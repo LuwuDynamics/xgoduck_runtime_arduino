@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibration · XGO Duck</title><link rel="stylesheet" href="style.css">
+<main>
+<header>
+  <div><small>ARDUINO UNO Q</small><h1>Zero calibration</h1></div>
+  <div class="header-actions">
+    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html" aria-current="page">Calibration</a><a href="/servo.html">Servo setup</a></nav>
+    <button class="stop" id="exit">Exit</button>
+  </div>
+</header>
+<p id="message">After the robot is wired, start calibration. Temporary gains become KP = 3 and KD = 0, and every servo is commanded to 2047.</p>
+<section>
+  <h2>Procedure</h2>
+  <div class="buttons">
+    <button id="start">Start calibration</button>
+    <button id="exit2">Exit</button>
+  </div>
+  <p class="hint">Policy and pose control stop while this page is active. Drag a slider to move one joint (raw encoder 0–4095). Place the joint at its mechanical zero, then press Finish. The current encoder reading is stored as that joint's zero. A green row means Finish was pressed during this session. Leaving or restarting clears that highlight. It is not written into the saved zero by itself.</p>
+</section>
+<section>
+  <h2>Joints <span id="mode">—</span></h2>
+  <div id="joints" class="cal-list"></div>
+</section>
+</main>
+<script src="calibrate.js"></script>
+</html>

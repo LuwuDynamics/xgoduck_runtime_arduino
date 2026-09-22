@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css">
+<main class="page-servo">
+<header>
+  <div><small>ARDUINO UNO Q</small><h1>Servo setup</h1></div>
+  <div class="header-actions">
+    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html" aria-current="page">Servo setup</a></nav>
+    <button class="stop" id="exit">Exit</button>
+  </div>
+</header>
+<p class="warn">Do not put two servos with the same ID on one bus. When changing an ID, connect only one servo. Work top to bottom:</p>
+<ol class="servo-steps">
+  <li>Move to</li>
+  <li>Set KP/KD</li>
+  <li>Change ID to</li>
+  <li>Read</li>
+</ol>
+<p id="message">Enter setup to begin. <span id="mode">—</span></p>
+<section class="servo-panel">
+  <div class="servo-toolbar">
+    <label>Target ID<input id="target-id" type="number" min="1" max="253" value="1"></label>
+    <button id="start">Enter setup</button>
+    <button id="exit2">Exit</button>
+  </div>
+  <div class="servo-grid">
+    <div class="servo-row">
+      <span class="servo-label">Move to</span>
+      <input id="goto-pos" type="number" min="0" max="4095" value="2047" title="Raw position">
+      <button id="goto">Write</button>
+    </div>
+    <div class="servo-row">
+      <span class="servo-label">Set KP/KD</span>
+      <input id="kp" type="number" min="0" max="255" value="5" title="KP">
+      <input id="kd" type="number" min="0" max="255" value="20" title="KD">
+      <button id="set-gains">Write</button>
+    </div>
+    <div class="servo-row">
+      <span class="servo-label">Change ID to</span>
+      <input id="new-id" type="number" min="1" max="253" value="10" title="New ID">
+      <button id="set-id">Write</button>
+    </div>
+    <div class="servo-row">
+      <span class="servo-label">Read</span>
+      <select id="read-id" title="Servo ID"></select>
+      <strong id="read-out" class="servo-readout">—</strong>
+      <button id="read">Read</button>
+    </div>
+  </div>
+</section>
+</main>
+<script src="servo.js"></script>
+</html>

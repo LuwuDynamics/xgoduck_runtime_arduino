@@ -1,0 +1,6 @@
+name: XGO Duck
+description: XGO Duck on Arduino Uno Q, based on Microduck. Linux runs ONNX policies at 50 Hz; the STM32 drives 15 servos and a QMI8658 at 100 Hz.
+icon: 🦆
+ports: [9527]
+bricks:
+  - arduino:web_ui

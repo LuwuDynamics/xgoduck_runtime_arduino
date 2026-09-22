@@ -1,0 +1,30 @@
+    void parse_packet(){
+        // DUCK_BOUNDED_FRAMING: never pass a partial binary value to Unpacker.
+        size_t offset = 0;
+        if (packet_incoming()) {
+            if (response_queued()) return;
+            offset = _response_offset;
+        }
+        while (offset < _bytes_stored) {
+            // Standard RPC envelopes are fixarray(3) or fixarray(4).
+            const uint8_t first = _raw_buffer[offset];
+            if (first != 0x93 && first != 0x94) {
+                consume(1, offset); ++_discarded_packets; continue;
+            }
+            const int length = duckMsgpackFrame(_raw_buffer+offset, _bytes_stored-offset, DECODER_BUFFER_SIZE / 4);
+            if (length == 0) return;
+            if (length < 0) { consume(1, offset); ++_discarded_packets; continue; }
+            MsgPack::Unpacker unpacker;
+            size_t container_size = 0;
+            int type = NO_MSG;
+            if (!unpacker.feed(_raw_buffer+offset, length) ||
+                !unpackTypedArray(unpacker, container_size, type) ||
+                !isValidRpc(type, container_size)) {
+                consume(length, offset); ++_discarded_packets; continue;
+            }
+            if (offset == 0) { _packet_type=type; _packet_size=length; }
+            if (type == RESP_MSG) { _response_offset=offset; _response_size=length; }
+            else _response_offset=offset+length;
+            return;
+        }
+    }

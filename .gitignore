@@ -1,0 +1,7 @@
+# ignore app cache folder
+.cache/
+.build/
+__pycache__/
+*.pyc
+data/zero_pos.json
+tests/
