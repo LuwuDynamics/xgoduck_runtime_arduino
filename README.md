@@ -1,8 +1,8 @@
 # XGO Duck
 
-This project runs walking, get-up, and pick policies on an [XGO Duck](https://github.com/pollen-robotics/microduck) built around the Arduino Uno Q.
+This project runs walking, get-up, and pick policies on an XGODuck built around the Arduino Uno Q.
 
-It is based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Robotics](https://pollen-robotics.com/microduck/). Thank you for publishing the robot and the runtime.
+It is based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Robotics](https://pollen-robotics.com/microduck/).
 
 The policies here follow that project: 15 servos, a 50 Hz neural controller, and the same joint order.
 
@@ -155,4 +155,3 @@ python tools/measure.py --seconds 60
 - [Microduck](https://github.com/pollen-robotics/microduck)
 - [Arduino RouterBridge](https://github.com/arduino-libraries/Arduino_RouterBridge)
 - [Arduino Router](https://github.com/arduino/arduino-router)
-- [QMI8658C datasheet](https://qstcorp.com/upload/pdf/202202/QMI8658C%20datasheet%20rev%200.9.pdf)
