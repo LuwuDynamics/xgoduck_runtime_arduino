@@ -1,0 +1,13 @@
+[Unit]
+Description=XGO Duck USB Device default at boot
+Wants=sys-kernel-debug.mount
+After=sys-kernel-debug.mount usb-gadget.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/duck-usb-role device
+RemainAfterExit=yes
+TimeoutStartSec=40
+
+[Install]
+WantedBy=multi-user.target

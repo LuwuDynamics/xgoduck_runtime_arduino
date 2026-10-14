@@ -1,0 +1,16 @@
+[Unit]
+Description=XGO Duck USB Host mode
+Wants=sys-kernel-debug.mount
+After=sys-kernel-debug.mount usb-gadget.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/duck-usb-host
+RemainAfterExit=yes
+TimeoutStartSec=40
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+const scope={window:{},Uint8Array,DataView,Set};
+vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../assets/mobile-audio.js'),'utf8'),scope);
+const nodes=[];
+const context={currentTime:1,destination:{},createBuffer:(channels,length,rate)=>{
+  const data=new Float32Array(length);return {data,duration:length/rate,getChannelData:()=>data};
+},createBufferSource:()=>{const n={connect(){},disconnect(){},start(at){this.at=at;},stop(){this.stopped=true;}};nodes.push(n);return n;}};
+const pcm=new scope.window.DuckAudio.LivePCM(context);
+pcm.push(new Uint8Array([0]));assert.equal(nodes.length,0);
+pcm.push(new Uint8Array([128,255,127,0]));
+assert.deepEqual(Array.from(nodes[0].buffer.data),[-1,32767/32768]);
+pcm.push(new Uint8Array([0]));assert.deepEqual(Array.from(nodes[1].buffer.data),[0]);
+assert.ok(nodes[1].at>=nodes[0].at+nodes[0].buffer.duration);
+const stalled=new Uint8Array(48000*5);stalled[stalled.length-2]=255;stalled[stalled.length-1]=127;
+pcm.push(stalled);assert.equal(nodes.at(-1).buffer.data.length,4800);
+assert.ok(nodes[0].stopped);assert.ok(nodes.at(-1).at+nodes.at(-1).buffer.duration-context.currentTime<=.3);
+assert.equal(nodes.at(-1).buffer.data.at(-1),32767/32768);
+pcm.stop();assert.equal(pcm.nodes.size,0);assert.ok(nodes.every(n=>n.stopped));
+context.currentTime=20;pcm.push(new Uint8Array([0,0]));assert.equal(nodes.at(-1).at,20.04);
+console.log('PASS: live PCM split-byte decoding, bounded latency, stale data trimming, stop and restart.');

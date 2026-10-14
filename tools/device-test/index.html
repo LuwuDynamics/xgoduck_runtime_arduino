@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>XGO Duck · 设备测试</title>
+<style>
+:root{color-scheme:light;--bg:#f4f5f1;--ink:#18352b;--muted:#708076;--line:#dfe5dc;--green:#246647;--lime:#ddf192}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}main{max-width:1180px;margin:auto;padding:34px 28px 60px}header{display:flex;align-items:center;justify-content:space-between;padding-bottom:30px;gap:20px}.brand{font-size:13px;font-weight:800;letter-spacing:2px}.brand span{display:inline-block;background:var(--green);color:white;padding:5px 10px;border-radius:9px;margin-right:10px}.connection{font-size:13px;color:var(--muted)}h1{font-size:36px;letter-spacing:-1.5px;line-height:1.25;margin:0 0 12px}h2{font-size:21px;letter-spacing:-.5px;margin:0}p{margin:8px 0;color:var(--muted)}.intro{display:flex;justify-content:space-between;align-items:end;gap:20px;margin:10px 0 28px}.tag{border:1px solid var(--line);border-radius:999px;padding:7px 13px;font-size:12px;white-space:nowrap}.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:20px;align-items:start}.card{background:#fff;border:1px solid var(--line);border-radius:22px;padding:24px;box-shadow:0 5px 22px #18352b04}.side{display:grid;gap:20px}.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.eyebrow{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:1.5px;margin-bottom:4px}.badge{font-size:12px;background:#f0f3ed;color:#647466;padding:5px 10px;border-radius:30px}.badge.on{background:#e6f5d8;color:#356a25}.view{aspect-ratio:4/3;background:#172e26;border-radius:14px;position:relative;overflow:hidden;display:grid;place-items:center;margin-bottom:18px}.view img{width:100%;height:100%;object-fit:contain;position:absolute}.placeholder{text-align:center;color:#a7bdb0}.placeholder svg{width:46px;height:46px;margin-bottom:10px;opacity:.65}.placeholder p{color:#a7bdb0;font-size:13px}.live{position:absolute;top:14px;left:14px;font-size:11px;letter-spacing:1px;color:white;background:#16352acc;padding:4px 10px;border-radius:20px}.live:before{content:'●';color:#d9f197;margin-right:6px}.row{display:flex;align-items:center;flex-wrap:wrap;gap:10px}button,.button{appearance:none;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;padding:10px 15px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;transition:.15s}button:hover,.button:hover{background:#eff4e9}button.primary{background:var(--green);color:white;border-color:var(--green)}button.primary:hover{background:#194d34}button:disabled{opacity:.4;cursor:not-allowed}.small{font-size:12px;color:var(--muted)}.meta{display:flex;justify-content:space-between;margin-top:17px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);gap:10px}.tune{display:flex;align-items:center;gap:13px;background:#f5f7f0;padding:14px;border-radius:12px;margin-bottom:17px}.note{width:43px;height:43px;border-radius:12px;display:grid;place-items:center;background:var(--lime);font-size:24px}.tune strong{display:block;font-size:14px}.tune p{font-size:12px;margin:1px 0}.volume{display:flex;align-items:center;gap:12px;margin:16px 0}.volume label{font-size:13px}input[type=range]{accent-color:var(--green);flex:1;min-width:60px}output{font-size:13px;min-width:38px;font-variant-numeric:tabular-nums}.upload{margin-top:14px;display:flex;gap:9px;align-items:center;flex-wrap:wrap}.upload label{cursor:pointer;border-bottom:1px solid var(--green);font-size:12px}.upload input{max-width:100%;font-size:12px}.error{color:#a34434;font-size:12px;min-height:0;margin-top:10px;overflow-wrap:anywhere}.notice{padding:12px 16px;border-radius:12px;background:#fcebe6;color:#933e32;margin-bottom:20px;font-size:13px}.record-select{margin:12px 0 18px;display:flex;align-items:center;gap:12px;font-size:13px}select{font:inherit;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:white;color:var(--ink)}.recording{border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:16px}.recording p{font-size:12px}.recording audio{width:100%;height:36px;margin:7px 0 10px}.meter{height:5px;background:#e8ede4;border-radius:8px;overflow:hidden;margin:9px 0}.meter i{display:block;height:100%;width:0;background:#75a454;transition:width .3s}footer{font-size:12px;color:var(--muted);margin-top:25px;display:flex;justify-content:space-between;gap:15px}a{color:var(--green)}[hidden]{display:none!important}:focus-visible{outline:3px solid #91b665;outline-offset:3px}@media(max-width:800px){main{padding:22px 16px}.grid{grid-template-columns:1fr}.intro{display:block}.intro .tag{display:inline-block;margin-top:12px}h1{font-size:30px}.card{padding:19px}header{padding-bottom:24px}.connection{font-size:11px}footer{display:block}}@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+.voice-card{margin-bottom:20px;background:#fbfdf7}.voice-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:24px}.voice-card textarea{width:100%;min-height:112px;resize:vertical;border:1px solid var(--line);border-radius:12px;padding:13px;font:inherit;color:var(--ink);background:#fff}.voice-card audio{width:100%;height:38px;margin:10px 0}.voice-card .row{margin-top:10px}.voice-info{align-self:center}.voice-count{text-align:right;font-size:12px;color:var(--muted)}@media(max-width:800px){.voice-grid{grid-template-columns:1fr;gap:10px}}
+</style>
+</head>
+<body><main>
+<header><div class="brand"><span>DUCK</span> DEVICE LAB</div><div class="connection" id="connection" role="status">正在连接板子…</div></header>
+<section class="intro"><div><div class="eyebrow">XGO DUCK / USB DEVICE TEST</div><h1>看得见，也听得见。</h1><p>在一个页面里，检查摄像头、扬声器和麦克风。</p></div><div class="tag">所有采集与播放均在板子上进行</div></section>
+<div id="notice" class="notice" role="alert" hidden></div>
+<section class="card voice-card"><div class="card-head"><div><div class="eyebrow">VOICE / DOUBAO</div><h2>XGO-Duck 语音</h2></div><span class="badge" id="ttsBadge">检测中</span></div>
+<div class="voice-grid"><div><label for="ttsText" class="small">输入朗读文本，用 XGO-Duck 音色说出来</label><textarea id="ttsText" maxlength="200" placeholder="写下想让小鸭说的话…">你好，我是小鸭，很高兴见到你。今天也一起探索有趣的事情吧！</textarea><div class="voice-count" id="ttsCount"></div><div class="row"><button class="primary" id="ttsSpeak">合成并在板子播放</button><button id="ttsStop" disabled>停止</button><button id="ttsReplay" disabled>再播一遍</button></div><div id="ttsError" class="error" role="status"></div></div>
+<div class="voice-info"><strong>豆包 · XGO-Duck 音色</strong><p class="small">点击合成后，文字会发送给豆包语音服务。播放音量沿用下方设置。</p><p class="small" id="ttsProgress">等待合成</p><div id="ttsResult" hidden><p class="small">在当前手机或电脑上试听：</p><audio id="ttsPlayer" controls preload="none"></audio><a class="button" href="/api/tts/audio" download="xgo-duck-voice.wav">下载合成语音</a></div></div></div></section>
+<div class="grid">
+<section class="card"><div class="card-head"><div><div class="eyebrow">01 / CAMERA</div><h2>摄像头</h2></div><span class="badge" id="camBadge">检测中</span></div>
+<div class="view"><div class="placeholder" id="placeholder"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="13" width="36" height="27" rx="6"/><path d="M16 13l3-6h10l3 6"/><circle cx="24" cy="26" r="8"/></svg><div id="cameraHint">画面将在开启后显示</div><p>板载 USB 摄像头 · 640 × 480</p></div><img id="frame" alt="板子 USB 摄像头实时画面" hidden><div class="live" id="live" hidden>LIVE</div></div>
+<div class="row"><button class="primary" id="camStart">开启摄像头</button><button id="camStop" disabled>关闭</button><button id="snapshot" disabled>保存照片</button></div><div id="cameraError" class="error" role="status"></div><div class="meta"><span id="camDevice">等待设备</span><span id="frameCount">尚未采集</span></div>
+</section>
+<div class="side">
+<section class="card"><div class="card-head"><div><div class="eyebrow">02 / SPEAKER</div><h2>音乐播放</h2></div><span class="badge" id="audioBadge">检测中</span></div>
+<div class="tune"><div class="note">♫</div><div><strong id="trackName">Duck 测试旋律</strong><p id="trackInfo">原创短旋律 · 双声道 · 约 8 秒</p></div></div>
+<div class="volume"><label for="volume">音量</label><input id="volume" type="range" min="0" max="100" value="100"><output id="volumeValue">100%</output></div>
+<div class="row"><button class="primary" id="play">在板子上播放</button><button id="audioStop" disabled>停止音频</button><button id="resetMusic" hidden>使用测试旋律</button></div>
+<div class="upload"><label for="upload">上传自己的音乐</label><input type="file" id="upload" accept="audio/*"><span class="small">取前 60 秒，浏览器解码后发送到板子。</span></div><div id="audioError" class="error" role="status"></div>
+</section>
+<section class="card"><div class="card-head"><div><div class="eyebrow">03 / MICROPHONE</div><h2>录音与回放</h2></div><span class="badge" id="recBadge">待录音</span></div><p class="small">使用板子的 USB 麦克风。点击录音后，对着模块说几句话。</p>
+<div class="record-select"><label for="seconds">录音时长</label><select id="seconds"><option value="5">5 秒</option><option value="10">10 秒</option><option value="30">30 秒</option></select><span id="recProgress" class="small"></span></div>
+<div class="row"><button class="primary" id="record">开始录音</button><button id="recordStop" disabled>结束录音</button></div>
+<div class="recording" id="recording" hidden><strong>最近一次录音</strong><div class="meter"><i id="level"></i></div><p id="recordStats"></p><p>在当前手机或电脑上试听：</p><audio id="player" controls preload="none"></audio><div class="row"><button id="replay">通过板子回放</button><a class="button" id="download" href="/api/recording" download="duck-recording.wav">下载 WAV</a></div></div>
+</section>
+</div></div>
+<footer><span>摄像头在页面不再获取画面 20 秒后自动关闭。录音最多 30 秒。</span><span>文件临时保留，服务重启后清除。</span></footer>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let state=null,busy=false,source='music',recordKey='',ttsKey='',streamActive=false;
+function notice(text=''){ $('notice').textContent=text; $('notice').hidden=!text; }
+async function request(path,data={}){
+ const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Device-Test':'1'},body:JSON.stringify(data)});
+ const body=await res.json();if(!res.ok)throw Error(body.error||'操作失败');return body;
+}
+function render(s){
+ state=s;const c=s.camera,a=s.audio,idle=a.state==='idle';
+ $('connection').textContent=`● 已连接 ${location.hostname}`;
+ $('camBadge').textContent=c.running?(c.ready?'采集中':'启动中'):c.available?'已识别':'未发现';$('camBadge').className='badge'+(c.running?' on':'');
+ $('camStart').disabled=busy||!c.available||c.running;$('camStop').disabled=busy||!c.running;$('snapshot').disabled=!c.ready;
+ $('cameraError').textContent=c.error;$('camDevice').textContent=c.device||'USB Camera';$('frameCount').textContent=c.frames?`采集 ${c.fps||0} fps · 连续视频流`:'尚未采集';
+ $('cameraHint').textContent=c.running?'正在获取画面…':'画面将在开启后显示';
+ syncStream();
+ $('audioBadge').textContent=({playing:'播放中',recording:'录音中',synthesizing:'语音合成中',cancelling:'正在取消'})[a.state]||(a.available?'已识别':'未发现');$('audioBadge').className='badge'+(!idle?' on':'');
+ $('play').disabled=busy||!idle||!a.available;$('audioStop').disabled=busy||idle;
+ $('record').disabled=busy||!idle||!a.available;$('recordStop').disabled=busy||a.state!=='recording';$('upload').disabled=busy||!idle;
+ $('replay').disabled=busy||!idle||!a.recording;$('volume').disabled=!idle;$('seconds').disabled=!idle;
+ $('audioError').textContent=a.error;$('recBadge').textContent=a.state==='recording'?'正在录音':a.recording?'录音完成':'待录音';$('recBadge').className='badge'+(a.state==='recording'?' on':'');
+ $('recProgress').textContent=a.state==='recording'?`${a.elapsed.toFixed(1)} 秒`:'';
+ $('recording').hidden=!a.recording;
+ if(!a.recording)recordKey='';
+ if(a.recording){const r=a.recording,key=JSON.stringify(r);$('recordStats').textContent=`${r.duration} 秒 · ${r.rate/1000} kHz · ${r.dbfs} dBFS · ${r.clipped?'存在削波':r.rms<.0001?'信号很弱或静音':'无削波'}`;$('level').style.width=`${Math.min(100,Math.max(0,(r.dbfs+60)/60*100))}%`;if(key!==recordKey){recordKey=key;$('player').src='/api/recording?t='+Date.now();}}
+ const t=s.tts||{};$('ttsBadge').textContent=t.busy?(a.state==='cancelling'?'正在取消':'合成中'):t.configured?'音色已配置':'未配置';$('ttsBadge').className='badge'+(t.configured?' on':'');
+ $('ttsSpeak').disabled=busy||!idle||!a.available||!t.configured;$('ttsReplay').disabled=busy||!idle||!t.audio||!a.available;$('ttsStop').disabled=busy||idle;$('ttsText').disabled=!!t.busy;
+ $('ttsError').textContent=t.error||'';$('ttsProgress').textContent=t.busy?`正在${a.state==='cancelling'?'取消':'合成'} · ${a.elapsed.toFixed(1)} 秒`:t.audio?`已合成 ${t.audio.duration} 秒 · ${t.audio.rate/1000} kHz`:'等待合成';
+ $('ttsResult').hidden=!t.audio;if(t.audio&&String(t.audio.version)!==ttsKey){ttsKey=String(t.audio.version);$('ttsPlayer').src='/api/tts/audio?t='+ttsKey;}if(!t.audio)ttsKey='';
+}
+async function act(path,data){if(busy)return;busy=true;if(state)render(state);notice();try{render(await request(path,data));}catch(e){notice(e.message);}finally{busy=false;if(state)render(state);}}
+$('camStart').onclick=()=>act('/api/camera/start');$('camStop').onclick=()=>act('/api/camera/stop');
+$('volume').oninput=()=>{$('volumeValue').textContent=$('volume').value+'%';};
+$('play').onclick=()=>act('/api/audio/play',{source,volume:+$('volume').value});
+$('audioStop').onclick=$('recordStop').onclick=()=>act('/api/audio/stop');
+$('record').onclick=()=>{$('player').pause();act('/api/audio/record',{seconds:+$('seconds').value});};
+$('replay').onclick=()=>{$('player').pause();act('/api/audio/play',{source:'recording',volume:+$('volume').value});};
+$('ttsText').oninput=()=>{$('ttsCount').textContent=`${$('ttsText').value.length} / 200 字`;};$('ttsText').oninput();
+$('ttsSpeak').onclick=()=>{$('ttsPlayer').pause();act('/api/tts/speak',{text:$('ttsText').value,volume:+$('volume').value});};
+$('ttsReplay').onclick=()=>{$('ttsPlayer').pause();act('/api/audio/play',{source:'tts',volume:+$('volume').value});};
+$('ttsStop').onclick=()=>act('/api/audio/stop');
+$('resetMusic').onclick=()=>{source='music';$('trackName').textContent='Duck 测试旋律';$('trackInfo').textContent='原创短旋律 · 双声道 · 约 8 秒';$('resetMusic').hidden=true;$('upload').value='';};
+$('snapshot').onclick=async()=>{try{const res=await fetch('/api/camera/frame');if(!res.ok)throw Error('画面尚未就绪');const url=URL.createObjectURL(await res.blob());const a=document.createElement('a');a.href=url;a.download='duck-camera-'+Date.now()+'.jpg';a.click();setTimeout(()=>URL.revokeObjectURL(url),2000);}catch(e){notice(e.message);}};
+// Decode common music formats in the browser, then send bounded PCM to ALSA.
+$('upload').onchange=async()=>{
+ const file=$('upload').files[0];if(!file)return;if(file.size>30*1024*1024){notice('请选择小于 30 MB 的音频文件。');return;}
+ busy=true;if(state)render(state);notice('正在处理音乐…');let ctx;
+ try{
+  ctx=new (window.AudioContext||window.webkitAudioContext)();const decoded=await ctx.decodeAudioData(await file.arrayBuffer());
+  const duration=Math.min(60,decoded.duration),rate=48000,channels=Math.min(2,decoded.numberOfChannels),n=Math.floor(duration*rate);
+  const offline=new OfflineAudioContext(channels,n,rate),node=offline.createBufferSource();node.buffer=decoded;node.connect(offline.destination);node.start();const audio=await offline.startRendering();
+  const buffer=new ArrayBuffer(44+n*channels*2),view=new DataView(buffer);const str=(at,s)=>{for(let i=0;i<s.length;i++)view.setUint8(at+i,s.charCodeAt(i));};
+  str(0,'RIFF');view.setUint32(4,36+n*channels*2,true);str(8,'WAVE');str(12,'fmt ');view.setUint32(16,16,true);view.setUint16(20,1,true);view.setUint16(22,channels,true);view.setUint32(24,rate,true);view.setUint32(28,rate*channels*2,true);view.setUint16(32,channels*2,true);view.setUint16(34,16,true);str(36,'data');view.setUint32(40,n*channels*2,true);
+  const ch=Array.from({length:channels},(_,i)=>audio.getChannelData(i));for(let i=0;i<n;i++)for(let c=0;c<channels;c++)view.setInt16(44+(i*channels+c)*2,Math.round(Math.max(-1,Math.min(1,ch[c][i]))*32767),true);
+  const res=await fetch('/api/upload',{method:'POST',headers:{'Content-Type':'audio/wav','X-Device-Test':'1'},body:buffer});const data=await res.json();if(!res.ok)throw Error(data.error);
+  source='upload';$('trackName').textContent=file.name;$('trackInfo').textContent=`${duration.toFixed(1)} 秒 · 已就绪，点击播放`;$('resetMusic').hidden=false;render(data);notice();
+ }catch(e){notice('音乐上传失败：'+e.message);}finally{if(ctx)await ctx.close();busy=false;if(state)render(state);}
+};
+async function poll(){try{const res=await fetch('/api/status');if(!res.ok)throw Error();render(await res.json());}catch(e){$('connection').textContent='● 连接中断，正在重试';document.querySelectorAll('button').forEach(b=>b.disabled=true);}finally{setTimeout(poll,800);}}
+function syncStream(){
+ const c=state?.camera,want=c?.running&&!document.hidden;
+ if(want&&!streamActive){streamActive=true;$('frame').src='/api/camera/stream?t='+Date.now();}
+ if(!want&&streamActive){streamActive=false;$('frame').removeAttribute('src');}
+ $('frame').hidden=!want||!c?.ready;$('live').hidden=!want||!c?.ready;$('placeholder').hidden=!!want&&!!c?.ready;
+}
+$('frame').onerror=()=>{streamActive=false;};
+document.addEventListener('visibilitychange',syncStream);
+poll();
+</script></body></html>

@@ -1,5 +1,13 @@
 # XGO Duck
 
+[English](README.md) · [简体中文](README_CN.md)
+
+<img src="docs/images/cockpit-demo.webp" alt="A controller-mounted phone shows Duck's live camera feed while the robot is driven with the gamepad" width="960">
+
+**Duck's-eye view, right on your controller.** Mount a phone between the grips, open the mobile cockpit, and drive Duck with the sticks while watching its onboard camera feed. The real-hardware demo above shows the handheld setup and robot moving together; the animated WebP loops silently.
+
+**Next-version development — audio, video & ToF.** This branch brings together USB camera streaming, the fullscreen mobile cockpit, live listening from Duck's microphone, phone-to-Duck voice clips, gamepad configuration, and the manual USB Host switch. ToF distance sensing is planned; its sensor integration is not implemented yet. See the [mobile cockpit guide](docs/mobile-cockpit.md) and [USB camera/audio setup](docs/usb-camera.md).
+
 This project runs walking, get-up, pick, and roulade policies on an XGODuck built around the Arduino Uno Q.
 
 It is based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Robotics](https://pollen-robotics.com/microduck/).
@@ -112,7 +120,7 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | Roulade | While upright in walk, runs `xgoduck_roulade.onnx` for 1.9 s, then returns to walk. |
 | Torque off | Disables position control. |
 
-Closing the page, or leaving it in the background for more than 1 second, turns position control off. Calibration and servo setup use a 2 second heartbeat and then exit and turn torque off.
+The Control page does not disarm on web heartbeat loss, backgrounding, or page close. Closing or backgrounding the page sends zero motion while retaining the selected mode; use Torque off to disarm. Sensor feedback loss and the MCU command watchdog still disarm. Calibration and servo setup retain their separate 2 second session heartbeat and exit on page leave.
 
 Walk commands are vx ±0.4, vy ±0.3, ωz ±1.0, with a joystick dead zone of 0.1. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
 

@@ -66,7 +66,7 @@ async function exit(){
 $('start').onclick=enter;
 $('exit').onclick=exit;
 $('exit2').onclick=exit;
-window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/cal/exit',new Blob([JSON.stringify({})],{type:'application/json'})));
+window.addEventListener('pagehide',()=>{if(active)navigator.sendBeacon('/api/cal/exit',new Blob([JSON.stringify({})],{type:'application/json'}));});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&active)exit();});
 
 setInterval(async()=>{

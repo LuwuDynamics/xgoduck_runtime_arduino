@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Audio · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="media.css"></head>
+<body><main class="audio-page">
+<header><div><small>ARDUINO UNO Q</small><h1>Audio</h1></div><div class="header-actions"><nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html">Servo setup</a><a href="/audio.html" aria-current="page">Audio</a><a href="/gamepad.html">Gamepad</a><a href="/mobile.html">Cockpit</a></nav></div></header>
+<p class="hint" id="connection" role="status">Connecting…</p><div id="notice" class="notice" role="alert" hidden></div>
+<section class="usb-settings"><h2>USB connection</h2><p class="small">Enable Host for a USB camera, audio device or wired controller. Off uses Device mode. Host is off after reboot; starting Duck does not enable it.</p><button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host: Checking…</button><p id="usbStatus" class="small" role="status">Checking USB mode…</p><p class="small">Use Wi-Fi when switching modes; USB connections will be interrupted.</p></section>
+<div class="audio-grid">
+<section><div class="card-head"><h2>Speaker</h2><span class="badge" id="audioBadge">Checking</span></div>
+<p class="small">Set the output volume of Duck's USB speaker.</p>
+<label for="volume">Output volume</label><div class="volume"><input id="volume" type="range" min="0" max="100" value="100" disabled><output id="volumeValue" for="volume">—</output></div>
+<div class="row"><button id="applyVolume" disabled>Apply volume</button><span class="small" id="volumeStatus" role="status">Reading device volume…</span></div>
+<div class="setting-test"><h3>Speaker test</h3><p class="small">Play an 8-second test melody on Duck.</p><div class="row"><button id="play" disabled>Test speaker</button><button id="audioStop" disabled>Stop</button></div></div>
+<div id="audioError" class="error" role="status"></div></section>
+<section><div class="card-head"><h2>Microphone</h2><span class="badge" id="recBadge">Checking</span></div><p class="small">Record a short sample with Duck's USB microphone.</p>
+<div class="record-select"><label for="seconds">Test duration</label><select id="seconds"><option value="5">5 seconds</option><option value="10">10 seconds</option><option value="30">30 seconds</option></select></div>
+<div class="row"><button id="record" disabled>Record test</button><button id="recordStop" disabled>Stop</button><span id="recProgress" class="small" role="status"></span></div>
+<div class="recording" id="recording" hidden><strong>Last recording</strong><div class="meter"><i id="level"></i></div><p id="recordStats"></p><div class="row"><button id="replay" disabled>Play on Duck</button><a class="button" href="/api/media/recording" download="duck-recording.wav">Download WAV</a></div><p>Listen on this device:</p><audio id="player" controls preload="none"></audio></div>
+</section></div>
+<details class="voice-card"><summary>Voice test <span class="small">XGO-Duck · Doubao</span></summary><p class="small">Test the configured XGO-Duck voice. Text is sent to Doubao when you select Generate &amp; play.</p><label for="ttsText">Text to speak</label><textarea id="ttsText" maxlength="200" placeholder="Enter a short phrase to test the voice."></textarea><div class="voice-count" id="ttsCount">0 / 200</div><div class="row"><button id="ttsSpeak" disabled>Generate &amp; play</button><button id="ttsReplay" disabled>Replay</button><button id="ttsStop" disabled>Stop</button><span id="ttsBadge" class="small">Checking</span></div><p class="small" id="ttsProgress"></p><div id="ttsError" class="error" role="status"></div><div id="ttsResult" hidden><p class="small">Listen on this device:</p><audio id="ttsPlayer" controls preload="none"></audio></div></details>
+<footer>Recording and speaker tests use Duck's USB audio device. Test recordings are cleared when the media service restarts.</footer>
+</main><script src="media-audio.js"></script><script src="usb-role.js?v=20261013"></script></body></html>

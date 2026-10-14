@@ -64,6 +64,7 @@ class Controller:
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
         self.web_time = 0.0
+        self.input_source = 'web'
         self.arm_pending = False
         self.seq = self.received = self.inferred = self.sent = self.bad_frames = self.gaps = 0
         self.last_error = ''
@@ -294,7 +295,7 @@ class Controller:
                 self.roulade_policy.warm(2)
         return {'ok': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
 
-    def command(self, twist=None, head=None, mouth=None):
+    def command(self, twist=None, head=None, mouth=None, source='web'):
         def values(seq, limits):
             if len(seq)!=len(limits): raise ValueError('wrong command dimension')
             seq = [float(v) for v in seq]
@@ -309,6 +310,8 @@ class Controller:
             if not math.isfinite(m) or not 0 <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
+            if source != self.input_source:
+                return {'ok': True, 'ignored': 'inactive input source'}
             if self.mode in EXCLUSIVE_MODES:
                 raise ValueError('motion commands disabled in calibrate/servo_debug')
             if t is not None and not self.pick_active: self.twist = t
@@ -431,8 +434,6 @@ class Controller:
                 lost = None
                 if not fb or age>.15 or not fb.imu_ok:
                     lost = 'sensor feedback lost; disarmed'
-                elif time.monotonic()-self.web_time > 1.0:
-                    lost = 'web heartbeat lost; disarmed'
                 if lost:
                     self.mode = mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.last_error = lost
@@ -620,7 +621,7 @@ class Controller:
                 bad_frames=self.bad_frames, sequence_gaps=self.gaps, loop_missed=self.loop_missed,
                 inference_ms=summary(self.infer_ms), receive_interval_ms=summary(self.rx_intervals),
                 feedback_age_ms=(now-self.rx_time)*1000 if fb else None,
-                uptime_s=now-self.started, last_error=self.last_error, command=self.twist,
+                uptime_s=now-self.started, last_error=self.last_error, command=self.twist, input_source=self.input_source,
                 head=self.head, mouth=self.mouth, policy_targets=self.last_action, motors=MOTOR_IDS, boot_pd=self.boot_pd,
                 full_robot_ready=bool(fb and fb.imu_ok and fb.mask==ALL_MASK and now-self.rx_time<.15),
                 raw_pos=list(self.raw_pos), zero_pos=list(self.zero_pos),

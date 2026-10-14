@@ -4,11 +4,15 @@ from fastapi import HTTPException
 from arduino.app_utils import App, Bridge
 from arduino.app_bricks.web_ui import WebUI
 from controller import Controller
+from media_proxy import register_media
+from gamepad import register_gamepad
 
 # Bound GIL handoff latency between the 100 Hz receiver, policy and WebUI.
 sys.setswitchinterval(0.001)
 controller = Controller(Bridge)
 ui = WebUI(port=9527, cors_origins='')
+register_media(ui)
+gamepad_control = register_gamepad(ui, controller)
 Bridge.provide('duck_state', controller.receive)
 Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
 Bridge.provide('duck_raw', controller.receive_raw)
@@ -19,7 +23,7 @@ def mode(body: dict):
     except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def command(body: dict):
-    try: return controller.command(**body)
+    try: return controller.command(**{k: v for k, v in body.items() if k != 'source'}, source='web')
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def filtering(body: dict):

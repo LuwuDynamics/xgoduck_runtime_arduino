@@ -154,7 +154,7 @@ $('set-id').onclick=()=>send('set_id',{new_id:$('new-id').value});
 $('read').onclick=()=>send('read',{},$('read-id').value);
 window.addEventListener('pagehide',()=>{
   stopScan();
-  navigator.sendBeacon('/api/servo/exit',new Blob([JSON.stringify({})],{type:'application/json'}));
+  if(active)navigator.sendBeacon('/api/servo/exit',new Blob([JSON.stringify({})],{type:'application/json'}));
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(active||scanTask))exit();});
 
