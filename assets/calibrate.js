@@ -6,15 +6,15 @@ let held=Array(15).fill(false);
 async function post(path, body={}){
   const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const x=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(x.detail||'request failed');
+  if(!r.ok) throw new Error(x.detail||t('request failed'));
   return x;
 }
 function showError(e){$('message').textContent=e.message||String(e);}
 
 MOTORS.forEach((id,i)=>{
   $('joints').insertAdjacentHTML('beforeend',`<div class="cal-row" id="row${i}">
-    <div class="cal-meta"><b>ID ${id}</b><span id="raw${i}">Waiting for feedback</span></div>
-    <div class="cal-actions"><span id="state${i}">Unloaded</span><button data-center="${i}" disabled>Set center &amp; hold</button></div>
+    <div class="cal-meta"><b>ID ${id}</b><span id="raw${i}">${t('Waiting for feedback')}</span></div>
+    <div class="cal-actions"><span id="state${i}">${t('Unloaded')}</span><button data-center="${i}" disabled>${t('Set center & hold')}</button></div>
   </div>`);
 });
 
@@ -23,7 +23,7 @@ function refreshRows(){
     const i=+btn.dataset.center;
     btn.disabled=!active||centering!==null||held[i]||!(presentMask&(1<<i));
     $(`row${i}`).classList.toggle('done',held[i]);
-    $(`state${i}`).textContent=centering===i?'Centering…':held[i]?'Holding 2048':'Unloaded';
+    $(`state${i}`).textContent=t(centering===i?'Centering…':held[i]?'Holding 2048':'Unloaded');
   });
 }
 
@@ -32,10 +32,10 @@ document.querySelectorAll('[data-center]').forEach(btn=>{
     const i=+btn.dataset.center;
     centering=i;
     refreshRows();
-    $('message').textContent=`Setting the center of ID ${MOTORS[i]}…`;
+    $('message').textContent=t('Setting the center of ID {0}…',MOTORS[i]);
     try{
       await post('cal/center',{index:i});
-      $('message').textContent=`Center command sent to ID ${MOTORS[i]}. It is holding position 2048.`;
+      $('message').textContent=t('Center command sent to ID {0}. It is holding position 2048.',MOTORS[i]);
     }catch(e){showError(e);}
     finally{centering=null;refreshRows();}
   };
@@ -46,7 +46,7 @@ async function enter(){
     await post('cal/enter');
     active=true;
     held.fill(false);
-    $('message').textContent='All servos are unloaded. Turn one joint by hand, then set its center.';
+    $('message').textContent=t('All servos are unloaded. Turn one joint by hand, then set its center.');
   }catch(e){showError(e);}
   refreshRows();
 }
@@ -56,7 +56,7 @@ async function exit(){
   try{
     await post('cal/exit');
     held.fill(false);
-    $('message').textContent='Calibration closed. All servos are unloaded.';
+    $('message').textContent=t('Calibration closed. All servos are unloaded.');
   }catch(e){showError(e);}
   refreshRows();
 }
@@ -72,15 +72,15 @@ setInterval(async()=>{
   try{
     if(active)await post('cal/heartbeat').catch(()=>{});
     const r=await fetch('/api/status');
-    if(!r.ok)throw new Error('status read failed');
+    if(!r.ok)throw new Error(t('status read failed'));
     const s=await r.json();
     active=s.mode==='calibrate';
     presentMask=s.raw_mask||0;
     held=s.cal_done||Array(15).fill(false);
-    $('mode').textContent=active?'Calibration active':'Calibration closed';
+    $('mode').textContent=t(active?'Calibration active':'Calibration closed');
     if(s.last_error)$('message').textContent=s.last_error;
     if(s.raw_pos)s.raw_pos.forEach((v,i)=>{
-      $(`raw${i}`).textContent=presentMask&(1<<i)?'Encoder '+v:'No servo feedback';
+      $(`raw${i}`).textContent=presentMask&(1<<i)?t('Encoder {0}',v):t('No servo feedback');
     });
     refreshRows();
   }catch(e){showError(e);}

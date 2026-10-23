@@ -9,3 +9,4 @@
 @media(max-width:720px){.cal-row{grid-template-columns:1fr;}.cal-actions{justify-content:space-between}.servo-row{grid-template-columns:80px 1fr auto;}.servo-row .hint{grid-column:1/-1}}
 .page-calibrate .cal-row{grid-template-columns:minmax(120px,1fr) auto}.page-calibrate .cal-actions span{min-width:100px}@media(max-width:620px){.page-calibrate .cal-row{grid-template-columns:1fr}.page-calibrate .cal-actions{flex-wrap:wrap}}
 .mode-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #3c5b78;border-radius:8px;cursor:pointer}.mode-toggle input{width:20px;height:20px;margin:0;accent-color:#6de1c4}.mode-toggle span{color:#8ce2cc;min-width:1em}
+.lang-toggle{padding:8px 12px;background:#0e1924;border-color:#26384b;color:#9cafc3}.lang-toggle:hover{color:#fff;border-color:#3c5b78;background:#0e1924}.lang-toggle span{opacity:.6}html[lang=zh-CN] .lang-toggle [lang=zh-CN],html[lang=en] .lang-toggle [lang=en]{opacity:1;color:#8ce2cc}

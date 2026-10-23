@@ -5,21 +5,21 @@ const motionRanges={
   walk:{backward:.2,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
   roller:{backward:.4,strafe:0,yaw:.25,keyboard:[.4,0,.25]}
 };
-for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>head ${i+1}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
-$('head-controls').insertAdjacentHTML('beforeend','<label>Mouth 34 (°)<input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>');
-async function post(path, body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.detail||'request failed');return x;}
+for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>${t('head {0}',i+1)}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
+$('head-controls').insertAdjacentHTML('beforeend',`<label>${t('Mouth 34 (°)')}<input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>`);
+async function post(path, body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.detail||t('request failed'));return x;}
 function showError(e){$('message').textContent=e.message;}
-async function setMode(mode){try{await post('mode',{mode});$('message').textContent='Mode updated';}catch(e){showError(e);}}
+async function setMode(mode){try{await post('mode',{mode});$('message').textContent=t('Mode updated');}catch(e){showError(e);}}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 function showRoller(enabled){
   const changed=rollerEnabled!==enabled;
   rollerEnabled=enabled;
-  $('roller-mode').checked=enabled;$('roller-state').textContent=enabled?'On':'Off';
+  $('roller-mode').checked=enabled;$('roller-state').textContent=t(enabled?'On':'Off');
   $('roller-warning').hidden=!enabled;
-  $('action-profile').textContent=enabled?'Roller walking':'Walking / other models';
+  $('action-profile').textContent=t(enabled?'Roller walking':'Walking / other models');
   const limits=motionRanges[enabled?'roller':'walk'];
-  $('motion-limits').textContent=`Limits: vx -${limits.backward} to +0.4, vy ${limits.strafe?'±'+limits.strafe:'0'}, ωz ±${limits.yaw}.`;
-  $('left-label').textContent=enabled?'Forward / backward':'Forward / strafe';
+  $('motion-limits').textContent=t('Limits: vx -{0} to +0.4, vy {1}, ωz ±{2}.',limits.backward,limits.strafe?'±'+limits.strafe:'0',limits.yaw);
+  $('left-label').textContent=t(enabled?'Forward / backward':'Forward / strafe');
   if(changed)zero(false);
 }
 $('roller-mode').onchange=async()=>{
@@ -27,12 +27,12 @@ $('roller-mode').onchange=async()=>{
   const enabled=$('roller-mode').checked;
   showRoller(enabled);
   rollerBusy=true;$('roller-mode').disabled=true;
-  try{const r=await post('roller',{enabled});showRoller(r.enabled);showActionSettings(r);$('message').textContent=`Roller mode ${r.enabled?'on':'off'} · ${r.model}`;}
+  try{const r=await post('roller',{enabled});showRoller(r.enabled);showActionSettings(r);$('message').textContent=t(r.enabled?'Roller mode on · {0}':'Roller mode off · {0}',r.model);}
   catch(e){showRoller(!enabled);showError(e);}
   finally{rollerBusy=false;$('roller-mode').disabled=false;}
 };
-$('pick').onclick=async()=>{try{const r=await post('pick',{});$('message').textContent=`Pick started · ${r.model}`;}catch(e){showError(e);}};
-$('roulade').onclick=async()=>{try{const r=await post('roulade',{});$('message').textContent=`Roulade · ${r.model}`;}catch(e){showError(e);}};
+$('pick').onclick=async()=>{try{const r=await post('pick',{});$('message').textContent=t('Pick started · {0}',r.model);}catch(e){showError(e);}};
+$('roulade').onclick=async()=>{try{const r=await post('roulade',{});$('message').textContent=t('Roulade · {0}',r.model);}catch(e){showError(e);}};
 $('stop').onclick=()=>{zero();setMode('off')};
 const keys=new Set(), sticks={left:{x:0,y:0},right:{x:0,y:0}}, resetSticks=[];
 let motion=[0,0,0], targetMotion=[0,0,0];
@@ -105,7 +105,7 @@ window.addEventListener('pagehide',()=>{
   navigator.sendBeacon('/api/command',new Blob([JSON.stringify({twist:[0,0,0]})],{type:'application/json'}));
 });
 setInterval(()=>{if(!document.hidden&&!commandBusy)sendCommand();},50);
-setInterval(async()=>{if(statusBusy||document.hidden)return;statusBusy=true;try{const r=await fetch('/api/status');if(!r.ok)throw new Error('status read failed');const s=await r.json();const modeLabel={shadow:'inference only',off:'torque off',hold:'default pose',policy:'walk',calibrate:'calibrate',servo_debug:'servo setup'};$('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';$('rl').textContent=s.inference_hz.toFixed(1)+' Hz';$('servos').textContent=(s.servo_ids?.length||0)+'/15';$('imu').textContent=s.imu_ok?'online':'offline';$('mode').textContent=(modeLabel[s.mode]||s.mode)+(s.enabled?' · enabled':' · torque off');$('message').textContent=s.last_error||`Bridge ${(s.bridge_baud/1e6).toFixed(0)} Mbps · state age ${(s.feedback_age_ms||0).toFixed(1)} ms`;
+setInterval(async()=>{if(statusBusy||document.hidden)return;statusBusy=true;try{const r=await fetch('/api/status');if(!r.ok)throw new Error(t('status read failed'));const s=await r.json();const modeLabel={shadow:'inference only',off:'torque off',hold:'default pose',policy:'walk',calibrate:'calibrate',servo_debug:'servo setup'};$('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';$('rl').textContent=s.inference_hz.toFixed(1)+' Hz';$('servos').textContent=(s.servo_ids?.length||0)+'/15';$('imu').textContent=t(s.imu_ok?'online':'offline');$('mode').textContent=t(s.enabled?'{0} · enabled':'{0} · torque off',t(modeLabel[s.mode]||s.mode));$('message').textContent=s.last_error||t('Bridge {0} Mbps · state age {1} ms',(s.bridge_baud/1e6).toFixed(0),(s.feedback_age_ms||0).toFixed(1));
 document.querySelectorAll('[data-mode="hold"],[data-mode="policy"]').forEach(b=>b.disabled=!s.control_ready);
 if(s.roller&&!rollerBusy)showRoller(s.roller.enabled);
 if(!rollerBusy)showActionSettings(s.deployment);
@@ -114,11 +114,11 @@ const recovery=s.recovery, pick=s.pick, roulade=s.roulade;
 const upright=(s.mode==='shadow'||s.mode==='policy')&&recovery&&recovery.active&&recovery.phase==='walk';
 $('pick').disabled=!upright||(pick&&pick.active)||(roulade&&roulade.active);
 $('roulade').disabled=$('pick').disabled;
-if(recovery){const phaseLabel=roulade&&roulade.active?'roulade':pick&&pick.active?'pick':({walk:'walk',default_pose:'get-up · action = 0',getup:'get-up'}[recovery.phase]||recovery.phase);
-$('recovery-phase').textContent=recovery.active?phaseLabel:'idle';$('active-model').textContent=s.active_model||'—';$('tilt-angle').textContent=recovery.angle_deg==null?'—':recovery.angle_deg.toFixed(1)+'°';
-$('recovery-timer').textContent=!recovery.active?'—':roulade&&roulade.active?`roulade ${roulade.remaining_s.toFixed(2)} / ${roulade.seconds.toFixed(2)} s`:pick&&pick.active?`pick φ ${pick.phi.toFixed(2)} / 1.00`:recovery.phase==='default_pose'?`hold ${recovery.hold_remaining_s.toFixed(2)} s left`:recovery.phase==='getup'?`upright ${recovery.stand_elapsed_s.toFixed(2)} / 1.00 s`:`fallen ${recovery.fall_elapsed_s.toFixed(2)} / 0.15 s`;
+if(recovery){const phaseLabel=t(roulade&&roulade.active?'roulade':pick&&pick.active?'pick':({walk:'walk',default_pose:'get-up · action = 0',getup:'get-up'}[recovery.phase]||recovery.phase));
+$('recovery-phase').textContent=recovery.active?phaseLabel:t('idle');$('active-model').textContent=s.active_model||'—';$('tilt-angle').textContent=recovery.angle_deg==null?'—':recovery.angle_deg.toFixed(1)+'°';
+$('recovery-timer').textContent=!recovery.active?'—':roulade&&roulade.active?t('roulade {0} / {1} s',roulade.remaining_s.toFixed(2),roulade.seconds.toFixed(2)):pick&&pick.active?t('pick φ {0} / 1.00',pick.phi.toFixed(2)):recovery.phase==='default_pose'?t('hold {0} s left',recovery.hold_remaining_s.toFixed(2)):recovery.phase==='getup'?t('upright {0} / 1.00 s',recovery.stand_elapsed_s.toFixed(2)):t('fallen {0} / 0.15 s',recovery.fall_elapsed_s.toFixed(2));
 if(pick&&pick.active)$('mouth').value=Math.round(s.mouth||0);}
 for(const [id,values]of [['acc-values',s.acc],['gyro-values',s.gyro],['gravity-values',s.gravity]])$(id).textContent=values?values.map(x=>x.toFixed(3)).join(' / '):'—';
-$('command-health').textContent=`sent ${s.sent} · MCU echo ${s.mcu_command_seq??'—'} · command age ${s.mcu_command_age_us<1e9?(s.mcu_command_age_us/1000).toFixed(1)+' ms':'—'} · gaps ${s.sequence_gaps} · rejected ${s.mcu_invalid_commands??0}`;
+$('command-health').textContent=t('sent {0} · MCU echo {1} · command age {2} · gaps {3} · rejected {4}',s.sent,s.mcu_command_seq??'—',s.mcu_command_age_us<1e9?(s.mcu_command_age_us/1000).toFixed(1)+' ms':'—',s.sequence_gaps,s.mcu_invalid_commands??0);
 if(s.angles)$('joints').innerHTML=s.motors.map((id,i)=>`<tr class="${s.servo_ids.includes(id)?'':'missing'}"><td>${id}</td><td>${s.angles[i].toFixed(1)}</td><td>${s.targets[i].toFixed(1)}</td></tr>`).join('');
 }catch(e){showError(e);}finally{statusBusy=false;}},250);

@@ -7,7 +7,7 @@ Based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Ro
 ## Start the app
 
 1. Open the project in **Arduino App Lab** and click **Run**. For a new board, complete the first-time setup below.
-2. Open the web interface shown by App Lab, or visit `http://<board-ip>:9527`.
+2. Open the web interface shown by App Lab, or visit `http://<board-ip>:9527`. Use **中文 / EN** in the header to switch between Simplified Chinese and English.
 3. Check that **Servos online** shows **15/15** and **IMU** shows **online**.
 4. The app starts in **Inference only**, with the motors unloaded. Finish servo setup and calibration before enabling motion.
 
