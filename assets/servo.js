@@ -10,7 +10,7 @@ async function api(path,body,signal){
   if(body!==undefined)Object.assign(options,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const r=await fetch('/api/'+path,options);
   const x=await r.json();
-  if(!r.ok)throw new Error(x.detail||'Request failed');
+  if(!r.ok)throw new Error(x.detail||t('Request failed'));
   return x;
 }
 function show(msg){$('message').textContent=msg;}
@@ -27,12 +27,12 @@ function selectId(id){
   $('read-out').textContent='—';
   $('scan-results').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.id===selectedId)));
   lock(false);
-  show('Selected ID '+selectedId);
+  show(t('Selected ID {0}',selectedId));
   send('read');
 }
 function validId(value){
   const id=Number(value);
-  if(String(value).trim()===''||!Number.isInteger(id)||id<0||id>253)throw new Error('ID must be between 0 and 253');
+  if(String(value).trim()===''||!Number.isInteger(id)||id<0||id>253)throw new Error(t('ID must be between 0 and 253'));
   return id;
 }
 async function enter(signal){
@@ -46,11 +46,11 @@ async function enter(signal){
     }
     await sleep(100);
   }
-  throw new Error('No MCU feedback. Servo setup is not ready.');
+  throw new Error(t('No MCU feedback. Servo setup is not ready.'));
 }
 function stopScan(){
   if(scanController){
-    $('scan-status').textContent='Stopping scan…';
+    $('scan-status').textContent=t('Stopping scan…');
     scanController.abort();
   }
 }
@@ -60,7 +60,7 @@ async function exit(){
   stopScan();
   if(scanTask)await scanTask;
   lock(true);
-  try{await api('servo/exit',{});active=false;show('Servo setup closed');}
+  try{await api('servo/exit',{});active=false;show(t('Servo setup closed'));}
   catch(e){show(e.message);}
   finally{lock(false);closing=false;}
 }
@@ -71,23 +71,23 @@ async function send(action,extra={}){
     const id=selectedId;
     if(action==='set_id')extra.new_id=validId(extra.new_id);
     await enter();
-    show(action==='set_id'?`Changing ID ${id} to ${extra.new_id}…`:`ID ${id} · ${action==='reset_mid'?'Reset Mid':action==='set_gains'?'Set KpKd':'Read'}…`);
+    show(action==='set_id'?t('Changing ID {0} to {1}…',id,extra.new_id):t('ID {0} · {1}…',id,t(action==='reset_mid'?'Reset Mid':action==='set_gains'?'Set KpKd':'Read')));
     const r=await api('servo',{action,target_id:id,...extra});
     if(action==='read'){
-      $('read-out').textContent=`ID ${id} · Pos ${r.raw_pos} · KP ${r.kp} · KD ${r.kd}`;
-      show(`ID ${id} · parameters read`);
+      $('read-out').textContent=t('ID {0} · Pos {1} · KP {2} · KD {3}',id,r.raw_pos,r.kp,r.kd);
+      show(t('ID {0} · parameters read',id));
     }else if(action==='reset_mid'){
       $('read-out').textContent='—';
-      show(`ID ${id} · Mid reset sent. Servo remains unloaded.`);
+      show(t('ID {0} · Mid reset sent. Servo remains unloaded.',id));
     }else if(action==='set_id'){
       selectedId=null;
       $('read-out').textContent='—';
       $('scan-results').replaceChildren();
       $('scan-progress').hidden=true;
-      $('scan-status').textContent='ID changed. Scan again to select the updated servo.';
-      show(`ID ${id} → ${extra.new_id} · verified`);
+      $('scan-status').textContent=t('ID changed. Scan again to select the updated servo.');
+      show(t('ID {0} → {1} · verified',id,extra.new_id));
     }else{
-      show(`ID ${id} · KP/KD written`);
+      show(t('ID {0} · KP/KD written',id));
     }
   }catch(e){show(e.message);}
   finally{lock(false);}
@@ -104,22 +104,22 @@ async function scan(){
   $('scan-progress').value=0;
   $('scan-progress').hidden=false;
   $('scan-stop').hidden=false;
-  $('scan-status').textContent='Preparing scan…';
+  $('scan-status').textContent=t('Preparing scan…');
   try{
     const s=await api('status',undefined,signal);
-    if(s.servo_scan_version!==2)throw new Error('Deploy the updated project to enable servo setup.');
+    if(s.servo_scan_version!==2)throw new Error(t('Deploy the updated project to enable servo setup.'));
     await enter(signal);
     await api('servo',{action:'torque_off',target_id:10},signal);
-    show('Scanning · torque off');
+    show(t('Scanning · torque off'));
     for(let id=0;id<=253;id++){
       signal.throwIfAborted();
-      $('scan-status').textContent=`Scanning ID ${id} · ${checked}/254 checked · ${found.length} found`;
+      $('scan-status').textContent=t('Scanning ID {0} · {1}/254 checked · {2} found',id,checked,found.length);
       let online=false;
       for(let attempt=0;attempt<2;attempt++){
         await api('servo/enter',{},signal);
         signal.throwIfAborted();
         const r=await api('servo',{action:'ping',target_id:id},signal);
-        if(r.op!==7||r.target_id!==id||typeof r.ok!=='boolean')throw new Error('Invalid scan reply');
+        if(r.op!==7||r.target_id!==id||typeof r.ok!=='boolean')throw new Error(t('Invalid scan reply'));
         if(r.ok){online=true;break;}
       }
       if(online){
@@ -133,11 +133,11 @@ async function scan(){
       checked++;
       $('scan-progress').value=checked;
     }
-    $('scan-status').textContent=`Scan complete · 254 IDs checked · ${found.length} found`;
-    show(found.length?'Select a found ID to read or change its settings.':'No servos replied. Check servo power, bus connection and baud rate.');
+    $('scan-status').textContent=t('Scan complete · 254 IDs checked · {0} found',found.length);
+    show(t(found.length?'Select a found ID to read or change its settings.':'No servos replied. Check servo power, bus connection and baud rate.'));
   }catch(e){
-    $('scan-status').textContent=`${signal.aborted?'Stopped':'Scan failed'} · ${checked}/254 checked · ${found.length} found (partial results)`;
-    show(signal.aborted?'Scan stopped. Select a found ID to continue.':e.message==='servo reply timeout'?'No MCU reply. Scan stopped.':e.message);
+    $('scan-status').textContent=t(signal.aborted?'Stopped · {0}/254 checked · {1} found (partial results)':'Scan failed · {0}/254 checked · {1} found (partial results)',checked,found.length);
+    show(signal.aborted?t('Scan stopped. Select a found ID to continue.'):e.message==='servo reply timeout'?t('No MCU reply. Scan stopped.'):e.message);
   }finally{
     $('scan-stop').hidden=true;
     scanController=null;
@@ -151,21 +151,21 @@ async function sendProtection(action,enabled){
     const settingCurrent=action==='set_protection_current',body={action};
     if(settingCurrent){
       const input=$('protection-current').value.trim(),current=Number(input);
-      if(!input||!Number.isFinite(current)||current<0||current>65535*.0065)throw new Error('Enter a protection current between 0 and 425.9775 A.');
+      if(!input||!Number.isFinite(current)||current<0||current>65535*.0065)throw new Error(t('Enter a protection current between 0 and 425.9775 A.'));
       body.current_a=current;
     }else{
       body.protection_enabled=enabled;
     }
     await enter();
-    show('Broadcasting protection settings to all servos…');
+    show(t('Broadcasting protection settings to all servos…'));
     const r=await api('servo',body);
-    if(!r.ok||r.broadcast!==true||r.target_id!==254||r.op!==(settingCurrent?10:9))throw new Error('Invalid broadcast reply');
+    if(!r.ok||r.broadcast!==true||r.target_id!==254||r.op!==(settingCurrent?10:9))throw new Error(t('Invalid broadcast reply'));
     if(settingCurrent){
-      $('protection-current-out').textContent=`Broadcast sent · ${r.current_a.toFixed(4)} A`;
+      $('protection-current-out').textContent=t('Broadcast sent · {0} A',r.current_a.toFixed(4));
     }else{
-      $('protection-out').textContent=`Broadcast sent · voltage / overcurrent ${r.protection_enabled?'on':'off'}`;
+      $('protection-out').textContent=t(r.protection_enabled?'Broadcast sent · voltage / overcurrent on':'Broadcast sent · voltage / overcurrent off');
     }
-    show('Protection broadcast sent. Individual servo writes are not verified.');
+    show(t('Protection broadcast sent. Individual servo writes are not verified.'));
   }catch(e){show(e.message);}
   finally{lock(false);}
 }
