@@ -148,7 +148,7 @@ class GamepadControl:
             self.controller.input_source = 'web'
             self.error = reason
             if active and stop:
-                self.controller.set_mode('off')
+                self.controller.pause_motion(reason or 'Gamepad control released')
 
     def enable(self, enabled):
         if not isinstance(enabled, bool):
@@ -168,7 +168,7 @@ class GamepadControl:
                 raise ValueError('Finish or cancel button binding first.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration or servo setup first.')
-            self.controller.set_mode('off')
+            self.controller.pause_motion('Gamepad control selected; explicitly resume with Walk/Hold')
             self.controller.input_source = 'gamepad'
             self.identity, self.buttons = data['id'], dict(data['buttons'])
             self.enabled, self.error = True, ''

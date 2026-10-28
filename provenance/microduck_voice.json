@@ -1,0 +1,18 @@
+{
+  "upstream": "https://github.com/pollen-robotics/microduck",
+  "commit": "d7560ef059c73fab4177eb247c1774013f6feb9d",
+  "license": "Apache-2.0",
+  "sources": {
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "sounds/src/lib.rs": "4e9baf2c35bc3808f8c8e1d7f9f96c1a69517a683ecc73afcdb5c34d8321500d",
+    "sounds/src/personality.rs": "17f738ab3940ff084a808c61aa5e76e6e7e4f4e0c1fea9323fd0daa090a6c0cd",
+    "sounds/src/synth.rs": "2cff1e97cac3ae16d6d384ecd25b709a81937654942df2fee5c572b89818b4c6",
+    "sounds/src/voices.rs": "05374c5c557bfd76b7e7c04fadeaf45ff2a9e2d3af70233d2f9e0c99e28ced07"
+  },
+  "adaptation": "Translated licensed Rust DSP/recipes to NumPy; PCG64 RNG, short bounded wheee, PCM resampling/headroom. Not a bit-identical upstream renderer.",
+  "sha256_packaged": {
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
+    "NOTICE.md": "8b600d72ccaca4acf005e07394aff20e736f44f3eea55299b93bb6f766163f96"
+  }
+}

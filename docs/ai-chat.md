@@ -1,0 +1,351 @@
+# XGO Duck AI App：首次安装与无屏使用
+
+[English guide](ai-chat-en.md) · [中文 README](../README_CN.md) · [检查记录](ai-validation.md)
+
+这是给用户自行购买的 **Arduino UNO Q** 安装的开源 App，需要先用电脑完成一次安装。它不是预装系统镜像。安装完成后，开机自动运行，手机通过蓝牙配 Wi-Fi、绑定账号；遥控通过云端 MCP。原 9527 网页、9528 音视频接口、Audio/豆包页面、校准和舵机设置保留，没有新增聊天标签。
+
+## 1. 先选择服务器和客户端
+
+同一份代码支持两套服务。**在板端明确选择区域**；手机配网、手机语言、Wi-Fi 名称和聊天语言都不能自动改区。未选择时显示 `awaiting_cloud_config`，不向任一聊天服务器发请求。
+
+| 板端配置 | 服务器 | 手机客户端 |
+| --- | --- | --- |
+| `cloud_region: cn` | `https://xl-api.xgorobot.com/xiaolu/ota/` | 国内微信小程序 |
+| `cloud_region: global` | `https://xl-api.luwudynamics.ai/xiaolu/ota/` | 国际版 Android / iOS App |
+
+| 国内微信小程序：微信扫一扫或识别小程序码 | 国际版 App：扫码下载 |
+| --- | --- |
+| <img src="images/qr_miniprogram.png" width="180" alt="国内微信小程序码"> | <img src="images/qr_app_intl.png" width="180" alt="国际版 App 下载二维码"> |
+| 对应 `cn` | 对应 `global`；[直接打开下载页面](https://agent.luwudynamics.ai/download) |
+
+二维码复用 Luwu-OS AI Chat Pro 的现有资源，来源和 SHA256 见 [onboarding-assets.json](../provenance/onboarding-assets.json)。App 码解码地址是上面的下载页面；小程序码需要用微信识别。
+
+两边的账号、设备绑定和智能体配置分别属于各自服务器。请选择与日常使用客户端一致的一侧。中文对话可以用国际服务器，英文对话也可以用国内服务器；`language` 与 `cloud_region` 独立。MCP 遥控需要发布包含 `XGO-Duck / Duck.RemoteMove` 适配的客户端版本，二维码入口本身不代表本地客户端改动已经上线。
+
+## 2. 用 USB 完成 UNO Q 初始设置
+
+1. 安装 [Arduino App Lab](https://www.arduino.cc/en/uno-q)，用 USB-C **数据线**连接裸板和电脑，按 [Arduino UNO Q 用户手册](https://docs.arduino.cc/tutorials/uno-q/user-manual/)完成板子命名、Wi-Fi 和 Linux 账户密码设置。首次安装需要板子能联网下载系统包、Arduino 依赖、容器和 Python 依赖。
+2. 记录板子局域网 IP，在电脑终端验证 `ssh arduino@<板子IP>`。密码使用你自己在 App Lab 中设置的密码；本项目没有统一出厂密码。App Lab 的 Network 模式也应能连接。
+3. 准备能供电的 USB-C Host Hub，后续接 USB 麦克风、USB 扬声器和可选摄像头。**硬件支持安装会切 USB Host，电脑的 USB/ADB 连接会断开**，所以先确认 Wi-Fi/SSH 可用，通过 Wi-Fi/SSH 安装。无需显示器。
+4. 装配、供电、舵机 ID 和校准按 [硬件指南](https://github.com/LuwuDynamics/xgoduck_hardware/blob/master/README_CN.md)及主 README 完成。首次软件检查先保持舵机扭矩关闭。
+
+## 3. 获取 App，并保留旧机器人的数据
+
+推荐在电脑打包，通过 App Lab **导入为新 App**：
+
+```sh
+git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
+cd xgoduck_runtime_arduino
+python3 tools/package-ai-app.py
+```
+
+导入生成的 `dist/xgoduck_ai.zip`，使用新目录名 `xgoduck_ai`。以下命令假定板端目录为 `/home/arduino/ArduinoApps/xgoduck_ai`，若 App Lab 使用了其他名字，以实际目录为准。
+
+也可通过 SSH 在板子上直接拉取这个分支，App Lab 会从 ArduinoApps 目录发现应用：
+
+```sh
+mkdir -p ~/ArduinoApps
+git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git ~/ArduinoApps/xgoduck_ai
+cd ~/ArduinoApps/xgoduck_ai
+```
+
+停止已有 Duck App，避免共用 Bridge、舵机、9527 和 9528。旧 App 可以保留。要沿用这只鸭子的校准和手柄映射，在两个 App 都停止时，把旧目录的 `data/zero_pos.json`、`data/gamepad-bindings.json`（若存在）复制到新目录的 `data/`。不要复制其他机器人的校准或绑定身份。ZIP 排除了所有运行数据，不会自动迁移。
+
+## 4. 在板端选区、安装硬件支持
+
+下面在 UNO Q 的 **Debian 13 ARM64 主机终端**中，以 `arduino` 用户执行，不在 App 容器或 Mac 上执行。两组配置二选一：
+
+```sh
+cd ~/ArduinoApps/xgoduck_ai
+
+# 国内微信小程序
+python3 tools/configure-ai.py --region cn --language cn
+
+# 或国际版 App
+# python3 tools/configure-ai.py --region global --language en
+
+python3 tools/configure-ai.py --show
+bash tools/install-ai-support.sh
+```
+
+`configure-ai.py` 原子保存 `data/voice_config.json`，保留音量、声卡、运动权限等已有设置。显式选择区域会清除高级自定义 `ota_url` 覆盖。配置损坏时脚本会报错，要求先修复文件，不会覆盖它。
+
+安装脚本会请求 sudo，先以 `arduino` 身份自动准备 MCU 编译环境，再安装音视频、BlueZ、NetworkManager 和必要的系统 Python 依赖；从当前 Debian 13 主机准备 `data/native/`，供 App 容器使用。硬件辅助代码安装到 root 所有的 `/usr/local/lib/xgoduck-ai-support/`，服务名为 `xgoduck-ai-hardware.service`，通过本 App 的 `data/gamepad.sock` 通信。它负责 USB 模式、原手柄功能和 BluFi 配网，不开放蓝牙运动指令或新的 TCP 服务。
+
+脚本还会：
+
+- 为当前板子创建并保留稳定设备 ID，优先使用永久 WLAN MAC；没有可用永久 MAC 时生成一次随机本地 ID。身份保存在 `data/voice-state/device-id`，不使用容器 MAC 或扫描时随机 MAC。
+- 通过官方 `arduino-app-cli properties set default <App目录>` 设置开机默认 App，并启用 `arduino-app-cli.service`；启动顺序在硬件辅助服务之后。
+- 关闭旧 `duck-device-test.service` 的用户级自启，避免抢占 9528 和 USB 音频。有旧豆包配置时仅首次复制一份，保留原文件。
+- 如已安装旧 `duck-gamepad.service`、`duck-usb-device.service` 或 `duck-usb-host.service`，停用其自启，由新辅助服务接管，避免重复读取手柄或晚启动的旧 USB 服务反向切换模式；旧 unit 文件保留。
+
+脚本可重复执行；App 目录改变或硬件辅助代码升级后需重跑。**先停止所有 App，通过 Wi-Fi/SSH 执行。安装脚本会准备 USB Host，需要时重启共享 router，但不启动 App、不烧写 MCU。** 运行中的 App 会使安装器直接拒绝继续。安装器启用 `xgoduck-ai-usb-host.service`，以后每次开机在 App CLI 和容器启动之前完成 Host 准备。
+
+## 5. 设置 Bridge 速率，首次运行一次
+
+沿用原工程的 STM32 sketch、2 Mbps Bridge、15 舵机和 IMU 接线：
+
+```sh
+sudo bash tools/router-2m.sh
+arduino-app-cli app start "$PWD"
+```
+
+也可准备后在 App Lab 通过 Network 连接点击 **Run**。上一步的安装脚本已调用 `tools/prepare-ai-sketch.py`：解析 `sketch/sketch.yaml` 的固定依赖、修补 Bridge/RPClite 缓存、仅编译并检查 ELF，无需先 Run 失败一次再 Stop 修缓存。若只需重建 MCU 缓存，以 `arduino` 用户运行 `python3 tools/prepare-ai-sketch.py`。首次准备期间保持扭矩关闭，App 保持停止。库缓存清空后需重新准备；已有正确环境不必每次重启 router。
+
+**Run 是启动整个 App 的构建和运行流程，Arduino 工具可能编译并上传其中的 sketch。** 本分支没有修改 STM32 源码，但 Run 不能被当作保证不上传 MCU 的纯 Python 更新。2 Mbps router 设置是全局设置；换用其他 Bridge 速率的 App 前按[技术参考](technical_reference.md#running)恢复。
+
+Host 准备在 **App 容器创建之前** 完成。开机 oneshot 服务先暂停 USB 串口监视器、代理及 Arduino router，解除 gadget 的 UDC 绑定，停止 `adbd.service`，切换 Host，再恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART；重启 router 又会更换容器绑定的 socket、重置 MCU，因此不能在运动进程或容器已经启动后才做准备。已是 Host 且 ADB 未运行时不重启 router。App 入口只检查 Host 已就绪，未就绪时退出并提示重跑安装器，不尝试热切换。
+
+切回 Device 后恢复原本启用或运行的 ADB 和 USB 串口监视器，不改变其 enable/mask 设置。只写 USB mode 而保留 ADB 运行，会让 ADB 在 Host 模式下反复重启。不要同时运行旧的 Host 启动脚本，也不要在运动中切换 USB 模式；本次修补隔离 App 启动时的切换，不替换系统内核。安装支持只补装缺少的依赖，不主动升级已经安装的系统包。
+
+第一次保持联网，等待依赖安装和两个业务进程进入运行状态。安装了默认 App 后，后续开机不需要再在电脑点击 Run。先验证一次正常重启；再验证 Wi-Fi 不可用时仍能被手机发现。系统重刷、删除依赖缓存或删除 App 后，需要重新完成相应准备。
+
+### 工具链与含工具链安装包
+
+工具链是在 UNO Q 的 Linux 上把 STM32 C/C++ 程序编译成固件的编译器、链接器等构建工具，不是聊天或运动进程。出厂系统可能带有 `arm-zephyr-eabi 0.16.8`；本工程固定的 Arduino Zephyr core `1.0.0` 需要 `arm-zephyr-eabi 1.0.1`。两者版本号体系也不同于 App 版本。安装脚本负责匹配，保留原有旧版本，不会拿 `0.16.8` 冒充所需版本。
+
+默认 App ZIP 不带工具链，首次由 Arduino CLI 下载并缓存。可选的含工具链版把官方 **Linux ARM64** 原始压缩包放入 `tools/offline/`，安装脚本自动校验大小和 SHA256 后放入 Arduino 下载缓存，再由 Arduino CLI 安装。压缩包约 97.3 MB，解压约 774 MB；含工具链的 App ZIP 约 107 MB。这里只省去该工具链的下载，其他 Arduino 库、系统包、容器与 Python 依赖仍需联网。已有正确版本时复用本机缓存，后续更新 App 可用普通小包。
+
+在电脑上制作含工具链版（电脑是 Mac 也必须下载 **linux-aarch64**，供板子使用）：
+
+```sh
+curl -fL --retry 3 -o /tmp/xgoduck-toolchain-1.0.1.tar.xz \
+  https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/toolchain_gnu_linux-aarch64_arm-zephyr-eabi.tar.xz
+python3 tools/package-ai-app.py \
+  --toolchain-archive /tmp/xgoduck-toolchain-1.0.1.tar.xz \
+  --output dist/xgoduck_ai_with_toolchain.zip
+```
+
+来源、版本和校验值见 [`provenance/toolchain.json`](../provenance/toolchain.json)。打包器会拒绝校验不符的文件；原压缩包和其中 `share/licenses` 完整保留，大文件不加入 Git 源码。
+
+若普通包首次安装遇到 GitHub `unexpected EOF`，先恢复网络再重跑安装脚本；也可用电脑下载上面的官方文件，通过 SCP 传到板子，并在 App 目录执行：
+
+```sh
+python3 tools/prepare-ai-sketch.py --toolchain-archive /tmp/xgoduck-toolchain-1.0.1.tar.xz
+bash tools/install-ai-support.sh
+```
+
+这个准备脚本没有上传、烧写或启动 App 的步骤。`/bin/arm-zephyr-eabi-g++: no such file or directory` 通常是前面工具下载失败的后续错误，应先修复前面的依赖下载，再编译。
+
+### Python 依赖下载失败
+
+安装支持时会在当前 App 根目录生成本机 `uv.toml`：`cn` 默认使用清华 PyPI 镜像，`global` 默认使用官方 PyPI。只影响 Python 包下载，不改变聊天服务器、账号绑定或区域。已有手写配置和显式指定的镜像会保留；该文件不进入分发 ZIP。
+
+如果 Run 日志先出现 `Failed to fetch .../simple/...` 或下载超时，随后才提示 `No module named onnxruntime`，应先修复依赖下载。在板端 App 目录执行 `python3 tools/configure-ai-python.py` 后重新 Run。也可用 `--index-url https://<可访问的镜像>/simple/` 显式指定 HTTPS 镜像。首次成功运行仍需要下载容器和其他依赖；含工具链 ZIP 不包含 Python 虚拟环境。
+
+## 6. 手机发现、配网、绑定
+
+1. 开机后，未联网、未绑定或云连接检查失败时，板子广播 **`XGO-DuckABCD`** 这样的名字；末四位来自稳定设备 ID。麦克风、扬声器和屏幕都不是广播的前提。使用第 1 步对应的小程序或 App 登录账号，进入“添加设备”，授予蓝牙及系统要求的权限，搜索这只鸭子。
+2. 连接后扫描 Wi-Fi，选择网络并提交密码。协议沿用生态现有 BluFi（FFFF / FF01 / FF02），发送的是 Wi-Fi 参数，不修改服务器。当前支持开放网络与 WPA/WPA2 Personal 密码；企业网络和需要网页登录的热点需另行在 Linux 主机配置。
+3. Wi-Fi 成功后，板子发送同一个稳定设备 ID；客户端把它绑定到**当前客户端所在服务器**的账号，并选择智能体。之后板端检查所选服务器的绑定状态，取得 MQTT 凭据并启动聊天/MCP。
+4. 已联网且绑定检查成功后结束配网广播；已经连接的配网会话先完成。后续 Wi-Fi 失联会重新广播以便更换网络。云服务暂时不可达时保留同一区域已知绑定并重试，不把网络错误当作“已解绑”。
+5. USB 麦克风/扬声器缺失时，云端 MCP 和配网仍可运行，语音状态显示 `waiting_audio`；接入后自动重新枚举。准备好 USB 音频时，中文默认唤醒词“小鸭小鸭”；英文沿用 Hi Luka 模型。
+
+如果选错客户端，Wi-Fi 仍可能配置成功，但板子检查的另一套服务器仍是未绑定。换用正确客户端完成绑定，或按下一节在板端明确换区；手机不会替你切区。
+
+## 7. 配置、换区和升级
+
+常用配置文件为 `data/voice_config.json`：
+
+```json
+{
+  "enabled": true,
+  "cloud_region": "cn",
+  "language": "cn",
+  "volume": 60,
+  "enable_wakeword": true,
+  "enable_aec": false,
+  "enable_camera": true,
+  "voice_motion_enabled": false,
+  "remote_motion_enabled": false,
+  "input_device": null,
+  "input_auto_gain": null,
+  "input_gain_db": 0,
+  "output_gain_db": 0,
+  "tts_mouth_enabled": true,
+  "output_device": null,
+  "camera_device": null,
+  "ota_url": ""
+}
+```
+
+缺失字段使用默认值，唯独服务器没有隐式默认选择。声卡使用枚举的 `usb:VID:PID:serial` 或 ALSA card ID；摄像头使用 `/dev/v4l/by-id/` 路径。高级自建服务器可显式填写 HTTPS `ota_url`，优先于区域预设；手机仍不能修改它。
+
+需要换区时，在板端停止 App 后修改并重新运行：
+
+```sh
+cd ~/ArduinoApps/xgoduck_ai
+arduino-app-cli app stop "$PWD"
+python3 tools/configure-ai.py --region global --language en
+arduino-app-cli app start "$PWD"
+```
+
+换回国内用 `--region cn`。然后在目标区域客户端添加/绑定并配置智能体。旧区域的账号绑定不会自动删除；设备 ID、校准、手柄映射和音量保留。绑定缓存按 OTA 地址和设备 ID 校验，目标区域检查成功前不会使用旧区域凭据。语言单独改变也不会换区。
+
+升级前停止 App、备份整个 `data/`，然后更新代码/模型；Git 安装可在这个分支拉取，ZIP 安装应只更新程序文件，保留 `data/`、已有依赖和本机设置。辅助服务代码更新后重跑安装脚本；随后 Run，并检查默认 App 路径。ZIP 不含身份、Wi-Fi 密码、云凭据、豆包密钥及校准数据。
+
+云绑定缓存、设备 ID、客户端 ID、AEC 和豆包设置位于权限 0700 的 `data/voice-state/`，私有文件权限 0600。不要把已绑定的 `data/` 作为给其他板子安装的模板。
+
+OTA 上报 MAC 统一为小写，以匹配管理端的在线状态和 MCP 查询；本地持久身份与 BluFi 绑定 MAC 不改变。由 OTA 返回重新签名的 MQTT 凭据，不能直接改写其 client ID。升级前版本若出现“已绑定、MQTT 已连接但小程序离线”，更新到 `0.2.3` 后重新启动 App 获取一致格式的凭据，无需解绑。
+
+### 切回保留的旧 Duck App
+
+先修改下面的旧目录变量。停止新 App、还原默认 App 并移除本安装器专属的启动依赖；两个 App 的文件和 `data/` 都保留：
+
+```sh
+duck_previous_app="/home/arduino/ArduinoApps/你的旧Duck目录"
+cd ~/ArduinoApps/xgoduck_ai
+arduino-app-cli app stop "$PWD"
+arduino-app-cli properties set default "$duck_previous_app"
+sudo systemctl disable --now xgoduck-ai-hardware.service xgoduck-ai-usb-host.service
+sudo rm -f /etc/systemd/system/arduino-app-cli.service.d/xgoduck-ai.conf
+sudo systemctl daemon-reload
+```
+
+按旧安装实际使用过的服务，恢复 `sudo systemctl enable --now duck-gamepad.service` 和 `systemctl --user enable --now duck-device-test.service`。如果以前使用开机 USB Device 默认服务，恢复 `sudo systemctl enable duck-usb-device.service`，正常重启一次后生效。然后用 App Lab 或 `arduino-app-cli app start "$duck_previous_app"` 启动旧 App。若原来没有默认 App，可用 `arduino-app-cli properties set default none` 恢复为不自动启动。旧 Duck 同样使用 2 Mbps Bridge，无需反复改变 router；切其他速率应用时再按技术参考处理。
+
+## 日常网页、聊天和遥控
+
+两个常驻业务进程：
+
+| 进程 | 工作 |
+| --- | --- |
+| `python/main.py` | 原 50 Hz ONNX、Bridge、STM32 状态和运动控制、9527 网页；监督聊天子进程 |
+| `python/voice_process.py` | 无屏 AI Chat Pro、USB 音频/摄像头、唤醒词、音量、绑定检查、MCP；线程内承接原 9528 音视频接口 |
+
+系统另有前述 root 硬件辅助服务，采集时还会按需调用 `arecord/aplay/v4l2-ctl`。业务进程通过仅容器回环地址的 9530/9531 通信，每次 App 启动使用临时令牌。聊天不直接打开 Bridge/UART。聊天进程故障会撤回动作并重启，运动主进程退出时清理聊天及录音子进程。
+
+网页仍在 `http://<板子IP>:9527/`，原诊断接口在 9528。网页录音、监听、播放和对讲使用音频时先释放聊天声卡，结束后恢复聊天；摄像头共享，原页面结构不变。系统开机先准备 USB Host，App 和聊天单独重启都不再次切换。
+
+语音可以通过 `self.audio_speaker.set_volume` 设置 0–100% 音量，与网页共用持久值。AEC 默认关闭，可用 `self.set_aec` 开启，实际效果需 USB 音频验收。
+
+待机识别到“小鸭小鸭”后，先在板子扬声器播放固定的鸭叫（约 0.92 秒，同一段 WAV，每次相同），再建立云端对话。提示音共用上述音量设置；网络慢或连接失败也不会推迟这次唤醒反馈。提示音排空后才开启对话采集，避免被状态切换截断；固定鸭叫沿用非语音提示音的嘴型屏蔽，不驱动嘴部。中文采用最终版 `python/models/xiaoya.onnx`，16 kHz、2 秒窗口、阈值 0.80、80 ms 步长，归一化输入保持与训练库一致。仅完全相同的 mel 窗口复用 embedding，最多 32 项；首帧和变化窗口重新推理。原模型和英文模型的 PCM16 幅值处理保留。模型及固定鸭叫的来源和校验值见 `provenance/xiaoya-wakeword.json`。
+
+**双麦采集（0.2.28）。** 宿主机硬件辅助服务读取实际 USB 采集通道数，避免把容器中的虚拟声卡通道数当成硬件能力。单麦仍用一路；双麦保留两路采集，默认 `"input_channel_mode": "auto"`，稳定选择一路送入唤醒、AEC 和 Opus。另一通道能量持续 0.5 秒高出约 6 dB 才切换，避免左右频繁跳动；这是通道选择，不是波束成形。可显式选择 `left`、`right` 或 `average`，但未确认两路极性前不建议平均，以免抵消语音。
+
+对 USB ID `0c45:636b` 且声明支持 48 kHz 的麦克风，默认以 48 kHz 采集，由 ALSA 转换为模型需要的 16 kHz。其他设备保留自动采样率；`input_sample_rate` 可显式设为 `16000`、`48000` 或 `null`（自动）。唤醒和聊天请求 320 ms 输入缓冲；唤醒回调只复制数据和统计，工作线程丢弃超过 500 ms 的积压块，并在丢块/溢出后重新预热，避免拼接不连续语音。`/api/voice/status` 的 `microphone` 报告通道电平/选择，`wake_capture` 与 `audio_playback` 分别报告唤醒和聊天采集计数。升级旧安装时需同步更新硬件辅助服务；原网页和 STM32 无需改动。输入缓冲不能修复整个 USB Hub 掉线，遇到这种情况仍需结合内核日志排查。
+
+USB 麦克风声音太弱时，可在 `data/voice_config.json` 设置 `"input_auto_gain": true` 后重启 App，启用声卡提供的自动增益。`false` 关闭，默认 `null` 保留设备自身设置；不支持该控制的 USB 麦克风继续正常使用。设置应用于聊天/唤醒及原网页录音，音量滑块仍只控制扬声器。
+
+硬件采集音量已到上限后，可设置 `"input_gain_db": 6`，额外放大唤醒与聊天的采集幅度约 2 倍。范围为 0–12 dB，默认 0（不额外放大）；设置持久保存，运行中的聊天自动重新打开音频会话。聊天在 AEC 后、Opus 编码前放大，唤醒在模型推理前放大；两条路径各处理一次，超出 PCM 范围的样本饱和限幅，避免整数溢出。软件增益也会放大底噪，近距离大声说话若失真，应降低增益。原网页录音和扬声器音量不使用此软件增益。当前值可从 `/api/voice/status` 的 `input_gain_db` 读取。
+
+扬声器硬件音量达到 100% 后，可设置 `"output_gain_db": 6`，把聊天、唤醒提示音和原网页播放的数字幅度额外放大约 2 倍。范围 0–12 dB，默认 0；与麦克风增益独立，运行中的聊天自动重新打开会话并应用。0–100 音量控制仍有效，0 始终数字静音；硬件调音量成功时不重复衰减，失败时用软件音量。放大后饱和限幅，AEC 参考使用实际输出样本；原本已接近满幅的声音会削波，应按听感降低增益。实际声压提升受扬声器和功放限制。状态接口同时报告 `output_gain_db`。
+
+聊天播放使用 **1000 ms 网络音频内容预缓冲、请求 500 ms 声卡缓冲**。按当前 60 ms/帧，网络预缓冲实际攒 17 帧即 1020 ms；不是固定等待一秒，超短回答在 TTS 结束时立即放行已有帧。声卡实际接受的时长由驱动决定，可从 `/api/voice/status` 的 `audio_playback.output_latency_ms` 读取。更大的缓冲会增加播放延迟。
+
+播放结束会等待最后提交给声卡的样本实际排空，再进入下一轮；打断会清空软件队列并丢弃尚未播放的声卡缓冲，迟到的解码/PLC/提示音不能恢复已取消的内容。实时音频回调不再直接打印日志。`audio_playback` 分别报告 `prebuffer_ms`、声卡缓冲、PCM/Opus 水位、声卡欠载 `output_underflows`、输入溢出和 PCM 断粮 `pcm_starvations`；声卡欠载不能仅凭网络缓存量判断。原网页音频播放接口与页面保持不变。
+
+**嘴型波动（0.2.20）。** 在原说话动嘴能力上，每 20 ms 叠加当前、80 ms 和 320 ms RMS 能量，权重为 0.6/0.3/0.1；短/中/长能量差补充音节变化，3.2 Hz 与 5.1 Hz 的混合节奏让持续元音也有开合。在节奏变化之外，随有效语音能量补充最多 2°张口，避免平均开口变小。攻击/释放平滑为 35/60 ms，保持 0–12° 和 90°/秒限制；当前音频静音时目标立即归零并平滑闭嘴，不由长窗口维持张嘴。跨 60 ms 音频帧连续计算，保留原 DAC 同步、队列时效和身体已使能检查。`tts_mouth.envelope` 显示各窗口 RMS、节奏和目标角度，便于观察。
+
+**说话动嘴（0.2.15）。** 默认 `"tts_mouth_enabled": true`。从实际送给扬声器的 PCM 每 20 ms 提取去直流的 RMS 音量，加少量过零率变化，平滑开合并限幅到 0–12°，不是音素口型识别。按声卡 DAC 时间排队，补偿现有约 540 ms 的实际输出延迟，网络预缓冲不会让嘴提前动；实时音频回调只入有界队列，计算和 IPC 在聊天进程的工作线程完成。相邻音频帧合并发送；IPC 较慢时保留最近两帧并丢弃积压/过期数据，避免嘴落后声音。状态中的 `last_lead_ms`、`dropped_frames`、`ipc_errors` 和 `last_error` 可用于诊断。
+
+仅在 Policy/Hold、身体舵机已使能、反馈/命令链路正常且不在起身、抓取或翻滚时更新嘴部；不会自动使能身体，不要求开启语音运动权限，也不取得身体控制权或改变行走/头部指令。显式嘴部动作和手动嘴部控制优先。播放结束、打断、失联、退出或约 180 ms 的嘴部租约超时会清掉未执行目标，并恢复说话前的嘴部目标（通常为闭嘴）；旧回合的迟到数据不能重启动画。卸力时仍正常聊天。设为 `false` 可关闭；状态从 `/api/voice/status` 的 `tts_mouth_enabled`、`tts_mouth` 读取。说话动嘴沿用原网页和运动模型；保扭矩暂停另需配套 STM32 更新。
+
+语音运动和手机遥控有独立权限，默认都关闭，App 默认仍以仅推理模式启动。先完成舵机配置和校准，再开启需要的权限：
+
+| 工具 | 行为 |
+| --- | --- |
+| `Duck.EnableVoiceMotion` | 授权语音动作，开启本身不启动舵机 |
+| `Duck.EnableRemoteMotion` | 授权手机 MCP 遥控，开启本身不启动舵机 |
+| `Duck.RemoteMove` | 手机前后/转向，租约 0.1–1 秒；每个控制器的递增序号拒绝过期指令，松手发送 stop |
+| `Duck.Stand` | 明确请求起立，以零方向速度进入原平衡/起身策略；反馈确认已使能并直立稳定后才允许移动 |
+| `Duck.Move / Duck.Turn` | 语音默认建议：前后 0.2 m/s、侧移 0.15 m/s，左转 +1 rad/s、右转 -1 rad/s；范围与网页摇杆一致：前后 ±0.4 m/s、侧移 ±0.3 m/s、转向 ±1 rad/s，每次 0.1–10 秒 |
+| `Duck.SetHead / Duck.SetMouth / Duck.Pick` | 头颈每轴 ±0.5 rad、嘴部 0–30°、原 4 秒抓取策略 |
+| `Duck.Roulade` | 站稳后运行一次原翻滚模型，固定约 1.9 秒；无方向/时长参数，后续动作等待恢复站稳 |
+| `Duck.Quack` | 本地合成一声鸭叫；`kind` 为 `greet/inquire/alarm/peck/chirp/coo/wheee`，不需要运动权限，不启动舵机 |
+| `Duck.GetStatus` | 反馈、控制权、当前动作 `motion_action`、排队 `queued_actions` 和最近结果 `recent_actions` |
+| `Duck.Stop` | 停止当前动作并清空排队，速度归零、保留平衡；`Duck.TorqueOff` 才明确卸力 |
+
+**按动作报告反馈问题（0.2.21）。** 不再把某个 ID 缺反馈作为全部 MCP 动作的拒绝条件。行走/转向检查十个腿部舵机，头颈检查本次改变的轴，嘴部和 TTS 嘴型检查 34 号；抓取涉及全部舵机，翻滚涉及腿部和头颈，以及需要回零的嘴部。Stand 还检查本次要回零的头颈/嘴部。其他 ID 缺反馈在 `GetStatus.feedback_warning` 中提示，不取消无关动作。`action_feedback_ready` 和 `head_feedback_ready` 分别给出动作和头颈各轴的反馈可用性；`full_robot_ready` 只保留为全部反馈齐全的诊断指标。权限、控制权、使能、姿态和 IMU/通信时效要求保留。
+
+排队入口只校验权限、参数、控制权和队列容量，不读取舵机反馈；立即执行和出队共用一处执行前检查。执行中使用已有状态流监测本次所需关节，不增加串口轮询、回包等待或全舵机拦截。拒绝或中止时说明具体缺失 ID、IMU 无效、STM32 反馈中断/尚未收到等可观测问题。现有固件不区分设备未回包与报错包被丢弃，因此不能把缺反馈擅自解释成过热、过载、断线或损坏，也不能只等待一个可能永远不会返回的设备错误码。
+
+模型头颈命令的顺序是颈部俯仰、头部俯仰、左右转头、头部侧倾，分别为 `head1`–`head4`；默认装配对应 ID 30–33，独立嘴部为 ID 34。实际重新编过 ID 的机器需单独核实。`SetHead` 至少传一个轴，省略的轴保留执行时的原目标；单独左右转头只传 `head3`，不要为了补齐参数把其他轴设为零或同时设为极值。保持已设定的同一目标不要求这个轴重新就绪；改变或回零才检查该轴。`SetHead` 保持目标，需要额外指令回中，并不是一次完整摇头动作。TTS 嘴型只更新原嘴部目标，由同一运动进程发送和读取全部舵机，不因正在说话而独占头部或停止嘴部反馈。
+
+**连接成功提示音（0.2.18）。** App 每次启动，确认联网后播放 `greet`，确认已绑定且语音服务 MQTT 实际在线后播放 `wheee`；复用 `Duck.Quack` 的本地合成器。这两个提示音额外乘 3 倍软件增益，在叠加已有扬声器增益前限幅；普通 MCP 鸭叫和 TTS 增益保留。联网提示不等待账号绑定：聊天尚未启动时短暂使用同一音频占用锁播放，释放声卡后才启动聊天；聊天已启动则沿用原输出流。无 USB 扬声器或音频被网页/TTS 占用时不阻塞启动，稍后补播；启动内成功过的提示不因轮询、断线或配置刷新重复播放。只有真实播放完成才记录成功；状态见 `/api/voice/status` 的 `connection_sounds`，不使能或驱动舵机。
+
+**鸭叫（0.2.16）。** 例如“像鸭子一样叫一声”（`greet`）、“疑惑地叫一声”（`inquire`）、“开心地叫一声”（`wheee`）。`alarm` 为警觉叫，`peck` 为啄叫，`chirp` 为轻鸣，`coo` 为低鸣。工具本地合成一次，声音长短和音色由设备身份与轮换变体决定，每声最多 2 秒；不朗读“嘎嘎”，不下载新 ONNX，也不调用云端 TTS。合成器移植自 [MicroDuck](https://github.com/pollen-robotics/microduck/tree/d7560ef059c73fab4177eb247c1774013f6feb9d/sounds) 的 Apache-2.0 Rust 源码，许可、修改说明与源码校验记录随 ZIP 分发。
+
+沿用聊天进程当前 USB 输出流、音量和扬声器增益，不另开声卡。当前回答未结束时最多等待一秒，仍忙则返回具体错误；同一时刻只播一声。鸭叫期间暂停唤醒/上行收音，短暂保留提早到达的 TTS，播完再按顺序恢复；不会把自己的叫声送去识别。工具等 PCM 与声卡尾部排空后才返回 `completed`，这表示音频播放链完成，不保证外部扬声器有电或音量非零。打断、新用户语音、音频重置、断连/退出或播放超时会中止；状态和最近原因可从 `/api/voice/status` 的 `duck_sound` 读取。原网页和 TTS 说话嘴型保持原行为；单纯鸭叫不使能或驱动嘴部舵机。
+
+`0.2.11` 起，普通语音左右转默认使用 ±1 rad/s、2–3 秒；用户明确要求较慢时仍可指定较小值。速度上限保持 ±1 rad/s，手机遥控仍为原先 ±0.5 rad/s，原网页 Q/E 参数未改。
+
+手机遥控路径为 **小程序/App → 对应云服务 → MCP → 聊天进程 → 运动进程**，手机蓝牙只用于配网；原蓝牙手柄功能保留。要求舵机/IMU 就绪，校准、Servo setup 和手柄占用时不抢控制权。网页模式按钮可手动接管并作废旧遥控续租；租约到期、聊天失联超过 0.8 秒或权限关闭会停止速度并保留平衡。
+
+首次运动时，放好鸭子并留出起身空间，先说“开启语音运动”，再说“站起来”。`Duck.Stand` 本身不修改权限，使用零方向速度运行原策略；也可以通过原网页的 Policy 明确启动平衡。起立请求返回“已接受”不代表已经站好：`Duck.GetStatus` 的 `movement_ready` 才表示移动条件已经满足，起立五秒内未确认就报告失败。
+
+
+**临时通信排查（0.2.22）。** 本版 `MOTION_TIMEOUT_CHECKS_ENABLED=false`，STM32 不因命令 250 ms 或 IMU 健康数据 100 ms 超时而暂停/卸力，暂时不按源采样时间戳 150 ms 拒绝新序号目标。固件用状态位 64 宣告 `timeout_checks_disabled`；Linux 收到此位后不因反馈超过 150 ms、IMU 无效或使能确认迟到而锁定暂停，MCP 同步忽略这些时效拦截。仍需真实 ARM 回执才继续下发策略，不把确认等待当成已使能。普通网页 1 秒心跳检查在本分支此前已移除。
+
+断流/无效 IMU 时保留上个目标，不使用无效采集推理或突然切换默认姿态；收到有效数据后直接继续原控制请求，因此可能接续断流前的动作。本版没有用自动回零速度替代被取消的超时处理。日志 `[motion-timeout-observed]` 和 `/api/status` 的 `timeout_warning`、`timeout_events` 保留实测年龄，持续异常日志最多每五秒一次；`full_robot_ready`、`feedback_warning` 仍报告真实健康状况，不能把旁路状态当成通信已修复。需要完整上传本版 sketch，只有 Python 更新时仍沿用旧固件保护。
+
+明确 Stop/TorqueOff、初次使能的 IMU 就绪、首次反馈不存在、缺失本次所需舵机、报文格式/有限值/序号、权限、动作时长与控制权检查保留。App 退出、手柄断连、模型异常和 MCU 重启仍可进入显式保扭矩暂停。这是为排查断流而临时取消超时动作，原网页资源和持久配置保持原样。下述 0.2.17 时效保护说明适用于未宣告状态位 64 的固件。
+
+**保扭矩暂停（0.2.17）。** 日常反馈超过 150 ms 未更新、IMU 异常、控制推理报错、App 退出或手柄断连只停止动作并保持当前可靠关节位置，不主动关扭矩。STM32 在命令超过 250 ms 或 IMU 健康状态超过 100 ms 未更新时也锁定保持位置。陈旧/乱序数据仍拒绝；普通 POLICY/HOLD 帧不能解除暂停，断连前的走路/翻滚和队列不会重放。恢复后明确要求“站起来”或选择原网页 Policy/Hold，由新鲜反馈生成 ARM；明确 TorqueOff、Off、Inference only 或明确退出诊断模式仍可卸力。
+
+Linux 重启连接到已使能的 MCU 时先保扭矩暂停，并接续 MCU 命令序号；校准/舵机调试超时或 App 退出保留最后诊断位置，直至明确控制/退出。新的 `PAUSE=4` 不接收 Linux 目标、不依赖源时间戳，始终在 MCU 本地捕获可靠关节位置，且不能使能原本卸力的舵机。状态 `fault_hold`、`fault_hold_supported`、`pause_events` 分别给出暂停、固件能力与最近原因/反馈年龄；MCP GetStatus 也返回暂停字段。必须同步更新本版 sketch：capability flag 32 未出现时拒绝新使能。断电、MCU 硬件重启或舵机自身的硬件保护无法由 Linux 保证扭矩。
+
+高频嘴部目标改走 App 私有目录中权限为 0600 的 Unix datagram socket，含每次 App 启动的临时令牌、会话/回合/序号校验。发送不等待 HTTP 回复，仍有界、过期丢弃、按 DAC 时间执行；音频回调只入队。MCP/普通控制命令仍使用原有认证的回环 HTTP。嘴部在保扭矩故障暂停时停止，不能解除身体暂停。
+
+**方向键不会开启舵机或自动起身。** 板端要求已在 Policy、STM32 已使能、十个腿部舵机和 IMU 反馈新鲜、运动命令到达 STM32 的间隔不超过 150 ms、恢复阶段为 `walk`，且身体倾角小于 15° 连续一秒。趴倒、正在起身、抓取/翻滚中或状态未知时拒绝移动并返回具体原因。语音 Move/Turn 和抓取/翻滚也须先通过站立检查；单独头颈/嘴部命令仍要求身体已使能、直立且处于 walk，但不重复等待站稳一秒。Stand 是明确启动平衡的入口。Stop 不受站立门槛限制。
+
+站稳检查用于开始一段新的移动。已经开始的 Move/Turn 及同一手机控制器的连续续租，允许正常步态的身体倾斜，不再要求行走中仍连续满足“小于 15° 一秒”；仍要求使能、反馈和命令新鲜、恢复阶段为 `walk`、姿态已知且倾角小于原恢复策略的 55° 跌倒阈值。停止后发起新动作或更换手机控制器，仍须重新通过站稳检查。手机遥控仍保留原先 0.1 m/s、0.5 rad/s 的限速。
+
+方向移动期间再次倾倒、进入起身恢复或通信丢失，方向速度归零、当前遥控会话作废，原平衡/恢复策略继续负责姿态。恢复后重新打开手机遥控页发起新会话，再操作方向键；旧会话的迟到指令不能重新启动移动。工具错误同时保留 MCP 文本和现有云端读取的详细错误字段，便于区分权限、姿态与通信问题。
+
+**10 秒与连续动作（0.2.9）。** “往前走 10 秒”使用一次 `Duck.Move(seconds=10)`，从真正开始执行时计时。当前语音动作未结束时，后续语音动作按接收顺序排队，返回 `execution.status=queued`，不会覆盖正在执行的动作。最多等待 4 个动作，当前动作剩余时间与排队动作时长合计最多 30 秒；额外的站稳等待不计入这项动作时长上限。`GetStatus` 区分当前动作、排队列表和最近 4 项结果；“已接受/已排队”都不表示实体动作完成。
+
+连续 Move/Turn 沿用正常步态检查；其他排队动作在执行前重新检查站稳，最多等待 5 秒。起立失败、非主动翻滚期间的跌倒/恢复、通信或使能丢失、聊天断开、权限关闭、手柄/网页接管及 App 退出都会取消待执行动作；恢复后不会自行接着走。Stop/TorqueOff 清空整条队列，停止前已发出但延迟到达的请求也不能重新启动运动。队列只在内存中保存；手机遥控仍使用独立短租约，不加入语音队列。
+
+**语音翻滚（0.2.14）。** 明确开启语音运动并站稳后，说“翻滚一次”或“滚一圈”，调用无参数 `Duck.Roulade`，沿用 `xgoduck_roulade.onnx` 与原约 1.9 秒窗口。翻滚前要求同样的站稳、权限、反馈和控制权；执行期间沿用原控制器的倾角处理，通信/使能丢失、聊天失联和权限撤回仍会中止。结束或 Stop 会退出翻滚、恢复平滑参数并复位动作滤波，保留原平衡/起身策略。排队的后续动作可等待这次主动翻滚的恢复和站稳，最多 5 秒；超时清队列，不自动重试翻滚。`completed` 仅表示指令窗口结束，不代表已经测得翻过一整圈。原网页按钮和手机方向遥控保持原行为。
+
+**拍照认证（0.2.9）。** 摄像头请求的 `Device-Id` 与 OTA 签发凭据时统一使用小写格式，避免“设备 ID 与 token 不匹配”。持久设备身份、绑定关系、Client-Id 和签名 token 保持原值；更新后无需重新绑定。摄像头缺失、网络或模型服务错误仍会报告具体原因。
+
+`Duck.GetStatus.motion_action` 和 `[motion-access]` 日志记录请求速度、动作状态、实际指令持续时长及中止原因。`completed` 只表示限时指令已结束，板子没有测量真实行走距离；不能仅凭工具返回“已接受”就宣称已经走了几步。旧版语音平移最高仅 0.1 m/s，模型可能只做很小的姿态调整；普通“往前走”建议从网页 W 键同样的 0.2 m/s、2–3 秒开始对照。
+
+`Duck.GetStatus` 在 MCP 中使用 `motion_action` 表示当前动作/租约，空闲时为 `null`。顶层 `action` 是现有云端的回复类型保留字段，不能用来放机器人动作。若旧版在查询状态后播报 “None/null”，更新到 `0.2.7` 并重启聊天进程或 App；保持整个 `data/`，无需重新绑定。语音权限关闭时，运动请求仍会被拒绝并说明原因。
+
+## 状态与排错
+
+在板端查看：
+
+```sh
+arduino-app-cli properties get default
+systemctl is-enabled xgoduck-ai-hardware.service arduino-app-cli.service
+systemctl is-active xgoduck-ai-hardware.service
+sudo journalctl -u xgoduck-ai-hardware.service -b -n 80 --no-pager
+curl -fsS http://127.0.0.1:9527/api/voice/status | python3 -m json.tool
+```
+
+| 状态/现象 | 检查 |
+| --- | --- |
+| `awaiting_cloud_config` | 用 `tools/configure-ai.py` 在板端明确选区；配置损坏时先修复 JSON |
+| `awaiting_network` | 手机蓝牙配网；扫描失败时同时查看板端硬件服务日志和手机错误码 |
+| `awaiting_binding` | 客户端区域是否匹配、账号是否绑定到返回的稳定 ID |
+| `checking_binding` / `cloud_error` | DNS、时间、互联网和所选服务可达性；不等同于解绑 |
+| `hardware_error` / identity mismatch | 核对当前 App 路径和身份，重跑硬件支持安装；不要删除已绑定身份 |
+| `waiting_audio` | Host 模式、Hub 供电、USB capture/playback 声卡及持久选择；MCP 仍可在线 |
+| 手机找不到设备 | 硬件服务是否启动、是否已联网并绑定而停止广播、蓝牙是否可用；原系统/驱动故障需单独排查 |
+| 开机不运行 | 默认 App 是否指向这个目录，首次联网 Run 是否完成，官方 daemon 日志和 App Lab 控制台 |
+| 安装后 USB 连接消失 | 支持安装已准备 Host，使用提前验证的 Wi-Fi/SSH；后续接 Host Hub |
+| 重启后 9528 被占用 | 检查并关闭旧 `duck-device-test.service` 自启 |
+
+硬件服务可独立于聊天和 USB 音频广播。若首次离线启动时 App CLI 在进入 Python 前因缺少依赖失败，成功配网后只对**当前仍是默认的本 App**尝试恢复一次；已经运行过又被手动 Stop 的 App 不会被这个恢复逻辑擅自重启。建议首次依赖完整缓存后再做离线冷启动验收。
+
+## 开发与验证
+
+本地测试环境需先安装 `python/requirements.txt`、`dbus-next==0.2.3` 和 `fastapi==0.118.0`；ARM64 Docker 镜像已准备这些测试依赖。
+
+```sh
+python3 -m unittest discover -s tests -v
+docker build --platform linux/arm64 -f tools/ai-test.Dockerfile -t xgoduck-ai-sdk-test:0.2.0 .
+docker run --rm --platform linux/arm64 --network none -v "$PWD:/app" xgoduck-ai-sdk-test:0.2.0
+docker run --rm --platform linux/arm64 --network none -v "$PWD:/app" xgoduck-ai-sdk-test:0.2.0 python -W error::ResourceWarning -m unittest discover -s tests -v
+python3 tools/package-ai-app.py
+```
+
+测试覆盖两进程生命周期、绑定/掉网/换区、真实私有 D-Bus GATT、BluFi 校验与分片、Wi-Fi 失败回滚、MCP 租约、USB 音频缺失和网页音频交接。见 [检查记录](ai-validation.md)。
+
+本地和 Linux 容器测试不替代实机验收。第二只 UNO Q 已执行支持安装并验证正常重启自启、Host、设备枚举和运动通信；仍需验证断电/离线冷启动、真实手机配网绑定、实际聊天/AEC 与物理运动，详见检查记录。本项目的配网服务不会修复系统无线驱动故障。
+
+官方依据：[UNO Q 初始设置](https://docs.arduino.cc/tutorials/uno-q/user-manual/)、[SSH](https://docs.arduino.cc/tutorials/uno-q/ssh/)、[App ZIP 导入](https://blog.arduino.cc/2026/02/04/introducing-the-latest-arduino-app-lab-release/)、[App 规范](https://github.com/arduino/arduino-app-cli/blob/main/docs/app-specification.md)、[默认 App 命令](https://github.com/arduino/arduino-app-cli/blob/main/cmd/arduino-app-cli/properties/properties.go)。

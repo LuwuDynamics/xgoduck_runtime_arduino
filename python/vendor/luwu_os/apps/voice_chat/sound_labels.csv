@@ -1,0 +1,522 @@
+index,label_en,label_cn,emotion,threshold,confirmations,enabled
+0,Speech,说话声,query,,,true
+1,"Child speech, kid speaking",儿童说话,query,,,true
+2,Conversation,交谈声,query,,,true
+3,"Narration, monologue",朗读与独白,query,,,true
+4,Babbling,牙牙学语,query,,,true
+5,Speech synthesizer,合成语音,query,,,true
+6,Shout,喊声,surprise,,,true
+7,Bellow,吼声,surprise,,,true
+8,Whoop,欢呼叫声,surprise,,,true
+9,Yell,大喊声,surprise,,,true
+10,Children shouting,儿童喊叫,surprise,,,true
+11,Screaming,尖叫声,surprise,,,true
+12,Whispering,耳语,query,,,true
+13,Laughter,笑声,guffaw,,,true
+14,Baby laughter,婴儿笑声,cute,,,true
+15,Giggle,咯咯笑,guffaw,,,true
+16,Snicker,窃笑,guffaw,,,true
+17,Belly laugh,开怀大笑,guffaw,,,true
+18,"Chuckle, chortle",轻笑,guffaw,,,true
+19,"Crying, sobbing",哭泣与抽泣,sad,,,true
+20,"Baby cry, infant cry",婴儿哭声,sad,,,true
+21,Whimper,呜咽,sad,,,true
+22,"Wail, moan",哀嚎,sad,,,true
+23,Sigh,叹气,sad,,,true
+24,Singing,唱歌,happy,,,true
+25,Choir,合唱,happy,,,true
+26,Yodeling,约德尔唱法,happy,,,true
+27,Chant,吟唱,happy,,,true
+28,Mantra,诵经,happy,,,true
+29,Child singing,儿童唱歌,happy,,,true
+30,Synthetic singing,合成歌声,happy,,,true
+31,Rapping,说唱,happy,,,true
+32,Humming,哼唱,happy,,,true
+33,Groan,呻吟,sad,,,true
+34,Grunt,哼哧声,query,,,true
+35,Whistling,口哨声,query,,,true
+36,Breathing,呼吸声,sleepy,,,true
+37,Wheeze,喘鸣,query,,,true
+38,Snoring,打鼾,sleepy,,,true
+39,Gasp,倒吸气,surprise,,,true
+40,Pant,喘气,query,,,true
+41,Snort,鼻息声,query,,,true
+42,Cough,咳嗽,query,,,true
+43,Throat clearing,清嗓子,query,,,true
+44,Sneeze,打喷嚏,surprise,0.60,1,true
+45,Sniff,吸鼻子,query,,,true
+46,Run,跑步声,query,,,true
+47,Shuffle,拖步声,query,,,true
+48,"Walk, footsteps",脚步声,query,,,true
+49,"Chewing, mastication",咀嚼声,query,,,true
+50,Biting,咬东西,query,,,true
+51,Gargling,漱口声,query,,,true
+52,Stomach rumble,肚子咕噜声,query,,,true
+53,"Burping, eructation",打嗝声,query,,,true
+54,Hiccup,呃逆,query,,,true
+55,Fart,放屁声,query,,,true
+56,Hands,手部动作声,query,,,true
+57,Finger snapping,打响指,happy,0.60,1,true
+58,Clapping,拍手声,happy,0.60,1,true
+59,"Heart sounds, heartbeat",心跳声,query,,,true
+60,Heart murmur,心脏杂音,query,,,true
+61,Cheering,欢呼声,happy,,,true
+62,Applause,掌声,happy,,,true
+63,Chatter,闲聊声,query,,,true
+64,Crowd,人群声,query,,,true
+65,"Hubbub, speech noise, speech babble",嘈杂人声,query,,,true
+66,Children playing,儿童玩耍,happy,,,true
+67,Animal,动物声,lookaround,,,true
+68,"Domestic animals, pets",宠物声,lookaround,,,true
+69,Dog,狗叫声,lookaround,,,true
+70,Bark,犬吠,lookaround,,,true
+71,Yip,小狗尖叫,lookaround,,,true
+72,Howl,犬嚎,lookaround,,,true
+73,Bow-wow,汪汪声,lookaround,,,true
+74,Growling,低吼,surprise,,,true
+75,Whimper (dog),小狗呜咽,sad,,,true
+76,Cat,猫叫声,lookaround,,,true
+77,Purr,猫咪呼噜,cute,,,true
+78,Meow,喵喵声,cute,,,true
+79,Hiss,猫咪嘶叫,surprise,,,true
+80,Caterwaul,猫咪嚎叫,surprise,,,true
+81,"Livestock, farm animals, working animals",家畜声,lookaround,,,true
+82,Horse,马的声音,lookaround,,,true
+83,Clip-clop,马蹄声,lookaround,,,true
+84,"Neigh, whinny",马嘶声,lookaround,,,true
+85,"Cattle, bovinae",牛的声音,lookaround,,,true
+86,Moo,哞哞声,lookaround,,,true
+87,Cowbell,牛铃声,lookaround,,,true
+88,Pig,猪的声音,lookaround,,,true
+89,Oink,猪哼声,lookaround,,,true
+90,Goat,山羊叫声,lookaround,,,true
+91,Bleat,咩咩声,lookaround,,,true
+92,Sheep,绵羊叫声,lookaround,,,true
+93,Fowl,家禽声,lookaround,,,true
+94,"Chicken, rooster",鸡的声音,lookaround,,,true
+95,Cluck,咯咯鸡叫,lookaround,,,true
+96,"Crowing, cock-a-doodle-doo",公鸡打鸣,lookaround,,,true
+97,Turkey,火鸡叫声,lookaround,,,true
+98,Gobble,火鸡咯咯声,lookaround,,,true
+99,Duck,鸭的声音,lookaround,,,true
+100,Quack,嘎嘎鸭叫,lookaround,,,true
+101,Goose,鹅的声音,lookaround,,,true
+102,Honk,鹅叫声,lookaround,,,true
+103,Wild animals,野生动物声,lookaround,,,true
+104,"Roaring cats (lions, tigers)",狮虎叫声,surprise,,,true
+105,Roar,咆哮声,surprise,,,true
+106,Bird,鸟的声音,lookaround,,,true
+107,"Bird vocalization, bird call, bird song",鸟鸣声,lookaround,,,true
+108,"Chirp, tweet",啁啾声,lookaround,,,true
+109,Squawk,鸟类尖叫,lookaround,,,true
+110,"Pigeon, dove",鸽子的声音,lookaround,,,true
+111,Coo,鸽子咕咕声,lookaround,,,true
+112,Crow,乌鸦的声音,lookaround,,,true
+113,Caw,乌鸦叫声,lookaround,,,true
+114,Owl,猫头鹰的声音,lookaround,,,true
+115,Hoot,猫头鹰咕咕声,lookaround,,,true
+116,"Bird flight, flapping wings",鸟儿振翅,lookaround,,,true
+117,"Canidae, dogs, wolves",犬狼叫声,lookaround,,,true
+118,"Rodents, rats, mice",啮齿动物声,lookaround,,,true
+119,Mouse,老鼠的声音,lookaround,,,true
+120,Patter,轻快脚步声,lookaround,,,true
+121,Insect,昆虫声,lookaround,,,true
+122,Cricket,蟋蟀叫声,lookaround,,,true
+123,Mosquito,蚊子声,lookaround,,,true
+124,"Fly, housefly",苍蝇声,lookaround,,,true
+125,Buzz,嗡嗡声,lookaround,,,true
+126,"Bee, wasp, etc.",蜜蜂与黄蜂,lookaround,,,true
+127,Frog,青蛙的声音,lookaround,,,true
+128,Croak,蛙鸣声,lookaround,,,true
+129,Snake,蛇的声音,lookaround,,,true
+130,Rattle,响尾蛇声,lookaround,,,true
+131,Whale vocalization,鲸鸣声,lookaround,,,true
+132,Music,音乐,happy,,,true
+133,Musical instrument,乐器声,happy,,,true
+134,Plucked string instrument,弹拨乐器,happy,,,true
+135,Guitar,吉他,happy,,,true
+136,Electric guitar,电吉他,happy,,,true
+137,Bass guitar,贝斯,happy,,,true
+138,Acoustic guitar,木吉他,happy,,,true
+139,"Steel guitar, slide guitar",滑棒吉他,happy,,,true
+140,Tapping (guitar technique),吉他点弦,happy,,,true
+141,Strum,扫弦声,happy,,,true
+142,Banjo,班卓琴,happy,,,true
+143,Sitar,西塔琴,happy,,,true
+144,Mandolin,曼陀林,happy,,,true
+145,Zither,齐特琴,happy,,,true
+146,Ukulele,尤克里里,happy,,,true
+147,Keyboard (musical),键盘乐器,happy,,,true
+148,Piano,钢琴,happy,,,true
+149,Electric piano,电钢琴,happy,,,true
+150,Organ,管风琴,happy,,,true
+151,Electronic organ,电子管风琴,happy,,,true
+152,Hammond organ,哈蒙德风琴,happy,,,true
+153,Synthesizer,合成器,happy,,,true
+154,Sampler,采样器,happy,,,true
+155,Harpsichord,羽管键琴,happy,,,true
+156,Percussion,打击乐,happy,,,true
+157,Drum kit,架子鼓,happy,,,true
+158,Drum machine,鼓机,happy,,,true
+159,Drum,鼓声,happy,,,true
+160,Snare drum,小军鼓,happy,,,true
+161,Rimshot,鼓边敲击,happy,,,true
+162,Drum roll,滚奏鼓声,happy,,,true
+163,Bass drum,大鼓,happy,,,true
+164,Timpani,定音鼓,happy,,,true
+165,Tabla,塔布拉鼓,happy,,,true
+166,Cymbal,镲声,happy,,,true
+167,Hi-hat,踩镲,happy,,,true
+168,Wood block,木鱼与木块,happy,,,true
+169,Tambourine,铃鼓,happy,,,true
+170,Rattle (instrument),摇响器,happy,,,true
+171,Maraca,沙槌,happy,,,true
+172,Gong,锣声,happy,,,true
+173,Tubular bells,管钟,happy,,,true
+174,Mallet percussion,槌击乐器,happy,,,true
+175,"Marimba, xylophone",马林巴与木琴,happy,,,true
+176,Glockenspiel,钟琴,happy,,,true
+177,Vibraphone,颤音琴,happy,,,true
+178,Steelpan,钢鼓,happy,,,true
+179,Orchestra,管弦乐,happy,,,true
+180,Brass instrument,铜管乐器,happy,,,true
+181,French horn,圆号,happy,,,true
+182,Trumpet,小号,happy,,,true
+183,Trombone,长号,happy,,,true
+184,Bowed string instrument,弓弦乐器,happy,,,true
+185,String section,弦乐组,happy,,,true
+186,"Violin, fiddle",小提琴,happy,,,true
+187,Pizzicato,拨弦,happy,,,true
+188,Cello,大提琴,happy,,,true
+189,Double bass,低音提琴,happy,,,true
+190,"Wind instrument, woodwind instrument",木管乐器,happy,,,true
+191,Flute,长笛,happy,,,true
+192,Saxophone,萨克斯,happy,,,true
+193,Clarinet,单簧管,happy,,,true
+194,Harp,竖琴,happy,,,true
+195,Bell,钟铃声,happy,,,true
+196,Church bell,教堂钟声,happy,,,true
+197,Jingle bell,雪橇铃,happy,,,true
+198,Bicycle bell,自行车铃,happy,,,true
+199,Tuning fork,音叉,happy,,,true
+200,Chime,钟鸣,happy,,,true
+201,Wind chime,风铃,happy,,,true
+202,Change ringing (campanology),编钟式鸣钟,happy,,,true
+203,Harmonica,口琴,happy,,,true
+204,Accordion,手风琴,happy,,,true
+205,Bagpipes,风笛,happy,,,true
+206,Didgeridoo,迪吉里杜管,happy,,,true
+207,Shofar,羊角号,happy,,,true
+208,Theremin,特雷门琴,happy,,,true
+209,Singing bowl,颂钵,happy,,,true
+210,Scratching (performance technique),唱盘搓碟,happy,,,true
+211,Pop music,流行音乐,happy,,,true
+212,Hip hop music,嘻哈音乐,happy,,,true
+213,Beatboxing,口技节奏,happy,,,true
+214,Rock music,摇滚音乐,happy,,,true
+215,Heavy metal,重金属,happy,,,true
+216,Punk rock,朋克摇滚,happy,,,true
+217,Grunge,垃圾摇滚,happy,,,true
+218,Progressive rock,前卫摇滚,happy,,,true
+219,Rock and roll,摇滚乐,happy,,,true
+220,Psychedelic rock,迷幻摇滚,happy,,,true
+221,Rhythm and blues,节奏布鲁斯,happy,,,true
+222,Soul music,灵魂乐,happy,,,true
+223,Reggae,雷鬼,happy,,,true
+224,Country,乡村音乐,happy,,,true
+225,Swing music,摇摆乐,happy,,,true
+226,Bluegrass,蓝草音乐,happy,,,true
+227,Funk,放克,happy,,,true
+228,Folk music,民谣,happy,,,true
+229,Middle Eastern music,中东音乐,happy,,,true
+230,Jazz,爵士乐,happy,,,true
+231,Disco,迪斯科,happy,,,true
+232,Classical music,古典音乐,happy,,,true
+233,Opera,歌剧,happy,,,true
+234,Electronic music,电子音乐,happy,,,true
+235,House music,浩室音乐,happy,,,true
+236,Techno,科技舞曲,happy,,,true
+237,Dubstep,回响贝斯,happy,,,true
+238,Drum and bass,鼓打贝斯,happy,,,true
+239,Electronica,电子乐,happy,,,true
+240,Electronic dance music,电子舞曲,happy,,,true
+241,Ambient music,氛围音乐,eyes,,,true
+242,Trance music,迷幻舞曲,happy,,,true
+243,Music of Latin America,拉丁美洲音乐,happy,,,true
+244,Salsa music,萨尔萨音乐,happy,,,true
+245,Flamenco,弗拉门戈,happy,,,true
+246,Blues,布鲁斯,happy,,,true
+247,Music for children,儿童音乐,happy,,,true
+248,New-age music,新世纪音乐,eyes,,,true
+249,Vocal music,声乐,happy,,,true
+250,A capella,无伴奏合唱,happy,,,true
+251,Music of Africa,非洲音乐,happy,,,true
+252,Afrobeat,非洲节拍,happy,,,true
+253,Christian music,基督教音乐,happy,,,true
+254,Gospel music,福音音乐,happy,,,true
+255,Music of Asia,亚洲音乐,happy,,,true
+256,Carnatic music,卡纳提克音乐,happy,,,true
+257,Music of Bollywood,宝莱坞音乐,happy,,,true
+258,Ska,斯卡音乐,happy,,,true
+259,Traditional music,传统音乐,happy,,,true
+260,Independent music,独立音乐,happy,,,true
+261,Song,歌曲,happy,,,true
+262,Background music,背景音乐,happy,,,true
+263,Theme music,主题音乐,happy,,,true
+264,Jingle (music),广告短曲,happy,,,true
+265,Soundtrack music,影视配乐,happy,,,true
+266,Lullaby,摇篮曲,sleepy,,,true
+267,Video game music,游戏音乐,happy,,,true
+268,Christmas music,圣诞音乐,happy,,,true
+269,Dance music,舞曲,happy,,,true
+270,Wedding music,婚礼音乐,happy,,,true
+271,Happy music,欢快音乐,happy,,,true
+272,Sad music,悲伤音乐,sad,,,true
+273,Tender music,温柔音乐,eyes,,,true
+274,Exciting music,激昂音乐,happy,,,true
+275,Angry music,愤怒音乐,angry,,,true
+276,Scary music,恐怖音乐,stun,,,true
+277,Wind,风声,eyes,,,true
+278,Rustling leaves,树叶沙沙声,eyes,,,true
+279,Wind noise (microphone),麦克风风噪,eyes,,,true
+280,Thunderstorm,雷雨声,surprise,,,true
+281,Thunder,雷声,surprise,,,true
+282,Water,水声,eyes,,,true
+283,Rain,雨声,eyes,,,true
+284,Raindrop,雨滴声,eyes,,,true
+285,Rain on surface,雨打物体,eyes,,,true
+286,Stream,溪流声,eyes,,,true
+287,Waterfall,瀑布声,eyes,,,true
+288,Ocean,海洋声,eyes,,,true
+289,"Waves, surf",海浪声,eyes,,,true
+290,Steam,蒸汽声,eyes,,,true
+291,Gurgling,汩汩声,eyes,,,true
+292,Fire,火焰声,query,,,true
+293,Crackle,噼啪声,query,,,true
+294,Vehicle,交通工具声,query,,,true
+295,"Boat, Water vehicle",水上交通工具,query,,,true
+296,"Sailboat, sailing ship",帆船声,query,,,true
+297,"Rowboat, canoe, kayak",划船声,query,,,true
+298,"Motorboat, speedboat",快艇声,query,,,true
+299,Ship,轮船声,query,,,true
+300,Motor vehicle (road),机动车声,query,,,true
+301,Car,汽车声,query,,,true
+302,"Vehicle horn, car horn, honking",汽车喇叭,surprise,,,true
+303,Toot,短促鸣笛,surprise,,,true
+304,Car alarm,汽车警报,surprise,,,true
+305,"Power windows, electric windows",电动车窗,query,,,true
+306,Skidding,车辆打滑,query,,,true
+307,Tire squeal,轮胎尖啸,surprise,,,true
+308,Car passing by,汽车驶过,query,,,true
+309,"Race car, auto racing",赛车声,query,,,true
+310,Truck,卡车声,query,,,true
+311,Air brake,气刹声,query,,,true
+312,"Air horn, truck horn",卡车气喇叭,surprise,,,true
+313,Reversing beeps,倒车提示音,surprise,,,true
+314,"Ice cream truck, ice cream van",冰淇淋车,query,,,true
+315,Bus,公交车声,query,,,true
+316,Emergency vehicle,应急车辆声,query,,,true
+317,Police car (siren),警车警笛,surprise,,,true
+318,Ambulance (siren),救护车警笛,surprise,,,true
+319,"Fire engine, fire truck (siren)",消防车警笛,surprise,,,true
+320,Motorcycle,摩托车声,query,,,true
+321,"Traffic noise, roadway noise",道路交通声,query,,,true
+322,Rail transport,轨道交通声,query,,,true
+323,Train,火车声,query,,,true
+324,Train whistle,火车汽笛,surprise,,,true
+325,Train horn,火车喇叭,surprise,,,true
+326,"Railroad car, train wagon",列车车厢,query,,,true
+327,Train wheels squealing,车轮尖啸,surprise,,,true
+328,"Subway, metro, underground",地铁声,query,,,true
+329,Aircraft,航空器声,query,,,true
+330,Aircraft engine,飞机引擎,query,,,true
+331,Jet engine,喷气引擎,query,,,true
+332,"Propeller, airscrew",螺旋桨,query,,,true
+333,Helicopter,直升机声,query,,,true
+334,"Fixed-wing aircraft, airplane",飞机声,query,,,true
+335,Bicycle,自行车声,query,,,true
+336,Skateboard,滑板声,query,,,true
+337,Engine,发动机声,query,,,true
+338,Light engine (high frequency),高频发动机,query,,,true
+339,"Dental drill, dentist's drill",牙科钻头,query,,,true
+340,Lawn mower,割草机,query,,,true
+341,Chainsaw,电锯,query,,,true
+342,Medium engine (mid frequency),中频发动机,query,,,true
+343,Heavy engine (low frequency),低频发动机,query,,,true
+344,Engine knocking,发动机爆震,surprise,,,true
+345,Engine starting,发动机启动,query,,,true
+346,Idling,发动机怠速,query,,,true
+347,"Accelerating, revving, vroom",发动机加速,query,,,true
+348,Door,门的声音,query,,,true
+349,Doorbell,门铃声,surprise,0.60,1,true
+350,Ding-dong,叮咚门铃,surprise,0.60,1,true
+351,Sliding door,推拉门,query,,,true
+352,Slam,关门砰响,surprise,0.60,1,true
+353,Knock,敲门声,surprise,0.60,1,true
+354,Tap,轻敲声,surprise,0.60,1,true
+355,Squeak,吱吱声,query,,,true
+356,Cupboard open or close,开关柜门,query,,,true
+357,Drawer open or close,开关抽屉,query,,,true
+358,"Dishes, pots, and pans",锅碗瓢盆,query,,,true
+359,"Cutlery, silverware",餐具碰撞,query,,,true
+360,Chopping (food),切菜声,query,,,true
+361,Frying (food),煎炒声,query,,,true
+362,Microwave oven,微波炉,query,,,true
+363,Blender,搅拌机,query,,,true
+364,"Water tap, faucet",水龙头,query,,,true
+365,Sink (filling or washing),水槽用水,query,,,true
+366,Bathtub (filling or washing),浴缸用水,query,,,true
+367,Hair dryer,吹风机,query,,,true
+368,Toilet flush,马桶冲水,query,,,true
+369,Toothbrush,刷牙声,query,,,true
+370,Electric toothbrush,电动牙刷,query,,,true
+371,Vacuum cleaner,吸尘器,query,,,true
+372,Zipper (clothing),拉链声,query,,,true
+373,Keys jangling,钥匙碰撞,query,,,true
+374,Coin (dropping),硬币落地,query,0.60,1,true
+375,Scissors,剪刀声,query,,,true
+376,"Electric shaver, electric razor",电动剃须刀,query,,,true
+377,Shuffling cards,洗牌声,query,,,true
+378,Typing,打字声,query,,,true
+379,Typewriter,打字机,query,,,true
+380,Computer keyboard,电脑键盘,query,,,true
+381,Writing,写字声,query,,,true
+382,Alarm,警报声,surprise,,,true
+383,Telephone,电话声,surprise,,,true
+384,Telephone bell ringing,电话铃声,surprise,,,true
+385,Ringtone,手机铃声,surprise,,,true
+386,"Telephone dialing, DTMF",电话按键音,surprise,,,true
+387,Dial tone,拨号音,surprise,,,true
+388,Busy signal,电话忙音,surprise,,,true
+389,Alarm clock,闹钟声,surprise,,,true
+390,Siren,警笛声,surprise,,,true
+391,Civil defense siren,防空警报,surprise,,,true
+392,Buzzer,蜂鸣器,surprise,,,true
+393,"Smoke detector, smoke alarm",烟雾报警声,surprise,,,true
+394,Fire alarm,火灾报警声,surprise,,,true
+395,Foghorn,雾笛,surprise,,,true
+396,Whistle,哨声,surprise,,,true
+397,Steam whistle,蒸汽哨声,surprise,,,true
+398,Mechanisms,机械声,query,,,true
+399,"Ratchet, pawl",棘轮声,query,,,true
+400,Clock,钟表声,query,,,true
+401,Tick,滴答单响,query,,,true
+402,Tick-tock,滴答声,query,,,true
+403,Gears,齿轮声,query,,,true
+404,Pulleys,滑轮声,query,,,true
+405,Sewing machine,缝纫机,query,,,true
+406,Mechanical fan,风扇声,query,,,true
+407,Air conditioning,空调声,query,,,true
+408,Cash register,收银机,query,,,true
+409,Printer,打印机,query,,,true
+410,Camera,相机声,query,0.60,1,true
+411,Single-lens reflex camera,单反快门,query,0.60,1,true
+412,Tools,工具声,query,,,true
+413,Hammer,锤击声,query,,,true
+414,Jackhammer,风镐声,query,,,true
+415,Sawing,锯东西,query,,,true
+416,Filing (rasp),锉削声,query,,,true
+417,Sanding,打磨声,query,,,true
+418,Power tool,电动工具,query,,,true
+419,Drill,电钻声,query,,,true
+420,Explosion,爆炸声,surprise,,,true
+421,"Gunshot, gunfire",枪声,surprise,,,true
+422,Machine gun,机关枪声,surprise,,,true
+423,Fusillade,密集枪声,surprise,,,true
+424,Artillery fire,炮火声,surprise,,,true
+425,Cap gun,玩具枪声,surprise,,,true
+426,Fireworks,烟花声,surprise,0.60,1,true
+427,Firecracker,鞭炮声,surprise,0.60,1,true
+428,"Burst, pop",爆裂声,surprise,0.60,1,true
+429,Eruption,喷发声,surprise,,,true
+430,Boom,轰响,surprise,,,true
+431,Wood,木头声,query,,,true
+432,Chop,劈砍声,query,,,true
+433,Splinter,木头碎裂,query,,,true
+434,Crack,劈啪裂响,query,,,true
+435,Glass,玻璃声,query,,,true
+436,"Chink, clink",玻璃叮当,query,,,true
+437,Shatter,玻璃破碎,surprise,0.60,1,true
+438,Liquid,液体声,query,,,true
+439,"Splash, splatter",泼溅声,query,,,true
+440,Slosh,液体晃荡,query,,,true
+441,Squish,湿软挤压,query,,,true
+442,Drip,滴水声,query,,,true
+443,Pour,倒水声,query,,,true
+444,"Trickle, dribble",涓涓水声,query,,,true
+445,Gush,涌水声,query,,,true
+446,Fill (with liquid),注水声,query,,,true
+447,Spray,喷洒声,query,,,true
+448,Pump (liquid),水泵声,query,,,true
+449,Stir,搅拌声,query,,,true
+450,Boiling,沸腾声,query,,,true
+451,Sonar,声呐声,query,,,true
+452,Arrow,箭的声音,query,,,true
+453,"Whoosh, swoosh, swish",呼啸掠过,query,,,true
+454,"Thump, thud",沉闷撞击,query,,,true
+455,Thunk,咚的一声,query,,,true
+456,Electronic tuner,电子调音器,query,,,true
+457,Effects unit,效果器,query,,,true
+458,Chorus effect,合唱效果,query,,,true
+459,Basketball bounce,篮球弹跳,query,,,true
+460,Bang,砰的一声,surprise,0.60,1,true
+461,"Slap, smack",拍打声,query,,,true
+462,"Whack, thwack",重击声,query,,,true
+463,"Smash, crash",猛烈碰撞,surprise,0.60,1,true
+464,Breaking,破裂声,surprise,,,true
+465,Bouncing,弹跳声,query,,,true
+466,Whip,鞭子声,query,,,true
+467,Flap,扑动声,query,,,true
+468,Scratch,抓挠声,query,,,true
+469,Scrape,刮擦声,query,,,true
+470,Rub,摩擦声,query,,,true
+471,Roll,滚动声,query,,,true
+472,Crushing,压碎声,query,,,true
+473,"Crumpling, crinkling",揉皱声,query,,,true
+474,Tearing,撕裂声,query,,,true
+475,"Beep, bleep",哔哔声,query,0.60,1,true
+476,Ping,叮的一声,query,0.60,1,true
+477,Ding,清脆铃响,query,0.60,1,true
+478,Clang,铿锵声,surprise,0.60,1,true
+479,Squeal,尖啸声,surprise,,,true
+480,Creak,嘎吱声,query,,,true
+481,Rustle,沙沙声,query,,,true
+482,Whir,呼呼转动,query,,,true
+483,Clatter,哐啷声,query,,,true
+484,Sizzle,滋滋声,query,,,true
+485,Clicking,咔嗒声,query,,,true
+486,Clickety-clack,连续咔嗒声,query,,,true
+487,Rumble,隆隆声,query,,,true
+488,Plop,扑通声,query,,,true
+489,"Jingle, tinkle",叮当声,query,,,true
+490,Hum,低沉嗡鸣,query,,,true
+491,Zing,嗖的一声,query,,,true
+492,Boing,弹簧声,query,,,true
+493,Crunch,嘎嘣脆响,query,,,true
+494,Silence,安静,sleepy,0.70,8,true
+495,Sine wave,正弦波音,eyes,0.60,3,true
+496,Harmonic,谐波音,eyes,0.60,3,true
+497,Chirp tone,啁啾提示音,eyes,0.60,3,true
+498,Sound effect,音效,eyes,0.60,3,true
+499,Pulse,脉冲声,eyes,0.60,3,true
+500,"Inside, small room",小房间环境声,eyes,0.60,3,true
+501,"Inside, large room or hall",大厅环境声,eyes,0.60,3,true
+502,"Inside, public space",室内公共环境声,eyes,0.60,3,true
+503,"Outside, urban or manmade",城市户外声,eyes,0.60,3,true
+504,"Outside, rural or natural",自然户外声,eyes,0.60,3,true
+505,Reverberation,混响,eyes,0.60,3,true
+506,Echo,回声,eyes,0.60,3,true
+507,Noise,噪声,eyes,0.60,3,true
+508,Environmental noise,环境噪声,eyes,0.60,3,true
+509,Static,静电杂音,eyes,0.60,3,true
+510,Mains hum,电源嗡声,eyes,0.60,3,true
+511,Distortion,失真声,eyes,0.60,3,true
+512,Sidetone,侧音,eyes,0.60,3,true
+513,Cacophony,嘈杂声,eyes,0.60,3,true
+514,White noise,白噪声,eyes,0.60,3,true
+515,Pink noise,粉红噪声,eyes,0.60,3,true
+516,Throbbing,脉动声,eyes,0.60,3,true
+517,Vibration,振动声,eyes,0.60,3,true
+518,Television,电视声,eyes,0.60,3,true
+519,Radio,收音机声,eyes,0.60,3,true
+520,Field recording,现场录音,eyes,0.60,3,true

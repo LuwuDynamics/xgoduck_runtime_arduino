@@ -1,0 +1,8 @@
+{
+  "protocol_reference": "https://github.com/LuwuDynamics/luwu_os",
+  "commit": "6a4444044ea6fcb3680a432a09dacacb43434d5b",
+  "source_path": "apps/voice_chat/blufi.py",
+  "source_sha256": "d41c65858368c786d14c8cb76f9a5b0cb8b6e80a9377273f63b905c48432b045",
+  "license": "Apache-2.0; python/vendor/luwu_os/LICENSE",
+  "implementation": "tools/ai-support/blufi.py and provisioning.py reimplement the existing FFFF/FF01/FF02 provisioning service for the UNO Q host. Adds BluFi CRC/ACK, bounded Wi-Fi operations/rollback and stable binding identity. No phone-selected cloud or Bluetooth motion commands."
+}

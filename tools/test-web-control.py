@@ -1,6 +1,7 @@
 """Controller behavior with no browser heartbeat; no hardware or ONNX required."""
 import ast
 import collections
+import json
 from pathlib import Path
 import sys
 import threading
@@ -16,7 +17,7 @@ from recovery import Recovery
 
 source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
-ns = dict(vars(wire), threading=threading, time=time, DEFAULT_DEG=[0.] * 15,
+ns = dict(vars(wire), threading=threading, time=time, json=json, DEFAULT_DEG=[0.] * 15,
           MOUTH_INDEX=14, EXCLUSIVE_MODES=('calibrate', 'servo_debug'))
 exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
@@ -30,9 +31,14 @@ class WebControlTest(unittest.TestCase):
         c.mode = 'hold'
         c.generation = c.seq = c.sent = c.inferred = 0
         c.arm_pending = False
+        c._arm_ack_seq, c._arm_ack_deadline = None, 0.0
+        c.fault_hold, c._pause_sent = False, False
+        c.pause_events = collections.deque(maxlen=8)
+        c.diagnostic_paused = False
         c.web_time = time.monotonic() - 3600
         c.rx_time = time.monotonic()
-        c.feedback = SimpleNamespace(imu_ok=True, sample_us=123, angles=[0.] * 15, enabled=True)
+        c.feedback = SimpleNamespace(imu_ok=True, sample_us=123, angles=[0.] * 15, enabled=True,
+                                     flags=wire.FAULT_HOLD_CAPABLE | 3, mask=wire.ALL_MASK)
         c.filtered = dict(imu_fusion_ready=True, imu_fusion_updated=True, grav=[0, 0, -1],
                           gyro_rad=[0.] * 3, angles_deg=[0.] * 15, vels_deg=[0.] * 15)
         c.twist, c.head, c.mouth = [0.] * 3, [0.] * 4, 0.
@@ -64,28 +70,31 @@ class WebControlTest(unittest.TestCase):
         self.assertEqual(self.command_mode(), wire.POLICY)
         self.assertEqual(self.c.inferred, 1)
 
-    def test_stale_sensor_feedback_still_disarms(self):
+    def test_stale_sensor_feedback_pauses_without_disarming(self):
         self.c.rx_time -= 1
         self.c.step()
-        self.assertEqual(self.command_mode(), wire.DISARM)
+        self.assertEqual(self.command_mode(), wire.PAUSE)
+        self.assertTrue(self.c.fault_hold)
+        self.assertEqual(self.c.mode, 'hold')
         self.assertIn('sensor feedback lost', self.c.last_error)
 
-    def test_invalid_imu_still_disarms(self):
+    def test_invalid_imu_pauses_without_disarming(self):
         self.c.feedback.imu_ok = False
         self.c.step()
-        self.assertEqual(self.command_mode(), wire.DISARM)
+        self.assertEqual(self.command_mode(), wire.PAUSE)
 
     def test_manual_stop_still_disarms(self):
         self.c.set_mode('off')
         self.c.step()
         self.assertEqual(self.command_mode(), wire.DISARM)
 
-    def test_calibration_session_timeout_retained(self):
+    def test_calibration_session_timeout_retains_positions_without_disarming(self):
         self.c.mode = 'calibrate'
         self.c.step()
-        self.assertEqual(self.c.mode, 'shadow')
+        self.assertEqual(self.c.mode, 'calibrate')
         self.assertIn('heartbeat lost', self.c.last_error)
-        self.assertTrue(any(call.args[0] == 'duck_cal' for call in self.c.bridge.notify.call_args_list))
+        self.assertTrue(self.c.diagnostic_paused)
+        self.c.bridge.notify.assert_not_called()
 
 
 if __name__ == '__main__':

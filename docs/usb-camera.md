@@ -1,5 +1,7 @@
 # USB 摄像头与音频页面
 
+`ai-chat-move` 的 **XGO Duck AI** 新 App 已把音视频接口并入聊天进程，并在安装及开机时、App 容器创建之前准备 USB Host。请按 [AI App 安装说明](ai-chat.md) 部署；下文的独立 `duck-device-test.service` 和手动 Host 默认行为用于原 Duck App。
+
 Duck 的主控制页（9527 端口）包含 USB camera 面板，点击开启后显示连续 MJPEG 视频流，可以保存 JPEG 照片。请求采集 640×480 / 30 fps，页面显示的是摄像头实测采集帧率，实际速度受设备曝光及网络影响。页面在后台会断开预览，20 秒无人观看后后台释放摄像头。
 
 顶部的 **Audio** 标签进入 `/audio.html`，采用英文设置界面，提供 0–100% USB 扬声器音量设置（Apply volume 立即生效）、扬声器测试旋律、5/10/30 秒 USB 麦克风录音、录音回放和下载。豆包 XGO-Duck 音色测试放在折叠区域。主控制页的摄像头按钮和提示也统一为英文。音乐上传保留在 9528 诊断页。音频采集和扬声器播放发生在板子上；页面的 audio 播放器则在当前手机/电脑上试听。
@@ -40,7 +42,9 @@ sudo systemctl enable --now duck-usb-device.service
 sudo systemctl restart duck-gamepad.service
 ```
 
-现有本地 Unix socket 工作进程只允许写入固定的 USB mode 节点，网页只接受同源带专用请求头的布尔开关值。没有新增 TCP 服务，不改变舵机、策略或 Bridge 频率。用 `sudo cat /sys/kernel/debug/usb/4e00000.usb/mode` 检查实际模式。
+现有本地 Unix socket 工作进程只接受固定 USB mode 节点的布尔开关，并协调固定的 ADB/USB 串口服务：Host 前停止监视器与代理、解绑并停止 ADB/gadget，Device 后恢复原本启用或运行的服务。网页只接受同源带专用请求头的布尔开关值。没有新增 TCP 服务，不改变舵机、策略或 Bridge 频率。用 `sudo cat /sys/kernel/debug/usb/4e00000.usb/mode` 检查实际模式。
+
+当前 UNO Q 系统在 USB 模式切换时可能产生内核告警并扰动 UART；不要在运动中切换。新 AI App 的开机服务会在容器创建前暂停 router、完成 Host 切换并恢复通信；App 本身只检查就绪，不热切换，详见 [AI App 安装说明](ai-chat.md)。旧 App 的手动开关没有这一启动流程。
 
 ## 验证
 
@@ -51,3 +55,9 @@ python3 -m unittest discover -s tools/device-test -p 'test_*.py'
 ```
 
 代理测试覆盖允许的路径、同源操作、请求大小限制、二进制上传及视频流转发。实机验证还应确认摄像头开启时 `/api/status` 的反馈和策略频率持续更新，以及音频页面的录音、音乐和 TTS 可用。普通 GET 请求不会启用摄像头、录音或舵机。
+
+## 分辨率下降与异常颜色
+
+先用 `lsusb -t` 检查实际 USB 速率，再用 `v4l2-ctl --list-devices` 找到 USB 摄像头，执行 `v4l2-ctl -d <USB-video-device> --list-formats-ext` 查看实际支持的分辨率。请求 640×480 不代表设备实际返回此尺寸。
+
+本次实机的 Hub/摄像头曾在断连后降为 12 Mbps，只上报 160×120/5 fps，原 MJPG、未压缩 YUYV 和 OpenCV 路径均出现偏红/网格。重新启动后恢复 480 Mbps，同一代码直接取得正常 640×480 彩图。此现象不能靠网页缩放恢复画面细节。先停稳并卸力，再检查 Hub 上行线、接口接触、供电或更换 Hub 做对照；不要在运动中重置或拔插 USB。尚未确认本机降速的物理触发因素。

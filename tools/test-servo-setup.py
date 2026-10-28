@@ -30,6 +30,7 @@ class ServoSetupTest(unittest.TestCase):
         c.servo_reply_event = threading.Event()
         c.servo_expected_reply = c.servo_reply = None
         c.mode = 'servo_debug'
+        c.fault_hold = False
         c.bridge = self
         self.ids = {0, 42, 253}
         self.sent = []

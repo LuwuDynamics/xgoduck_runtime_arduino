@@ -10,7 +10,9 @@ SERVO = struct.Struct('<4sBBBBBBH')
 RAW = struct.Struct('<4sH15H15H')
 SERVO_REPLY = struct.Struct('<4sBBBBHH')
 ALL_MASK = 0x7fff  # hardware order: 10..14,20..24,30..34
-DISARM, ARM, POLICY, HOLD = range(4)
+DISARM, ARM, POLICY, HOLD, PAUSE = range(5)
+FAULT_HOLD_CAPABLE = 32
+TIMEOUT_CHECKS_DISABLED = 64
 
 CAL_ENTER, CAL_EXIT, CAL_SET_RAW, CAL_FINISH_ONE, CAL_SET_ZEROS = range(5)
 SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID, SERVO_GOTO, SERVO_SET_PERM_KP_KD, SERVO_READ = range(7)
@@ -72,7 +74,7 @@ def decode_state(data):
                     tuple(x[35:50]), tuple(x[50:65]))
 
 def encode_command(seq, sample_us, mode, targets, ttl_us=250000):
-    if mode not in range(4):
+    if mode not in range(5):
         raise ValueError('invalid command mode/mask')
     if len(targets) != 15 or not all(math.isfinite(v) for v in targets):
         raise ValueError('15 finite targets required')

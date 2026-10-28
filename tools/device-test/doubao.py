@@ -2,6 +2,7 @@
 import base64
 import io
 import json
+import os
 from pathlib import Path
 import time
 import urllib.error
@@ -18,7 +19,7 @@ class Cancelled(Exception):
 
 
 def load_config():
-    path = Path.home() / '.config/duck-device-test/doubao.json'
+    path = Path(os.environ.get('DUCK_DOUBAO_CONFIG', Path.home() / '.config/duck-device-test/doubao.json'))
     if not path.exists():
         return {}
     config = json.loads(path.read_text())

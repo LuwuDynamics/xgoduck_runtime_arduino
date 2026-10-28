@@ -1,3 +1,9 @@
 numpy==2.2.6
 onnxruntime==1.22.1
 httpx==0.28.1
+sounddevice==0.5.3
+opuslib==3.0.1
+paho-mqtt==2.1.0
+pycryptodome==3.23.0
+requests==2.32.5
+Pillow==11.3.0

@@ -5,8 +5,14 @@ import subprocess
 
 p=argparse.ArgumentParser()
 p.add_argument('elf',nargs='?',default=str(Path(__file__).resolve().parents[1]/'.cache/sketch/sketch.ino.elf'))
+p.add_argument('--readelf', type=Path, help='readelf from the pinned profile toolchain')
 a=p.parse_args()
-tool=Path.home()/'.arduino15/packages/zephyr/tools/arm-zephyr-eabi/1.0.1/bin/arm-zephyr-eabi-readelf'
+tool=a.readelf or Path.home()/'.arduino15/packages/zephyr/tools/arm-zephyr-eabi/1.0.1/bin/arm-zephyr-eabi-readelf'
+if a.readelf is None and not tool.is_file():
+    matches=list((Path.home()/'.arduino15/internal').glob('zephyr_arm-zephyr-eabi_1.0.1_*/bin/arm-zephyr-eabi-readelf'))
+    if len(matches)!=1:
+        raise SystemExit('Pinned toolchain 1.0.1 not found; run tools/prepare-ai-sketch.py first')
+    tool=matches[0]
 def read(*args):return subprocess.check_output([str(tool),*args,a.elf],text=True)
 undefined={line.split()[-1] for line in read('-Ws').splitlines() if ' UND ' in line and len(line.split())>7}
 bad=[]

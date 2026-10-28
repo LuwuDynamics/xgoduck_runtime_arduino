@@ -2,6 +2,80 @@
 
 [English](README.md) · [简体中文](README_CN.md)
 
+Version `0.2.27` keeps ToF optional: absent at boot or disconnected during
+ranging, it reports `absent`/`offline` without stopping motion, voice or media.
+The startup support checks interrupted MCU object/dependency files so a broken
+build cache is rebuilt instead of preventing the default App from starting.
+After updating this version, rerun the hardware support installer once.
+
+Version `0.2.26` adds an optional SparkFun VL53L5CX on the UNO Q Qwiic port:
+8×8 distances at 5 Hz, sampled independently on STM32 `Wire1` and available
+through a read-only Bridge tool. See [ToF connection and reading](docs/tof.md).
+
+**XGO Duck AI App (`ai-chat-move`).** One App with two business processes: the original web/motion runtime and headless AI Chat Pro. It adds autostart, Bluetooth Wi-Fi provisioning, account binding and cloud MCP remote control. Existing web pages, audio/video and Doubao are retained; upload the matching STM32 sketch for torque-preserving pauses. Install it once on your own UNO Q; no display is required.
+
+Version `0.2.25` switches the Chinese wake phrase to “小鸭小鸭” with the bundled final `xiaoya.onnx`, threshold 0.80, a two-second window and 80 ms hop. Training-compatible normalized audio and a bounded cache of identical mel windows reduce device computation. Wake detection plays the same fixed 0.92-second duck call without jaw motion. English wake detection, cloud selection, send/reply-finished cues and saved gains are retained.
+
+Version `0.2.24` keeps the jaw still for send/wake cues and local duck calls; spoken replies continue to animate it. Cue and speech samples remain distinct even within one output frame, without changing speaker audio, gain or DAC timing.
+
+Version `0.2.23` fixes false speaker-busy errors in `Duck.Quack` while the server waits for an MCP result. Capture reference processing now runs outside the sound-device callback; the App requests a 200 ms input buffer and reports actual latency, callback gaps and queue drops. Existing playback buffering and gains are retained. USB disconnection or reduced link speed still requires separate device checks.
+
+This version retains the temporary communication diagnostic settings introduced in `0.2.22`. Its matching STM32 sketch disables the 250 ms command and 100 ms IMU expiry actions. Linux no longer latches a pause for feedback older than 150 ms or invalid IMU, and MCP uses the same bypass. Timeouts remain logged. Missing/invalid samples retain the previous motion target; valid samples may continue the previous motion request instead of jumping to a default pose. The normal web heartbeat watchdog was already removed. **Upload the matching sketch** and confirm `timeout_checks_disabled=true`; Python alone leaves old firmware guards active. Explicit stop/off, initial-enable IMU readiness, packet/sequence validation and required-servo checks remain. Web assets and saved configuration are unchanged.
+
+Version `0.2.21` checks feedback for the joints each MCP action needs, without blocking healthy joints because an unrelated ID is missing. `SetHead` accepts individual axes and preserves omitted goals. Queue entry avoids duplicate feedback checks; execution errors identify the observed problem. Existing web pages, ONNX policies, STM32 and saved configuration are preserved.
+
+Version `0.2.20` adds visible TTS jaw variation using 20/80/320 ms energy windows, relative energy changes and gentle mixed rhythms, with a slightly wider speaking opening. Motion remains within 0–12° and 90°/s, using already enabled body servos. Web pages, movement policies and STM32 firmware are preserved.
+
+Version `0.2.18` plays a `greet` duck call after networking succeeds and a `wheee` call after the voice service actually connects, once each per start. These two cues have an additional 3× software gain with saturation; saved chat volume and normal MCP duck-call gain remain. The networking cue works before account binding, and missing USB audio never blocks startup.
+
+Version `0.2.17` combines MCP `Duck.Quack`, gentle TTS jaw motion and torque-preserving pauses. Feedback/IMU timeouts, process exits and gamepad disconnects stop motion while holding position; explicit TorqueOff/Off releases motors. Resume a paused body explicitly with Stand or Policy/Hold. The jaw uses private nonblocking local messages instead of repeated HTTP round trips. Original pages, models and saved calibration remain. [Motion and media behavior](docs/ai-chat-en.md#runtime-web-and-mcp); [checks and device validation](docs/ai-validation.md).
+
+## First AI App installation
+
+**Choose a cloud locally on the board. The phone never changes it.** Accounts, bindings and agents belong to the selected service. Conversation language is independent of region.
+
+| Board selection | Client | OTA endpoint |
+| --- | --- | --- |
+| `cn` | Domestic WeChat Mini Program | `https://xl-api.xgorobot.com/xiaolu/ota/` |
+| `global` | International Android / iOS App | `https://xl-api.luwudynamics.ai/xiaolu/ota/` |
+
+| WeChat Mini Program (scan with WeChat) | International App (download QR) |
+| --- | --- |
+| <img src="docs/images/qr_miniprogram.png" alt="Domestic WeChat Mini Program code" width="180"> | <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="180"> |
+| Use `cn` | Use `global`; [open download page](https://agent.luwudynamics.ai/download) |
+
+Images reuse the existing Luwu-OS AI Chat Pro assets; [source and hashes](provenance/onboarding-assets.json). Duck remote control requires a client release with the `XGO-Duck` adapter. These public QR destinations do not imply that local client changes have been released.
+
+1. **Initial USB setup.** Install [Arduino App Lab](https://www.arduino.cc/en/uno-q), connect UNO Q with a data cable, and set up Wi-Fi and your Linux password. Verify `ssh arduino@<board-ip>`. First installation requires internet access for dependencies.
+2. **Download and package on the computer:**
+
+   ```sh
+   git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
+   cd xgoduck_runtime_arduino
+   python3 tools/package-ai-app.py
+   ```
+
+   Import `dist/xgoduck_ai.zip` as a **new App** named `xgoduck_ai` in App Lab. Stop the old Duck App. See the [full guide](docs/ai-chat-en.md#first-installation) for direct Git installation on the board and calibration migration.
+
+   An optional **App ZIP with the toolchain included** avoids downloading that large file from GitHub on first installation. The normal ZIP is about 9.5 MB; the bundled ZIP is about 107 MB. System, container and Python dependencies still require internet access. See [toolchain packaging and recovery](docs/ai-chat-en.md#toolchain-and-bundled-app-zip).
+3. **Choose region and install support in the UNO Q host shell.** Adjust the path to the imported directory; this example selects the international service:
+
+   ```sh
+   cd ~/ArduinoApps/xgoduck_ai
+   python3 tools/configure-ai.py --region global --language en
+   # Domestic: python3 tools/configure-ai.py --region cn --language cn
+   bash tools/install-ai-support.sh
+   sudo bash tools/router-2m.sh
+   ```
+
+   **Use Wi-Fi/SSH and stop all Apps first.** The installer resolves the pinned MCU toolchain and libraries, compiles and checks the ELF, then configures the default App, services and **USB Host**. Computer USB/ADB access disconnects; use a powered Host hub afterwards. It does not flash the MCU or start the App. Users need not choose toolchain versions. Run `router-2m.sh` with the App stopped; it restarts the MCU communication router.
+4. **First Run.** Use App Lab Network and wait for dependencies and both processes. Run may compile/upload the sketch. On subsequent boots, Host preparation completes before the App starts automatically. Chat restarts do not change USB mode.
+5. **Add from the phone.** In the matching client, discover a name such as `XGO-DuckABCD`, provision Wi-Fi, bind your account and select an agent. Provisioning and MCP work without a microphone or speaker; conversation resumes when USB audio is connected. Phone Bluetooth is for provisioning; original gamepad support remains.
+6. **Verify autostart.** After the first successful online Run, reboot. Further boots need no desktop Run click. Preserve all of `data/` on updates. To change regions, stop the App and explicitly configure the board, then bind in the destination client. No chat cloud is contacted before region selection.
+7. **Stand before driving.** After calibration and placement, explicitly enable voice motion and ask the Duck to stand up, or start Policy in the original web page. Direction commands only move an already armed, stable Duck and never start get-up. Check `Duck.GetStatus.movement_ready` before driving; see the [motion flow](docs/ai-chat-en.md#runtime-web-and-mcp).
+
+See the [English installation guide](docs/ai-chat-en.md), [中文说明](docs/ai-chat.md), and [validation record](docs/ai-validation.md) for configuration, recovery, updates and device acceptance limits. The original hardware/web instructions follow.
+
 <img src="docs/images/cockpit-demo.webp" alt="A controller-mounted phone shows Duck's live camera feed while the robot is driven with the gamepad" width="960">
 
 **Duck's-eye view, right on your controller.** Mount a phone between the grips, open the mobile cockpit, and drive Duck with the sticks while watching its onboard camera feed. The real-hardware demo above shows the handheld setup and robot moving together; the animated WebP loops silently.
@@ -89,21 +163,21 @@ Pinned stack: App CLI with Arduino Zephyr core 1.0.0, RouterBridge 0.4.3, RPClit
 On the Uno Q, from this directory:
 
 ```bash
-python3 tools/prepare-bridge.py
+python3 tools/prepare-ai-sketch.py
 sudo bash tools/router-2m.sh
 arduino-app-cli app start "$PWD"
 ```
 
-`prepare-bridge.py` patches the resolved library cache and keeps the original headers as `.h.original`:
+`prepare-ai-sketch.py` resolves the pinned tools and libraries, then calls `prepare-bridge.py` to patch the resolved library cache and keep the original headers as `.h.original`:
 
 - RouterBridge 0.4.3: RPC thread stack 500 → 4096 bytes.
 - RPClite 0.3.1: a bounded MessagePack scanner accepts a complete frame before `Unpacker::feed()`, and rejects a frame larger than the RPC buffer.
 
-Re-run the script after a library-cache wipe or on a new board. If it cannot find the libraries, let the App CLI resolve `sketch.yaml` once, then run it again.
+It compiles and checks the ELF without uploading. Re-run it after a library-cache wipe or on a new board; the AI support installer already does this step.
 
 `router-2m.sh` sets the router serial rate to 2 Mbps in `/etc/systemd/system/arduino-router.service.d/90-xgoduck-baud.conf` and leaves the board GPIO ready-hook in place. That rate is global. Before starting another app that calls `Bridge.begin()` at 115200, move the drop-in aside, reload systemd, and restart `arduino-router`. Both ends must use the same rate. Restarting the router recreates its socket and resets the MCU, so stop this app first, restart the router, then start the app again. A normal app restart does not need a router restart.
 
-If an isolated CLI build tries to re-download a toolchain that is already on the board and GitHub is unreachable, run `python3 tools/reuse-toolchain.py` and start the app again.
+The preparation script reuses only the exact required toolchain version. For GitHub download failures, use the [bundled toolchain or archive recovery](docs/ai-chat-en.md#toolchain-and-bundled-app-zip).
 
 GCC 14 can tail-call `k_thread_name_set` at the end of `setup()` with a Thumb `JUMP24` from the loadable sketch into flash. The Uno Q loader then returns ENOEXEC (−8) and the MCU never starts. The `asm volatile("nop")` at the end of `setup()` keeps a long call. `python3 tools/verify-elf.py` checks the built ELF for the same class of short branch to an unresolved firmware symbol.
 
@@ -120,7 +194,7 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | Roulade | While upright in walk, runs `xgoduck_roulade.onnx` for 1.9 s, then returns to walk. |
 | Torque off | Disables position control. |
 
-The Control page does not disarm on web heartbeat loss, backgrounding, or page close. Closing or backgrounding the page sends zero motion while retaining the selected mode; use Torque off to disarm. Sensor feedback loss and the MCU command watchdog still disarm. Calibration and servo setup retain their separate 2 second session heartbeat and exit on page leave.
+The Control page keeps torque on heartbeat loss, backgrounding or page close. Closing/backgrounding sends zero motion. Feedback/IMU/command timeouts, App exits and gamepad disconnects latch a position hold, retain torque and discard unfinished movement. Explicit Torque off/Off/Inference only releases motors; Stand or Policy/Hold resumes after fresh feedback. Calibration/servo-setup heartbeat loss retains the last diagnostic position; explicit exit still releases it.
 
 Walk commands are vx ±0.4, vy ±0.3, ωz ±1.0, with a joystick dead zone of 0.1. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
 
@@ -146,7 +220,7 @@ Recovery, evaluated on the 50 Hz clock:
 
 Action smoothing uses α = 0.45 on slices `[0:5]`, `[5:10]`, and `[10:14]`. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly and does not keep a filtered walk action. Gyro smoothing α = 0.5, joint-velocity α = 0.4, gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%. There is no gyro bias subtraction. The QMI axes are mapped once, in firmware; the host undoes the reference device mapping so the filter matches the Microduck math without applying that mapping twice.
 
-Position control stops if commands are absent for 250 ms or the IMU is absent for 100 ms. Enabling again takes an explicit mode change. Host feedback older than 150 ms also disarms; that matches the MCU source-age limit.
+Commands absent for 250 ms or IMU health absent for 100 ms latch a measured-position hold with torque retained. Host feedback older than 150 ms also requests this hold. Stale source data still cannot update targets; ordinary POLICY/HOLD packets cannot resume after a timeout. A fresh explicit ARM from Stand/Policy/Hold resumes. The new sketch advertises capability flag 32 and PAUSE command 4; matching firmware is required before enabling motors. Power loss or an MCU reset necessarily interrupts torque and never auto-arms afterwards.
 
 ## Layout
 

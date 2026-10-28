@@ -4,4 +4,10 @@
 __pycache__/
 *.pyc
 data/zero_pos.json
-tests/
+.venv/
+data/*
+!data/.gitkeep
+dist/
+tools/offline/
+uv.toml
+.uv.toml.before-xgoduck

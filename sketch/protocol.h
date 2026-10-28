@@ -5,7 +5,11 @@ constexpr uint32_t BRIDGE_BAUD = 2000000;
 constexpr uint32_t TICK_US = 10000;
 constexpr uint32_t COMMAND_TTL_US = 250000;
 constexpr uint32_t MAX_SOURCE_AGE_US = 150000;
-enum CommandMode : uint8_t { DISARM = 0, ARM = 1, POLICY = 2, HOLD = 3 };
+enum CommandMode : uint8_t { DISARM = 0, ARM = 1, POLICY = 2, HOLD = 3, PAUSE = 4 };
+constexpr uint8_t FAULT_HOLD_CAPABLE = 32;
+// Temporary diagnostic build: timeouts are reported, not used to pause motion.
+constexpr bool MOTION_TIMEOUT_CHECKS_ENABLED = false;
+constexpr uint8_t TIMEOUT_CHECKS_DISABLED = 64;
 
 enum HostBusMode : uint8_t { HOST_NORMAL = 0, HOST_CAL = 1, HOST_SERVO_DEBUG = 2 };
 

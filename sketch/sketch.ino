@@ -4,9 +4,11 @@
 #include <string.h>
 #include "duck_config.h"
 #include "protocol.h"
+#include "control_lease.h"
 #include "scs_bus.h"
 #include "qmi8658.h"
 #include "uart_fifo.h"
+#include "tof_sensor.h"
 
 Motor motors[NUM_MOTORS];
 struct k_mutex motorsMu;
@@ -36,7 +38,7 @@ static void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {
   bool valid = bytes.size() == sizeof(cmd);
   if (valid) {
     memcpy(&cmd, bytes.data(), sizeof(cmd));
-    valid = memcmp(cmd.magic, "DQC1", 4) == 0 && cmd.mode <= HOLD &&
+    valid = memcmp(cmd.magic, "DQC1", 4) == 0 && cmd.mode <= PAUSE &&
             !cmd.reserved && !cmd.reserved2 &&
             cmd.ttlUs > 0 && cmd.ttlUs <= COMMAND_TTL_US;
     for (unsigned i = 0; i < NUM_MOTORS; ++i)
@@ -249,10 +251,10 @@ static void controlTask(void*, void*, void*) {
   const uint32_t pdStart=micros();
   while ((uint32_t)(micros()-pdStart)<20000) { parseServoRx(); k_sleep(K_USEC(100)); }
   initImu();
-  uint32_t deadline = micros(), previous = deadline, seq = 0, lastCommandUs = 0;
-  uint32_t acceptedSeq = 0, ttl = COMMAND_TTL_US, overruns = 0, lastImuUs = 0;
+  uint32_t deadline = micros(), previous = deadline, seq = 0;
+  uint32_t overruns = 0, lastImuUs = 0;
   uint32_t lastHealthyUs = 0;
-  bool enabled = false, timedOut = false, haveCommand = false;
+  ControlLease lease;
   for (;;) {
     const uint32_t start = micros(), period = start - previous;
     previous = start;
@@ -275,43 +277,47 @@ static void controlTask(void*, void*, void*) {
     k_mutex_unlock(&commandMu);
 
     const bool busTaken = hostMode != HOST_NORMAL;
+    // Disabled in the temporary diagnostic build; explicit PAUSE still freezes.
+    bool freezePose = !busTaken && lease.expire(start, lastHealthyUs);
     if (got && !busTaken) {
-      const bool fresh = cmd.mode == DISARM || (uint32_t)(start - cmd.sourceUs) <= MAX_SOURCE_AGE_US;
-      const bool ordered = !haveCommand || cmd.mode == DISARM || (int32_t)(cmd.seq - acceptedSeq) > 0;
-      if (fresh && ordered) {
-        acceptedSeq = cmd.seq; haveCommand = true; lastCommandUs = start; ttl = cmd.ttlUs;
-        if (cmd.mode == DISARM) { enabled = false; timedOut = false; }
-        if (cmd.mode == ARM && !enabled && imu.ok &&
-            (uint32_t)(start-lastImuUs) < 50000) {
-          enabled = true; timedOut = false;
+      const bool wasPaused = lease.paused;
+      const auto result = lease.accept(cmd, start, imu.ok &&
+                                      (uint32_t)(start-lastImuUs) < 50000);
+      freezePose |= lease.paused && !wasPaused;
+      if (result == ControlLease::APPLY_TARGETS) {
+        if (cmd.mode == ARM) {
           lastHealthyUs = start;
           setRunKpKd();
         }
         k_mutex_lock(&motorsMu, K_FOREVER);
         for (unsigned i = 0; i < NUM_MOTORS; ++i) motors[i].desAngleDeg = cmd.target[i];
         k_mutex_unlock(&motorsMu);
-      } else {
+      } else if (result == ControlLease::REJECTED) {
         k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
       }
     }
     if (busTaken) {
-      enabled = false;
-      timedOut = false;
-    } else if (enabled && ((uint32_t)(start-lastCommandUs) > ttl ||
-                           (uint32_t)(start-lastHealthyUs) > 100000)) {
-      enabled = false; timedOut = true;
+      lease.takeBus();
+    } else if (freezePose && lease.enabled && lease.paused) {
+      // Capture measured positions once, preserving the last safe target for a
+      // missing joint. Do not chase future/stale Linux targets while paused.
+      k_mutex_lock(&motorsMu, K_FOREVER);
+      for (unsigned i = 0; i < NUM_MOTORS; ++i)
+        if ((servoRxMask & (1u << i)) && isfinite(motors[i].fbAngleDeg))
+          motors[i].desAngleDeg = motors[i].fbAngleDeg;
+      k_mutex_unlock(&motorsMu);
     }
     static bool previousEnabled = false;
     if (hostMode == HOST_CAL) {
       k_mutex_lock(&motorsMu, K_FOREVER); sendMotorRawPos(); k_mutex_unlock(&motorsMu);
       Serial1.flush();
-    } else if (enabled) {
+    } else if (lease.enabled) {
       k_mutex_lock(&motorsMu, K_FOREVER); sendMotorDesPos(); k_mutex_unlock(&motorsMu);
       Serial1.flush();
     }
     if (!busTaken) {
-      if (enabled != previousEnabled || !enabled) setTorqueEnable(enabled);
-      previousEnabled = enabled;
+      if (lease.enabled != previousEnabled || !lease.enabled) setTorqueEnable(lease.enabled);
+      previousEnabled = lease.enabled;
     } else {
       previousEnabled = false;
     }
@@ -327,10 +333,13 @@ static void controlTask(void*, void*, void*) {
     if (imu.ok) lastHealthyUs = micros();
     StatePacket s = {};
     memcpy(s.magic, "DQS1", 4); s.version = 1;
-    s.flags = (imu.ok ? 1 : 0) | (enabled ? 2 : 0) | (timedOut ? 4 : 0) |
-              ((hostMode == HOST_CAL) ? 8 : 0) | ((hostMode == HOST_SERVO_DEBUG) ? 16 : 0);
+    s.flags = (imu.ok ? 1 : 0) | (lease.enabled ? 2 : 0) | (lease.paused ? 4 : 0) |
+              ((hostMode == HOST_CAL) ? 8 : 0) | ((hostMode == HOST_SERVO_DEBUG) ? 16 : 0) |
+              FAULT_HOLD_CAPABLE |
+              (MOTION_TIMEOUT_CHECKS_ENABLED ? 0 : TIMEOUT_CHECKS_DISABLED);
     s.servoMask = servoRxMask; s.seq = ++seq; s.sampleUs = start; s.imuUs = lastImuUs;
-    s.commandSeq = acceptedSeq; s.commandAgeUs = haveCommand ? start-lastCommandUs : UINT32_MAX;
+    s.commandSeq = lease.acceptedSeq;
+    s.commandAgeUs = lease.haveCommand ? start-lease.lastCommandUs : UINT32_MAX;
     s.periodUs = period; s.overruns = overruns; s.invalidCommands = bad;
     memcpy(s.acc, imu.accRaw, sizeof(s.acc)); memcpy(s.gyro, imu.gyroRaw, sizeof(s.gyro));
     k_mutex_lock(&motorsMu, K_FOREVER);
@@ -421,6 +430,7 @@ void setup() {
   k_thread_create(&reportThread, reportStack, K_THREAD_STACK_SIZEOF(reportStack),
                   reportTask, nullptr, nullptr, nullptr, 6, 0, K_NO_WAIT);
   k_thread_name_set(&reportThread, "duck_report100");
+  startTof();
   // GCC 14 otherwise emits a tail B.W to a flash syscall from RAM, outside
   // Thumb JUMP24 range; the Uno Q extension loader rejects it with ENOEXEC.
   asm volatile("nop" ::: "memory");

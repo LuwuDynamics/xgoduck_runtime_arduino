@@ -107,7 +107,7 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | Pick | While upright in walk, runs `xgoduck_pick.onnx` for 4 s, then returns to walk. |
 | Torque off | Disables position control. |
 
-The Control page does not disarm on web heartbeat loss, backgrounding, or page close. Closing or backgrounding the page sends zero motion while retaining the selected mode; use Torque off to disarm. Sensor feedback loss and the MCU command watchdog still disarm. Calibration and servo setup retain their separate 2 second session heartbeat and exit on page leave.
+Web heartbeat loss/backgrounding and chat failures do not release torque. Sensor/command timeouts latch a static position hold, with no automatic gait replay. Stand or Policy/Hold explicitly resumes; Torque off/Off explicitly releases motors. Calibration and servo-setup timeout retains the last diagnostic position until explicit control or exit. App restart adopts an enabled MCU in paused hold and continues its command sequence.
 
 Walk commands are vx ±0.4, vy ±0.3, ωz ±1.0, with a joystick dead zone of 0.1. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
 
@@ -131,7 +131,7 @@ Recovery, evaluated on the 50 Hz clock:
 
 Action smoothing uses α = 0.45 on slices `[0:5]`, `[5:10]`, and `[10:14]`. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly and does not keep a filtered walk action. Gyro smoothing α = 0.5, joint-velocity α = 0.4, gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%. There is no gyro bias subtraction. The QMI axes are mapped once, in firmware; the host undoes the reference device mapping so the filter matches the Microduck math without applying that mapping twice.
 
-Position control stops if commands are absent for 250 ms or the IMU is absent for 100 ms. Enabling again takes an explicit mode change. Host feedback older than 150 ms also disarms; that matches the MCU source-age limit.
+Commands absent for 250 ms or IMU health absent for 100 ms latch a measured-position hold with torque retained. Host feedback older than 150 ms also requests this hold. Stale source data still cannot update targets; ordinary POLICY/HOLD packets cannot resume after a timeout. A fresh explicit ARM from Stand/Policy/Hold resumes. The new sketch advertises capability flag 32 and PAUSE command 4; matching firmware is required before enabling motors. Power loss or an MCU reset necessarily interrupts torque and never auto-arms afterwards.
 
 ## Layout
 
