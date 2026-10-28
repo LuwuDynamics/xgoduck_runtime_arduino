@@ -1,7 +1,8 @@
 const $=id=>document.getElementById(id);
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-let active=false, busy=false, scanTask=null, scanController=null, closing=false;
-const lockedIds=['start','target-id','read-id','goto-pos','kp','kd','new-id','goto','set-gains','set-id','read','scan'];
+let active=false, busy=false, selectedId=null, scanTask=null, scanController=null, closing=false;
+const editIds=['kp','kd','new-id','reset-mid','set-gains','set-id','read'];
+const protectionIds=['protection-current','enable-protection','disable-protection','set-protection-current'];
 
 async function api(path,body,signal){
   const timeout=AbortSignal.timeout(4000);
@@ -15,16 +16,19 @@ async function api(path,body,signal){
 function show(msg){$('message').textContent=msg;}
 function lock(value){
   busy=value;
-  lockedIds.forEach(id=>$(id).disabled=value);
+  editIds.forEach(id=>$(id).disabled=value||selectedId===null);
+  protectionIds.forEach(id=>$(id).disabled=value);
+  $('scan').disabled=value;
   $('scan-results').querySelectorAll('button').forEach(b=>b.disabled=value);
-  // Exit remains available during a scan and cancels it first.
-  $('exit').disabled=$('exit2').disabled=value&&!scanController;
+  $('exit').disabled=value&&!scanController;
 }
 function selectId(id){
-  $('target-id').value=id;
-  $('read-id').value=id;
+  selectedId=validId(id);
   $('read-out').textContent='—';
-  $('scan-results').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.id===+id)));
+  $('scan-results').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(+b.dataset.id===selectedId)));
+  lock(false);
+  show('Selected ID '+selectedId);
+  send('read');
 }
 function validId(value){
   const id=Number(value);
@@ -60,24 +64,30 @@ async function exit(){
   catch(e){show(e.message);}
   finally{lock(false);closing=false;}
 }
-async function send(action,extra={},value=$('target-id').value){
-  if(busy||closing)return;
+async function send(action,extra={}){
+  if(busy||closing||selectedId===null)return;
   lock(true);
   try{
-    const id=validId(value);
+    const id=selectedId;
     if(action==='set_id')extra.new_id=validId(extra.new_id);
     await enter();
-    if(action==='read')$('read-out').textContent='—';
-    show(action==='set_id'?`Changing ID ${id} to ${extra.new_id}…`:`${action} · ID ${id}…`);
+    show(action==='set_id'?`Changing ID ${id} to ${extra.new_id}…`:`ID ${id} · ${action==='reset_mid'?'Reset Mid':action==='set_gains'?'Set KpKd':'Read'}…`);
     const r=await api('servo',{action,target_id:id,...extra});
-    show(`${action} ok`+(action==='read'?` · ID ${id} · raw=${r.raw_pos}`:''));
-    if(action==='read')$('read-out').textContent=`raw ${r.raw_pos}`;
-    if(action==='set_id'){
-      selectId(extra.new_id);
+    if(action==='read'){
+      $('read-out').textContent=`ID ${id} · Pos ${r.raw_pos} · KP ${r.kp} · KD ${r.kd}`;
+      show(`ID ${id} · parameters read`);
+    }else if(action==='reset_mid'){
+      $('read-out').textContent='—';
+      show(`ID ${id} · Mid reset sent. Servo remains unloaded.`);
+    }else if(action==='set_id'){
+      selectedId=null;
+      $('read-out').textContent='—';
       $('scan-results').replaceChildren();
       $('scan-progress').hidden=true;
-      $('scan-status').textContent='ID changed. Scan again to refresh the list.';
+      $('scan-status').textContent='ID changed. Scan again to select the updated servo.';
       show(`ID ${id} → ${extra.new_id} · verified`);
+    }else{
+      show(`ID ${id} · KP/KD written`);
     }
   }catch(e){show(e.message);}
   finally{lock(false);}
@@ -85,6 +95,8 @@ async function send(action,extra={},value=$('target-id').value){
 async function scan(){
   scanController=new AbortController();
   const signal=scanController.signal;
+  selectedId=null;
+  $('read-out').textContent='—';
   lock(true);
   const found=[];
   let checked=0;
@@ -95,9 +107,8 @@ async function scan(){
   $('scan-status').textContent='Preparing scan…';
   try{
     const s=await api('status',undefined,signal);
-    if(s.servo_scan_version!==1)throw new Error('Deploy the updated project to enable scanning.');
+    if(s.servo_scan_version!==2)throw new Error('Deploy the updated project to enable servo setup.');
     await enter(signal);
-    // Re-enter on the MCU to turn torque off even after a manual Move to.
     await api('servo',{action:'torque_off',target_id:10},signal);
     show('Scanning · torque off');
     for(let id=0;id<=253;id++){
@@ -105,7 +116,6 @@ async function scan(){
       $('scan-status').textContent=`Scanning ID ${id} · ${checked}/254 checked · ${found.length} found`;
       let online=false;
       for(let attempt=0;attempt<2;attempt++){
-        // Also refresh the setup heartbeat between probes.
         await api('servo/enter',{},signal);
         signal.throwIfAborted();
         const r=await api('servo',{action:'ping',target_id:id},signal);
@@ -116,7 +126,7 @@ async function scan(){
         found.push(id);
         const b=document.createElement('button');
         b.textContent=`ID ${id}`;b.dataset.id=id;b.disabled=true;
-        b.setAttribute('aria-pressed',String(id===+$('target-id').value));
+        b.setAttribute('aria-pressed','false');
         b.onclick=()=>selectId(id);
         $('scan-results').appendChild(b);
       }
@@ -124,37 +134,57 @@ async function scan(){
       $('scan-progress').value=checked;
     }
     $('scan-status').textContent=`Scan complete · 254 IDs checked · ${found.length} found`;
-    show(found.length?'Select a found ID or enter the current ID.':'No servos replied. Check servo power, bus connection and baud rate.');
+    show(found.length?'Select a found ID to read or change its settings.':'No servos replied. Check servo power, bus connection and baud rate.');
   }catch(e){
     $('scan-status').textContent=`${signal.aborted?'Stopped':'Scan failed'} · ${checked}/254 checked · ${found.length} found (partial results)`;
-    show(signal.aborted?'Scan stopped. Found IDs are kept.':e.message==='servo reply timeout'?'No MCU reply. Scan stopped.':e.message);
+    show(signal.aborted?'Scan stopped. Select a found ID to continue.':e.message==='servo reply timeout'?'No MCU reply. Scan stopped.':e.message);
   }finally{
     $('scan-stop').hidden=true;
     scanController=null;
     lock(false);
   }
 }
+async function sendProtection(action,enabled){
+  if(busy||closing)return;
+  lock(true);
+  try{
+    const settingCurrent=action==='set_protection_current',body={action};
+    if(settingCurrent){
+      const input=$('protection-current').value.trim(),current=Number(input);
+      if(!input||!Number.isFinite(current)||current<0||current>65535*.0065)throw new Error('Enter a protection current between 0 and 425.9775 A.');
+      body.current_a=current;
+    }else{
+      body.protection_enabled=enabled;
+    }
+    await enter();
+    show('Broadcasting protection settings to all servos…');
+    const r=await api('servo',body);
+    if(!r.ok||r.broadcast!==true||r.target_id!==254||r.op!==(settingCurrent?10:9))throw new Error('Invalid broadcast reply');
+    if(settingCurrent){
+      $('protection-current-out').textContent=`Broadcast sent · ${r.current_a.toFixed(4)} A`;
+    }else{
+      $('protection-out').textContent=`Broadcast sent · voltage / overcurrent ${r.protection_enabled?'on':'off'}`;
+    }
+    show('Protection broadcast sent. Individual servo writes are not verified.');
+  }catch(e){show(e.message);}
+  finally{lock(false);}
+}
 $('scan').onclick=()=>{
   if(busy||scanTask||closing)return;
   scanTask=scan().finally(()=>{scanTask=null;});
 };
 $('scan-stop').onclick=stopScan;
-$('target-id').onchange=()=>selectId($('target-id').value);
-$('read-id').onchange=()=>selectId($('read-id').value);
-$('start').onclick=async()=>{
-  if(busy||closing)return;
-  lock(true);
-  try{await enter();show('Servo setup active');}catch(e){show(e.message);}finally{lock(false);}
-};
 $('exit').onclick=exit;
-$('exit2').onclick=exit;
-$('goto').onclick=()=>send('goto',{raw_pos:+$('goto-pos').value});
+$('reset-mid').onclick=()=>send('reset_mid');
 $('set-gains').onclick=()=>send('set_gains',{kp:+$('kp').value,kd:+$('kd').value});
 $('set-id').onclick=()=>send('set_id',{new_id:$('new-id').value});
-$('read').onclick=()=>send('read',{},$('read-id').value);
+$('read').onclick=()=>send('read');
+$('enable-protection').onclick=()=>sendProtection('set_protection',true);
+$('disable-protection').onclick=()=>sendProtection('set_protection',false);
+$('set-protection-current').onclick=()=>sendProtection('set_protection_current');
 window.addEventListener('pagehide',()=>{
   stopScan();
-  if(active)navigator.sendBeacon('/api/servo/exit',new Blob([JSON.stringify({})],{type:'application/json'}));
+  navigator.sendBeacon('/api/servo/exit',new Blob(['{}'],{type:'application/json'}));
 });
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(active||scanTask))exit();});
 
@@ -170,3 +200,4 @@ setInterval(async()=>{
   }catch(_){}
   finally{statusBusy=false;}
 },1000);
+lock(false);

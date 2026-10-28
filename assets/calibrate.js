@@ -1,7 +1,7 @@
 const $=id=>document.getElementById(id);
 const MOTORS=[10,11,12,13,14,20,21,22,23,24,30,31,32,33,34];
-let statusBusy=false, targetBusy=false, targetPending=false, active=false;
-const targets=Array(15).fill(2047);
+let statusBusy=false, active=false, centering=null, presentMask=0;
+let held=Array(15).fill(false);
 
 async function post(path, body={}){
   const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -9,83 +9,82 @@ async function post(path, body={}){
   if(!r.ok) throw new Error(x.detail||'request failed');
   return x;
 }
-function showError(e){$('message').textContent=typeof e==='string'?e:(e.message||String(e));}
+function showError(e){$('message').textContent=e.message||String(e);}
 
-const list=$('joints');
 MOTORS.forEach((id,i)=>{
-  list.insertAdjacentHTML('beforeend',`<div class="cal-row" id="row${i}">
-    <div class="cal-meta"><b>ID ${id}</b><span id="raw${i}">—</span><span id="zero${i}">zero —</span></div>
-    <input id="sl${i}" type="range" min="0" max="4095" value="2047">
-    <div class="cal-actions"><span id="val${i}">2047</span><button data-finish="${i}">Finish</button></div>
+  $('joints').insertAdjacentHTML('beforeend',`<div class="cal-row" id="row${i}">
+    <div class="cal-meta"><b>ID ${id}</b><span id="raw${i}">Waiting for feedback</span></div>
+    <div class="cal-actions"><span id="state${i}">Unloaded</span><button data-center="${i}" disabled>Set center &amp; hold</button></div>
   </div>`);
-  $(`sl${i}`).oninput=()=>{
-    targets[i]=+$(`sl${i}`).value;
-    $(`val${i}`).textContent=targets[i];
-    queueTargets();
-  };
 });
 
-function queueTargets(){
-  if(!active) return;
-  if(targetBusy){targetPending=true;return;}
-  targetBusy=true;targetPending=false;
-  post('cal/targets',{targets:[...targets]}).catch(showError).finally(()=>{
-    targetBusy=false;
-    if(targetPending) queueTargets();
+function refreshRows(){
+  document.querySelectorAll('[data-center]').forEach(btn=>{
+    const i=+btn.dataset.center;
+    btn.disabled=!active||centering!==null||held[i]||!(presentMask&(1<<i));
+    $(`row${i}`).classList.toggle('done',held[i]);
+    $(`state${i}`).textContent=centering===i?'Centering…':held[i]?'Holding 2048':'Unloaded';
   });
 }
 
-document.querySelectorAll('[data-finish]').forEach(btn=>{
+document.querySelectorAll('[data-center]').forEach(btn=>{
   btn.onclick=async()=>{
+    const i=+btn.dataset.center;
+    centering=i;
+    refreshRows();
+    $('message').textContent=`Setting the center of ID ${MOTORS[i]}…`;
     try{
-      const i=+btn.dataset.finish;
-      const r=await post('cal/finish',{index:i});
-      $(`row${i}`).classList.add('done');
-      $(`zero${i}`).textContent='zero '+r.zero_pos;
-      $('message').textContent=`Joint ${MOTORS[i]} zero saved as ${r.zero_pos}`;
+      await post('cal/center',{index:i});
+      $('message').textContent=`Center command sent to ID ${MOTORS[i]}. It is holding position 2048.`;
     }catch(e){showError(e);}
+    finally{centering=null;refreshRows();}
   };
 });
 
 async function enter(){
   try{
-    await post('cal/enter',{});
+    await post('cal/enter');
     active=true;
-    targets.fill(2047);
-    MOTORS.forEach((_,i)=>{$(`sl${i}`).value=2047;$(`val${i}`).textContent='2047';});
-    $('message').textContent='Calibration active: temporary KP = 3, KD = 0, target 2047';
+    held.fill(false);
+    $('message').textContent='All servos are unloaded. Turn one joint by hand, then set its center.';
   }catch(e){showError(e);}
+  refreshRows();
 }
 async function exit(){
+  active=false;
+  refreshRows();
   try{
-    await post('cal/exit',{});
-    active=false;
-    $('message').textContent='Calibration closed. Position modes are available from the control page.';
+    await post('cal/exit');
+    held.fill(false);
+    $('message').textContent='Calibration closed. All servos are unloaded.';
   }catch(e){showError(e);}
+  refreshRows();
 }
 $('start').onclick=enter;
 $('exit').onclick=exit;
 $('exit2').onclick=exit;
-window.addEventListener('pagehide',()=>{if(active)navigator.sendBeacon('/api/cal/exit',new Blob([JSON.stringify({})],{type:'application/json'}));});
+window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/cal/exit',new Blob(['{}'],{type:'application/json'})));
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&active)exit();});
 
 setInterval(async()=>{
   if(statusBusy||document.hidden)return;
   statusBusy=true;
   try{
+    if(active)await post('cal/heartbeat').catch(()=>{});
     const r=await fetch('/api/status');
     if(!r.ok)throw new Error('status read failed');
     const s=await r.json();
     active=s.mode==='calibrate';
-    $('mode').textContent=s.mode+(s.mcu_calibrating?' · MCU':'');
+    presentMask=s.raw_mask||0;
+    held=s.cal_done||Array(15).fill(false);
+    $('mode').textContent=active?'Calibration active':'Calibration closed';
     if(s.last_error)$('message').textContent=s.last_error;
-    if(s.cal_done)s.cal_done.forEach((d,i)=>$(`row${i}`).classList.toggle('done',!!d));
-    if(s.raw_pos)s.raw_pos.forEach((v,i)=>$(`raw${i}`).textContent='encoder '+v);
-    if(s.zero_pos)s.zero_pos.forEach((v,i)=>$(`zero${i}`).textContent='zero '+v);
-    if(active){
-      // Keep the calibration session alive. Status reads do not refresh its heartbeat.
-      if(!targetBusy) post('cal/targets',{targets:[...targets]}).catch(()=>{});
-    }
+    if(s.raw_pos)s.raw_pos.forEach((v,i)=>{
+      $(`raw${i}`).textContent=presentMask&(1<<i)?'Encoder '+v:'No servo feedback';
+    });
+    refreshRows();
   }catch(e){showError(e);}
   finally{statusBusy=false;}
 },250);
+
+enter();

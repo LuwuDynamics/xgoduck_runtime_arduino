@@ -94,9 +94,6 @@ class VoiceMotionTest(unittest.TestCase):
         command = fixture.wire.COMMAND.unpack(payload)
         self.assertEqual(command[4], fixture.wire.ARM)
         self.assertEqual(list(command[7:]), self.c.feedback.angles)
-        count = self.c.bridge.notify.call_count
-        self.c.step()
-        self.assertEqual(self.c.bridge.notify.call_count, count) # Wait for actual MCU ARM acknowledgement.
         self.ack_arm()
         self.c.step()
         self.assertEqual(fixture.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], fixture.wire.POLICY)
@@ -654,13 +651,10 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.twist, [0, 0, 0])
 
     def test_stand_can_resume_with_an_unused_head_missing(self):
-        self.c.pause_motion('test gap')
+        self.c.mode, self.c.feedback.enabled = 'shadow', False
         self.c.feedback.mask &= ~(1 << 13)
-        self.c.feedback.flags |= 4
         self.missing_servos(33)
-        self.motion_status.update(mcu_watchdog=True, mcu_command_age_us=999999)
         self.access.start_action(kind='stand', session=101)
-        self.assertFalse(self.c.fault_hold)
         self.assertTrue(self.c.arm_pending)
         self.c.step()
         self.assertEqual(fixture.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], fixture.wire.ARM)
@@ -987,7 +981,7 @@ class VoiceMotionTest(unittest.TestCase):
     def test_manual_takeover_and_rejected_mode(self):
         self.move()
         with self.assertRaisesRegex(ValueError, 'disarm'):
-            self.access.web_mode('calibrate')
+            self.access.web_mode('servo_debug')
         self.assertEqual(self.c.input_source, 'voice')
         self.assertEqual(self.access.action['state'], 'running')
         self.access.web_mode('hold')
@@ -1065,6 +1059,7 @@ class VoiceMotionTest(unittest.TestCase):
             model.infer.return_value = [0.] * 14
             model.action_to_deg.return_value = [0.] * 15
             setattr(self.c, name, model)
+        self.c.walk_policy = self.c.policy
         with patch.object(fixture.ns['time'], 'monotonic', side_effect=lambda: self.now):
             self.c.rx_time = self.now
             self.access.start_action(kind='roulade', session=101)

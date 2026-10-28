@@ -147,10 +147,10 @@ tools/                   Bridge patch, router rate, ELF check, read-only capture
 ## Checks
 
 ```bash
-python tools/measure.py --seconds 60
+for i in $(seq 1 60); do curl -s http://127.0.0.1:9527/api/status; echo; sleep 1; done
 ```
 
-`tools/measure.py` only reads `http://127.0.0.1:9527/api/status`. It does not enable motors. Pass `--output` to save a JSON capture.
+This loop only reads `http://127.0.0.1:9527/api/status`; it does not enable motors. Redirect it to a file for a JSON-lines capture.
 
 ## References
 

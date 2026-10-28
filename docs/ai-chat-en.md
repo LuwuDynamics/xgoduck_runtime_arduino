@@ -1,5 +1,8 @@
 # XGO Duck AI App: installation and headless operation
 
+> **Control layer note (0.2.29):** motion control, the MCU protocol, rollers, all-servo protection and the walk model now follow upstream `master`. The earlier AI-branch features "torque-preserving pause (0.2.17)", "PAUSE command", "timeout bypass (0.2.22)" and the `fault_hold` / `timeout_*` status fields are not part of the merged firmware/control code; the STM32 disarms on command/IMU timeout per the upstream firmware. AI chat, voice control, gamepad and media are unchanged.
+
+
 [中文说明](ai-chat.md) · [English README](../README.md) · [Validation record](ai-validation.md)
 
 This is an open-source App for a user-owned **Arduino UNO Q**, rather than a preinstalled OS image. Complete installation with a computer once. The board can then start the App automatically and use the phone for Wi-Fi provisioning and account binding. Remote control uses cloud MCP. The existing web pages, audio/video and Doubao interfaces, calibration, gamepad and servo setup remain available.

@@ -18,6 +18,9 @@ static bool servoPingSeen = false;
 static uint8_t servoReadId = 0xFF;
 static bool servoReadSeen = false;
 static uint16_t servoReadPos = 0;
+static uint8_t servoParamsId = 0xFF;
+static bool servoParamsSeen = false;
+static uint8_t servoParamKp = 0, servoParamKd = 0;
 
 static int motorIndexById(uint8_t id) {
   for (uint8_t i = 0; i < NUM_MOTORS; i++) {
@@ -121,14 +124,10 @@ static void syncWriteGoalsFromDesPos() {
 
 static void sendMotorDesPos() {
   for (uint8_t i = 0; i < NUM_MOTORS; i++) {
-    int32_t pos = (int32_t)motors[i].zeroPos +
+    int32_t pos = (int32_t)SERVO_CENTER_POS +
                   (int32_t)(motors[i].desAngleDeg / M_A * M_N * motors[i].sign);
     motors[i].desPos = satPos(pos);
   }
-  syncWriteGoalsFromDesPos();
-}
-
-static void sendMotorRawPos() {
   syncWriteGoalsFromDesPos();
 }
 
@@ -141,20 +140,57 @@ static void writeSingleGoalRaw(uint8_t id, uint16_t raw) {
   scsWriteBuf(id, 0x03, data, 7);
 }
 
-static void servoUnlock(uint8_t id) {
-  scsWriteByte(id, ADDR_UNLOCK, 0);
+static void servoMid(uint8_t id) {
+  // Same six-byte command as the servo debug mid.py program.
+  scsWriteBuf(id, 0x0B, nullptr, 0);
   Serial1.flush();
 }
 
+static void servoUnlock(uint8_t id) {
+  for (unsigned i = 0; i < 3; ++i) {
+    scsWriteByte(id, ADDR_UNLOCK, 0x00);
+    Serial1.flush();
+    k_msleep(10);
+  }
+}
+
 static void servoSetId(uint8_t id, uint8_t newId) {
-  scsWriteByte(id, ADDR_ID, newId);
-  Serial1.flush();
+  servoUnlock(id);
+  for (unsigned i = 0; i < 3; ++i) {
+    scsWriteByte(id, ADDR_ID, newId);
+    Serial1.flush();
+    if (i < 2) k_msleep(10);
+  }
 }
 
 static void servoSetPermKpKd(uint8_t id, uint8_t kp, uint8_t kd) {
   const uint8_t data[3] = {ADDR_PERM_KP_KD, kp, kd};
-  scsWriteBuf(id, 0x03, data, 3);
-  Serial1.flush();
+  servoUnlock(id);
+  for (unsigned i = 0; i < 3; ++i) {
+    scsWriteBuf(id, 0x03, data, 3);
+    Serial1.flush();
+    if (i < 2) k_msleep(10);
+  }
+}
+
+static void servoSetProtection(uint8_t flags) {
+  // Only change the unload conditions; leave the current threshold untouched.
+  servoUnlock(0xFE);
+  for (unsigned i = 0; i < 3; ++i) {
+    scsWriteByte(0xFE, ADDR_UNLOAD_CONDITION, flags);
+    Serial1.flush();
+    if (i < 2) k_msleep(10);
+  }
+}
+
+static void servoSetProtectionCurrent(uint16_t current) {
+  // Only change the current threshold; preserve the enabled protection bits.
+  servoUnlock(0xFE);
+  for (unsigned i = 0; i < 3; ++i) {
+    scsWriteWord(0xFE, ADDR_PROTECTION_CURRENT, current);
+    Serial1.flush();
+    if (i < 2) k_msleep(10);
+  }
 }
 
 static void readAllRegisters(uint8_t address, uint8_t length) {
@@ -192,7 +228,7 @@ static void applyMotorFb(uint8_t id, int16_t pos, int32_t vel) {
   k_mutex_lock(&motorsMu, K_FOREVER);
   motors[idx].fbPos = (uint16_t)pos;
   motors[idx].fbAngleDeg =
-      (float)(pos - motors[idx].zeroPos) * M_A / M_N * motors[idx].sign;
+      (float)(pos - SERVO_CENTER_POS) * M_A / M_N * motors[idx].sign;
   motors[idx].fbVelDeg =
       (float)vel * SERVO_SPEED_UNIT * (360.0f / 4096.0f) * motors[idx].sign;
   k_mutex_unlock(&motorsMu);
@@ -268,9 +304,14 @@ static void parseServoRx() {
             break;
           }
           const int idx = motorIndexById(sid);
-          if (dataLen == 4 && servoRxBuffer[4] == 0 && idx >= 0) {
-            servoBootP[idx]=servoRxBuffer[5]; servoBootD[idx]=servoRxBuffer[6];
-            servoPdMask |= 1u << idx;
+          if (dataLen == 4 && servoRxBuffer[4] == 0) {
+            if (servoParamsId <= 253 && sid == servoParamsId) {
+              servoParamKp = servoRxBuffer[5]; servoParamKd = servoRxBuffer[6];
+              servoParamsSeen = true;
+            } else if (servoParamsId == 0xFF && idx >= 0) {
+              servoBootP[idx]=servoRxBuffer[5]; servoBootD[idx]=servoRxBuffer[6];
+              servoPdMask |= 1u << idx;
+            }
             break;
           }
           // Only accept the requested 6-byte status, with no device error.
@@ -290,4 +331,50 @@ static void parseServoRx() {
         break;
     }
   }
+}
+
+static void waitServoReply() {
+  const uint32_t start = micros();
+  while ((uint32_t)(micros() - start) < SERVO_REPLY_US) {
+    parseServoRx();
+    k_sleep(K_USEC(100));
+  }
+  parseServoRx();
+}
+
+static bool pingServo(uint8_t id) {
+  drainServoRx();
+  servoPingId = id;
+  servoPingSeen = false;
+  scsWriteBuf(id, 0x01, nullptr, 0);
+  Serial1.flush();
+  waitServoReply();
+  servoPingId = 0xFF;
+  return servoPingSeen;
+}
+
+static bool readServoPresent(uint8_t id, uint16_t &pos) {
+  drainServoRx();
+  servoReadId = id;
+  servoReadSeen = false;
+  servoReadPos = 0;
+  readSinglePresent(id);
+  Serial1.flush();
+  waitServoReply();
+  pos = servoReadPos;
+  servoReadId = 0xFF;
+  return servoReadSeen;
+}
+
+static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd) {
+  drainServoRx();
+  servoParamsId = id;
+  servoParamsSeen = false;
+  const uint8_t data[2] = {ADDR_PERM_KP_KD, 2};
+  scsWriteBuf(id, 0x02, data, 2);
+  Serial1.flush();
+  waitServoReply();
+  kp = servoParamKp; kd = servoParamKd;
+  servoParamsId = 0xFF;
+  return servoParamsSeen;
 }

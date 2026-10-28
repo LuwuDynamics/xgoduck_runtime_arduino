@@ -81,7 +81,9 @@
 
 **下一版本开发：音视频与 ToF。** 本分支集中开发 USB 摄像头视频流、手机全屏驾驶页面、Duck 麦克风实时监听、手机向 Duck 发送语音片段、手柄配置及手动 USB Host 开关。ToF 测距列入后续规划，传感器接入尚未实现。使用说明见[移动驾驶页面](docs/mobile-cockpit.md)和 [USB 摄像头 / 音频配置](docs/usb-camera.md)。
 
-在装配好的 XGO Duck 上运行仓库附带的行走、起身、地面抓取和翻滚 ONNX 策略。本仓库包含 Uno Q 应用、STM32 固件、网页控制界面和四个运动模型；AI App 另含四个唤醒相关 ONNX。实体制作请看[硬件仓库](https://github.com/LuwuDynamics/xgoduck_hardware/blob/master/README_CN.md)；只有想自行训练策略时才需要 [XGO Duck RL](https://github.com/LuwuDynamics/xgoduck_rl/blob/main/README_CN.md)。
+在装配好的 XGO Duck 上运行仓库附带的行走、起身、地面抓取和翻滚 ONNX 策略。> **控制层已同步上游 `master`（0.2.29）。** 本分支的运动控制、MCU 协议 v2、滚轮行走、全部舵机保护、校准/舵机设置流程和 `xgoduck_walk.onnx` 均以主分支为准；此前 AI 分支的“保扭矩暂停 / PAUSE 命令 / 超时旁路（0.2.17、0.2.22）”已随控制层一起移除。STM32 在命令或 IMU 超时后按主分支固件规则卸力（timedOut），`fault_hold`、`timeout_*` 字段不再上报；AI 语音/手柄链路仅保留输入归属与动作排队。下面的 0.2.17/0.2.22 历史说明仅记录旧固件行为。
+
+本仓库包含 Uno Q 应用、STM32 固件、网页控制界面和四个运动模型；AI App 另含四个唤醒相关 ONNX。实体制作请看[硬件仓库](https://github.com/LuwuDynamics/xgoduck_hardware/blob/master/README_CN.md)；只有想自行训练策略时才需要 [XGO Duck RL](https://github.com/LuwuDynamics/xgoduck_rl/blob/main/README_CN.md)。
 
 <img src="docs/images/uno-q-installation.png" alt="XGO Duck 硬件装配指南中的 Uno Q 安装照片" width="760">
 
@@ -192,10 +194,10 @@ Linux 主机以 50 Hz 运行 ONNX 推理并提供网页界面。STM32 以 100 Hz
 协议字节数、关节顺序、滤波、起身阈值、路由器速率与 ELF 检查见[技术参考](docs/technical_reference.md)。在机器人上只读采集状态可运行：
 
 ```bash
-python tools/measure.py --seconds 60
+for i in $(seq 1 60); do curl -s http://127.0.0.1:9527/api/status; echo; sleep 1; done
 ```
 
-该命令只读取 `/api/status`，不会启用电机。
+该循环只读取 `/api/status`，不会启用电机；可重定向到文件保存。
 
 ## 来源与相关仓库
 

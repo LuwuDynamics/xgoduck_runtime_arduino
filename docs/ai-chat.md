@@ -1,4 +1,7 @@
-# XGO Duck AI App：首次安装与无屏使用
+# XGO Duck AI App
+
+> **0.2.29 控制层说明：** 运动控制/STM32 协议/滚轮/舵机保护已改为跟随上游 `master`。旧文档中的“保扭矩暂停（0.2.17）”“PAUSE 命令”“超时旁路（0.2.22）”“fault_hold / timeout_* 状态”不再适用于合并后的固件与控制代码；STM32 超时后按主分支规则卸力。AI 聊天、语音控制、手柄和媒体功能保持不变。
+
 
 [English guide](ai-chat-en.md) · [中文 README](../README_CN.md) · [检查记录](ai-validation.md)
 

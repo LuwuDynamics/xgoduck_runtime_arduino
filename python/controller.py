@@ -1,22 +1,14 @@
 """100Hz receive/filter callback and independent 50Hz ONNX loop."""
 import collections
-import json
 import math
 import threading
 import time
-from pathlib import Path
 from policy import Policy
 from recovery import Recovery
 from proc import SignalFilter
-from rl_core import MOTOR_IDS, HOME_DEG, DEFAULT_DEG, GRAVITY_TAU, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG
+from rl_core import MOTOR_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG
 from wire import *
 
-FACTORY_ZERO = [
-    2236, 2005, 1912, 1866, 1945,
-    2127, 2135, 1914, 2228, 2206,
-    2550, 2060, 2128, 2034, 2190,
-]
-ZERO_PATH = Path(__file__).resolve().parents[1] / 'data' / 'zero_pos.json'
 EXCLUSIVE_MODES = ('calibrate', 'servo_debug')
 PICK_PERIOD_S = 4.0
 PICK_MOUTH_CLOSE_PHI = 0.4
@@ -29,12 +21,22 @@ class Controller:
         self.bridge = bridge
         self.lock = threading.RLock()
         self.servo_op_lock = threading.Lock()
+        self.cal_op_lock = threading.Lock()
         self.policy_lock = threading.Lock()
         self.policy = Policy()
         ok, message = self.policy.load()
         if not ok:
             raise RuntimeError(message)
         self.model_message = message
+        self.walk_policy = self.policy
+        self.roller_policy = Policy()
+        ok, message = self.roller_policy.load('xgoduck_roller.onnx', use_model_home=True)
+        if not ok:
+            raise RuntimeError(message)
+        self.roller_policy.action_scale = 0.7
+        self.roller_policy.set_action_alphas(leg=0.4, head=0.5)
+        self.model_message += '; ' + message
+        self.roller_mode = False
         self.getup_policy = Policy()
         ok, message = self.getup_policy.load('xgoduck_getup.onnx')
         if not ok:
@@ -64,16 +66,10 @@ class Controller:
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
         self.web_time = 0.0
-        self.input_source = 'web'
         self.arm_pending = False
-        self._arm_ack_seq = None
-        self._arm_ack_deadline = 0.0
-        self.fault_hold = False
-        self._pause_sent = False
-        self.pause_events = collections.deque(maxlen=8)
-        self.timeout_events = []
-        self.timeout_warning = ''
-        self.diagnostic_paused = False
+        # AI-chat layer arbitration: web page, gamepad or voice owns motion.
+        self.input_source = 'web'
+        self.fault_hold = False  # compatibility: firmware timeout disarms instead of holding
         self.seq = self.received = self.inferred = self.sent = self.bad_frames = self.gaps = 0
         self.last_error = ''
         self.stop_event = threading.Event()
@@ -85,40 +81,16 @@ class Controller:
         self.last_action = [0.0]*15
         self.started = time.monotonic()
         self.boot_pd = {}
-        self.raw_pos = list(FACTORY_ZERO)
-        self.zero_pos = list(FACTORY_ZERO)
+        self.raw_pos = [SERVO_CENTER_POS]*15
         self.cal_done = [False]*15
-        self.cal_targets = [2047]*15
+        self.cal_reply = None
+        self.cal_seq = 0
+        self.cal_reply_event = threading.Event()
+        self.cal_expected_index = None
         self.raw_mask = 0
         self.servo_reply = None
         self.servo_reply_event = threading.Event()
         self.servo_expected_reply = None
-        self._zeros_pushed = False
-        self._load_zeros()
-
-    def _load_zeros(self):
-        try:
-            data = json.loads(ZERO_PATH.read_text(encoding='utf-8'))
-            values = [int(v) for v in data['zero_pos']]
-            if len(values) != 15 or any(not 0 <= v <= 4095 for v in values):
-                return
-            self.zero_pos = values
-        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
-            pass
-
-    def _save_zeros(self):
-        ZERO_PATH.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            'version': 1,
-            'ids': list(MOTOR_IDS),
-            'zero_pos': list(self.zero_pos),
-            'saved_at': time.strftime('%Y-%m-%dT%H:%M:%S%z'),
-        }
-        ZERO_PATH.write_text(json.dumps(payload, indent=2), encoding='utf-8')
-
-    def _push_zeros(self):
-        self.bridge.notify('duck_cal', encode_cal(CAL_SET_ZEROS, mask=ALL_MASK, raw=self.zero_pos))
-        self._zeros_pushed = True
 
     def receive_boot_pd(self, raw):
         if not isinstance(raw, (bytes, bytearray)) or len(raw)!=32: return
@@ -132,13 +104,21 @@ class Controller:
         except ValueError:
             return
         with self.lock:
-            if not self._zeros_pushed:
-                self._push_zeros()
             self.raw_pos = pkt['pos']
             self.raw_mask = pkt['mask']
-            # After a push settles, trust MCU zeros; until then keep file values.
-            if self._zeros_pushed:
-                self.zero_pos = pkt['zero']
+            self.cal_done = [self.mode == 'calibrate' and bool(pkt['held_mask'] & (1 << i))
+                             for i in range(15)]
+
+    def receive_cal_reply(self, raw):
+        try:
+            reply = decode_cal_reply(raw)
+        except ValueError:
+            return
+        with self.lock:
+            if self.cal_expected_index != (reply['seq'], reply['index']):
+                return
+            self.cal_reply = reply
+            self.cal_reply_event.set()
 
     def receive_servo_reply(self, raw):
         try:
@@ -160,25 +140,17 @@ class Controller:
         now = time.monotonic()
         with self.lock:
             old = self.feedback
-            if old is None:
-                # A restarted Linux App must not disarm an already enabled MCU,
-                # and its new command sequence must continue the MCU watermark.
-                self.seq = fb.command_seq
-                if fb.enabled:
-                    self._pause_motion_locked('App attached to enabled motors', adopt=True)
-                elif fb.calibrating or fb.servo_debugging:
-                    self.mode = 'calibrate' if fb.calibrating else 'servo_debug'
-                    self.diagnostic_paused = True
-                    self.last_error = 'App attached to a diagnostic pose; positions retained until explicit control.'
             if old:
                 step = elapsed_us(fb.seq, old.seq)
                 if step == 0: return
                 if step > 0x80000000:
-                    self._pause_motion_locked('MCU feedback sequence restarted')
+                    self.mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.filter.reset()
                     self.recovery.reset(); self.policy_needs_reset = True
                     self._stop_pick_locked(); self._stop_roulade_locked()
-                    self._zeros_pushed = False
+                    self.cal_done = [False]*15
+                    self.cal_expected_index = None
+                    self.cal_reply_event.set()
                 else:
                     self.gaps += step-1
                 self.rx_intervals.append((now-self.rx_time)*1000)
@@ -186,197 +158,140 @@ class Controller:
                 timestamp=now, imu_ok=fb.imu_ok)
             self.feedback, self.rx_time = fb, now
             self.received += 1; self.rx_times.append(now)
-            waiting_arm = self.arm_pending or getattr(self, '_arm_ack_seq', None) is not None
-            if (waiting_arm and not self._timeouts_disabled(fb)
-                    and now >= getattr(self, '_arm_ack_deadline', float('inf'))):
-                self._pause_motion_locked('MCU enable acknowledgement timed out')
-                waiting_arm = False
-            ack_seq = getattr(self, '_arm_ack_seq', None)
-            if ack_seq is not None and elapsed_us(fb.command_seq, ack_seq) < 0x80000000:
-                # Only feedback acknowledging this explicit ARM can end the wait.
-                # A queued pre-ARM pause frame must not cancel the new request.
-                self._arm_ack_seq = None
-                waiting_arm = False
-                if not fb.enabled or fb.flags & 4:
-                    self._pause_motion_locked('MCU did not confirm enable / resume')
-            if fb.enabled and fb.flags & 4 and self.mode in ('hold', 'policy') and not waiting_arm:
-                self._pause_motion_locked('MCU command/IMU timeout; torque held')
-
-    def _pause_motion_locked(self, reason, *, adopt=False):
-        if self.mode not in ('hold', 'policy') and not adopt:
-            return
-        if not self.fault_hold:
-            fb = self.feedback
-            event = dict(reason=reason, at=time.monotonic(),
-                         feedback_age_ms=(time.monotonic()-self.rx_time)*1000 if fb else None,
-                         imu_ok=fb.imu_ok if fb else None,
-                         command_age_us=getattr(fb, 'command_age_us', None),
-                         command_seq=getattr(fb, 'command_seq', None))
-            self.pause_events.append(event)
-            print('[motion-pause]', json.dumps(event), flush=True)
-            self.generation += 1
-            self._pause_sent = False
-        self.fault_hold = True
-        self.mode = 'hold'
-        self.arm_pending = False
-        self._arm_ack_seq = None
-        self.last_error = reason + '; motion paused, torque retained; explicitly resume with Stand/Policy.'
-        self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
-        self._stop_pick_locked(); self._stop_roulade_locked()
-
-    def pause_motion(self, reason='Motion paused'):
-        with self.lock:
-            self._pause_motion_locked(reason)
-
-    def _timeouts_disabled(self, feedback=None):
-        fb = self.feedback if feedback is None else feedback
-        return bool(fb and getattr(fb, 'flags', 0) & TIMEOUT_CHECKS_DISABLED)
-
-    def _observe_timeouts_locked(self, now, age):
-        if not self._timeouts_disabled():
-            return
-        fb = self.feedback
-        problems = []
-        if age > .15:
-            problems.append('STM32 feedback older than 150 ms')
-        if not fb.imu_ok:
-            problems.append('IMU feedback invalid')
-        imu_age = None
-        if hasattr(fb, 'imu_us'):
-            # sample_us is the tick start, before the I2C read. Use the end of
-            # reported work so a newer IMU timestamp cannot look 2^32 us old.
-            report_us = (fb.sample_us + getattr(fb, 'work_us', 0)) & 0xffffffff
-            imu_age = elapsed_us(report_us, fb.imu_us)
-            if imu_age > 100000:
-                problems.append('MCU IMU sample older than 100 ms')
-        command_age = getattr(fb, 'command_age_us', None)
-        if command_age == 0xffffffff:
-            problems.append('MCU has not accepted a command')
-        elif command_age is not None and command_age > 250000:
-            problems.append('MCU reported command age above 250 ms')
-        if (getattr(self, '_arm_ack_seq', None) is not None
-                and now >= self._arm_ack_deadline):
-            problems.append('waiting for MCU enable acknowledgement')
-        signature = tuple(problems)
-        self.timeout_warning = '; '.join(problems)
-        previous = getattr(self, '_timeout_signature', ())
-        if (signature and now - getattr(self, '_timeout_logged_at', float('-inf')) < 5.) or (not signature and not previous):
-            return
-        self._timeout_signature, self._timeout_logged_at = signature, now
-        event = dict(at=now, problems=problems, feedback_age_ms=age*1000,
-                     last_reported_command_age_us=command_age,
-                     last_reported_imu_age_us=imu_age, action='log_only')
-        if not hasattr(self, 'timeout_events'):
-            self.timeout_events = []
-        self.timeout_events.append(event)
-        del self.timeout_events[:-8]
-        print('[motion-timeout-observed]', json.dumps(event), flush=True)
-
-    def _send_pause_locked(self):
-        if self._pause_sent or self.feedback is None:
-            return
-        self.seq = (self.seq + 1) & 0xffffffff
-        # PAUSE ignores source age and all targets; the MCU captures its own
-        # reliable joint positions. It cannot enable an already disabled motor.
-        self.bridge.notify('duck_command', encode_command(self.seq, self.feedback.sample_us, PAUSE, DEFAULT_DEG))
-        self._pause_sent = True
-        self.sent += 1
 
     def _require_feedback(self, mask):
         fb = self.feedback
-        bypass = self._timeouts_disabled()
-        if not fb or (not bypass and time.monotonic()-self.rx_time > .15):
+        if not fb or time.monotonic()-self.rx_time > .15:
             raise ValueError('MCU feedback is stale')
-        if (not bypass and not fb.imu_ok) or (fb.mask & mask) != mask:
+        if not fb.imu_ok or (fb.mask & mask) != mask:
             raise ValueError('required servo feedback / IMU missing')
         return fb
 
     def _disarm_now(self):
         self.arm_pending = False
-        self._arm_ack_seq = None
         self.seq = (self.seq + 1) & 0xffffffff
         sample = self.feedback.sample_us if self.feedback else 0
-        self.bridge.notify('duck_command', encode_command(self.seq, sample, DISARM, DEFAULT_DEG))
+        self.bridge.notify('duck_command', encode_command(self.seq, sample, DISARM, self.policy.default_deg))
 
     def set_mode(self, mode, *, feedback_mask=None):
         if mode not in ('shadow', 'off', 'hold', 'policy', 'calibrate', 'servo_debug'):
             raise ValueError('unknown mode')
         with self.lock:
-            paused = self.fault_hold
-            if mode == self.mode and not (paused and mode in ('hold', 'policy')):
+            if mode == self.mode and mode != 'calibrate':
                 self.web_time = time.monotonic()
-                self.diagnostic_paused = False
                 return {'mode': self.mode}
             if mode in ('hold', 'policy') and self.mode in EXCLUSIVE_MODES:
                 raise ValueError('exit calibrate/servo_debug first')
-            if mode in EXCLUSIVE_MODES and self.mode in ('hold', 'policy'):
+            if mode == 'servo_debug' and self.mode in ('hold', 'policy'):
                 raise ValueError('disarm before calibrate/servo_debug')
             fb = None
             if mode in ('hold', 'policy'):
-                required = ALL_MASK if paused else 0
+                required = 0
                 if feedback_mask is not None:
-                    if isinstance(feedback_mask, bool) or not isinstance(feedback_mask, int) or not 0 <= feedback_mask <= ALL_MASK:
+                    if (isinstance(feedback_mask, bool) or not isinstance(feedback_mask, int)
+                            or not 0 <= feedback_mask <= ALL_MASK):
                         raise ValueError('invalid feedback mask')
                     required = feedback_mask
                 fb = self._require_feedback(required)
-                if not fb.enabled and not fb.imu_ok:
-                    raise ValueError('IMU is not ready for initial motor enable')
-                if not getattr(fb, 'flags', 0) & FAULT_HOLD_CAPABLE:
-                    raise ValueError('STM32 firmware lacks torque-preserving pause; upload the matching sketch before enabling motors.')
             previous = self.mode
             self.generation += 1; self.mode = mode
             self.recovery.reset(); self.policy_needs_reset = True
             self._stop_pick_locked(); self._stop_roulade_locked()
             self.last_error = ''
-            self.fault_hold = False
-            self.diagnostic_paused = False
-            self._pause_sent = False
             self.web_time = time.monotonic()
             self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
-            self.arm_pending = fb is not None and (not fb.enabled or paused or bool(getattr(fb, 'flags', 0) & 4))
-            self._arm_ack_seq = None
-            self._arm_ack_deadline = time.monotonic() + .25 if self.arm_pending else 0.0
+            self.arm_pending = fb is not None and not fb.enabled
             if previous == 'calibrate' and mode != 'calibrate':
                 self.cal_done = [False]*15
+                self.cal_expected_index = None
+                self.cal_reply_event.set()
                 self.bridge.notify('duck_cal', encode_cal(CAL_EXIT))
             if previous == 'servo_debug' and mode != 'servo_debug':
                 self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
             if mode == 'calibrate':
                 self._disarm_now()
-                self.cal_targets = [2047]*15
                 self.cal_done = [False]*15
+                self.cal_expected_index = None
+                self.cal_reply_event.set()
                 self.bridge.notify('duck_cal', encode_cal(CAL_ENTER))
             elif mode == 'servo_debug':
                 self._disarm_now()
                 self.bridge.notify('duck_servo', encode_servo(SERVO_ENTER, 10))
             elif previous in EXCLUSIVE_MODES:
                 self._disarm_now()
-            elif mode in ('off', 'shadow'):
-                self._disarm_now()
         with self.policy_lock:
-            self.policy.reset_action_filter()
-            self.getup_policy.reset_action_filter()
-            self.pick_policy.reset_action_filter()
-            self.roulade_policy.reset_action_filter()
+            for model in self._models():
+                model.reset_action_filter()
         return {'mode': mode}
 
+    def pause_motion(self, reason='Motion paused'):
+        """Stop AI-driven travel inputs. Keeps the current control mode; the
+        STM32 keeps torque until its own command timeout (or an explicit mode)."""
+        with self.lock:
+            self.twist = [0.0]*3
+            self.head = [0.0]*4
+            self.mouth = 0.0
+            if reason:
+                self.last_error = reason
+
+    def set_roller_mode(self, enabled):
+        if not isinstance(enabled, bool):
+            raise ValueError('roller enabled must be true or false')
+        with self.lock:
+            if enabled != self.roller_mode:
+                with self.policy_lock:
+                    self.policy = self.roller_policy if enabled else self.walk_policy
+                    self.policy.reset_action_filter()
+                    self.policy.warm(1)
+                self.roller_mode = enabled
+                # Drop any action computed by the previously selected walk model.
+                self.generation += 1
+                if (self.recovery.phase == 'walk' and not self.pick_active
+                        and not self._roulade_on(time.monotonic())):
+                    self.policy_needs_reset = True
+                self.twist = [0.0]*3
+                self.web_time = time.monotonic()
+            return dict(enabled=self.roller_mode, model=self.policy.file,
+                        action_scale=self.policy.action_scale, action_alpha=self.policy.action_alpha,
+                        action_alpha_head=self.policy.action_alpha_head)
+
     def _models(self):
-        return (self.policy, self.getup_policy, self.pick_policy, self.roulade_policy)
+        return (self.walk_policy, self.roller_policy, self.getup_policy, self.pick_policy, self.roulade_policy)
+
+    def _standard_models(self):
+        return (self.walk_policy, self.getup_policy, self.pick_policy, self.roulade_policy)
 
     def _apply_alphas_locked(self, leg, head):
-        for model in self._models():
+        for model in self._standard_models():
             model.set_action_alphas(leg=leg, head=head)
 
     def set_action_alphas(self, **values):
         with self.lock:
             with self.policy_lock:
-                leg, head = self.policy.set_action_alphas(**values)
+                if self.roller_mode:
+                    return self.roller_policy.set_action_alphas(**values)
+                leg, head = self.walk_policy.set_action_alphas(**values)
                 if self._roulade_alpha is not None:
                     self._roulade_alpha = (leg, head)
                     self._apply_alphas_locked(ROULADE_ALPHA, ROULADE_ALPHA)
                 else:
                     self._apply_alphas_locked(leg, head)
                 return leg, head
+
+    def set_imu_filters(self, **values):
+        with self.lock:
+            return self.filter.set_imu_filters(**values)
+
+    def set_action_scale(self, scale):
+        scale = float(scale)
+        if not math.isfinite(scale) or not 0 <= scale <= 2:
+            raise ValueError('action scale must be within [0,2]')
+        with self.lock:
+            with self.policy_lock:
+                models = (self.roller_policy,) if self.roller_mode else self._standard_models()
+                for model in models:
+                    model.action_scale = scale
+        return {'scale': scale}
 
     def _stop_pick_locked(self):
         self.pick_active = False
@@ -417,7 +332,7 @@ class Controller:
             if self.recovery.phase != 'walk' or self.pick_active:
                 raise ValueError('roulade only while walking')
             if self._roulade_alpha is None:
-                self._roulade_alpha = (self.policy.action_alpha, self.policy.action_alpha_head)
+                self._roulade_alpha = (self.walk_policy.action_alpha, self.walk_policy.action_alpha_head)
             self.roulade_until = time.monotonic() + ROULADE_S
             self.policy_needs_reset = True
             self.web_time = time.monotonic()
@@ -445,8 +360,6 @@ class Controller:
         with self.lock:
             if source != self.input_source:
                 return {'ok': True, 'ignored': 'inactive input source'}
-            if self.fault_hold and any(v for seq in (t, h, [m] if m is not None else None) for v in (seq or [])):
-                raise ValueError('Motion paused with torque held. 请明确要求“站起来”或选择 Policy 后再移动。')
             if self.mode in EXCLUSIVE_MODES:
                 raise ValueError('motion commands disabled in calibrate/servo_debug')
             if t is not None and not self.pick_active: self.twist = t
@@ -455,43 +368,54 @@ class Controller:
             self.web_time = time.monotonic()
         return {'ok': True}
 
-    def cal_targets_set(self, targets):
-        values = [int(v) for v in targets]
-        if len(values) != 15 or any(not 0 <= v <= 4095 for v in values):
-            raise ValueError('15 raw targets in 0..4095 required')
+    def cal_heartbeat(self):
         with self.lock:
             if self.mode != 'calibrate':
                 raise ValueError('not in calibrate mode')
-            self.cal_targets = values
             self.web_time = time.monotonic()
-            self.bridge.notify('duck_cal', encode_cal(CAL_SET_RAW, mask=ALL_MASK, raw=values))
-        return {'ok': True, 'targets': values}
+        return {'ok': True}
 
-    def cal_finish(self, index):
-        index = int(index)
-        if not 0 <= index < 15:
+    def cal_center(self, index):
+        if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < 15:
             raise ValueError('joint index out of range')
-        with self.lock:
-            if self.mode != 'calibrate':
-                raise ValueError('not in calibrate mode')
-            self.bridge.notify('duck_cal', encode_cal(CAL_FINISH_ONE, index=index))
-            # Optimistically store the last reported encoder reading.
-            self.zero_pos[index] = int(self.raw_pos[index])
-            self.cal_done[index] = True
-            self._save_zeros()
-            self.web_time = time.monotonic()
-            return {'ok': True, 'index': index, 'zero_pos': self.zero_pos[index],
-                    'cal_done': list(self.cal_done)}
+        with self.cal_op_lock:
+            with self.lock:
+                if self.mode != 'calibrate':
+                    raise ValueError('not in calibrate mode')
+                if not self.feedback or time.monotonic()-self.rx_time > .15:
+                    raise ValueError('MCU feedback is stale')
+                generation = self.generation
+                self.cal_seq = (self.cal_seq + 1) & 0xffffffff
+                seq = self.cal_seq
+                self.web_time = time.monotonic()
+                self.cal_reply = None
+                self.cal_reply_event.clear()
+                self.cal_expected_index = (seq, index)
+            try:
+                self.bridge.notify('duck_cal', encode_cal(CAL_CENTER_ONE, index=index, seq=seq))
+                if not self.cal_reply_event.wait(.75):
+                    raise ValueError('centering acknowledgement timeout')
+                with self.lock:
+                    if self.mode != 'calibrate' or self.generation != generation:
+                        raise ValueError('calibration session changed')
+                    if not self.cal_reply or not self.cal_reply['ok']:
+                        raise ValueError(f'No servo replied at ID {MOTOR_IDS[index]}; centering was not started')
+                    self.web_time = time.monotonic()
+                return {'ok': True, 'index': index, 'id': MOTOR_IDS[index], 'hold_pos': CAL_HOLD_POS}
+            finally:
+                with self.lock:
+                    self.cal_expected_index = None
 
     def _require_servo_debug(self):
         if self.mode != 'servo_debug':
             raise ValueError('not in servo_debug mode')
         self.web_time = time.monotonic()
 
-    def servo_op(self, action, target_id, new_id=None, kp=5, kd=20, raw_pos=2047):
+    def servo_op(self, action, target_id=None, new_id=None, kp=5, kd=20, *, protection_enabled=True, current_a=1.0):
         with self.servo_op_lock:
             if action != 'set_id':
-                return self._servo_op(action, target_id, new_id, kp, kd, raw_pos)
+                return self._servo_op(action, target_id, new_id, kp, kd,
+                                      protection_enabled=protection_enabled, current_a=current_a)
             target_id, new_id = int(target_id), int(new_id)
             if not 0 <= target_id <= 253 or not 0 <= new_id <= 253:
                 raise ValueError('ID must be between 0 and 253')
@@ -502,7 +426,7 @@ class Controller:
             if self._servo_op('ping', new_id)['ok']:
                 raise ValueError(f'ID {new_id} is already in use; choose another ID')
             # Keep the checks, write and verification in one serialized operation.
-            reply = self._servo_op(action, target_id, new_id, kp, kd, raw_pos)
+            reply = self._servo_op(action, target_id, new_id, kp, kd)
             time.sleep(0.05)
             if not self._servo_op('ping', new_id)['ok']:
                 raise ValueError(f'ID write sent, but ID {new_id} did not reply. Scan again')
@@ -510,8 +434,13 @@ class Controller:
                 raise ValueError('Both old and new IDs replied. Connect only one servo and scan again')
             return dict(reply, new_id=new_id)
 
-    def _servo_op(self, action, target_id, new_id=None, kp=5, kd=20, raw_pos=2047):
-        target_id = int(target_id)
+    def _servo_op(self, action, target_id, new_id=None, kp=5, kd=20, *, protection_enabled=True, current_a=1.0):
+        if action in ('set_protection', 'set_protection_current'):
+            if target_id is not None and target_id != BROADCAST_ID:
+                raise ValueError('protection applies to all servos; target must be broadcast')
+            target_id = BROADCAST_ID
+        else:
+            target_id = int(target_id)
         with self.lock:
             self._require_servo_debug()
             if action == 'unlock':
@@ -521,15 +450,20 @@ class Controller:
                 if not 0 <= new_id <= 253:
                     raise ValueError('invalid new id')
                 op, payload = SERVO_SET_ID, encode_servo(SERVO_SET_ID, target_id, new_id=new_id)
-            elif action == 'goto':
-                raw_pos = int(raw_pos)
-                op, payload = SERVO_GOTO, encode_servo(SERVO_GOTO, target_id, raw_pos=raw_pos)
+            elif action == 'reset_mid':
+                op, payload = SERVO_RESET_MID, encode_servo(SERVO_RESET_MID, target_id)
             elif action == 'set_gains':
                 kp, kd = int(kp), int(kd)
                 if not 0 <= kp <= 255 or not 0 <= kd <= 255:
                     raise ValueError('kp/kd out of range')
                 op = SERVO_SET_PERM_KP_KD
                 payload = encode_servo(SERVO_SET_PERM_KP_KD, target_id, kp=kp, kd=kd)
+            elif action == 'set_protection':
+                op = SERVO_SET_PROTECTION
+                payload = encode_servo_protection(protection_enabled)
+            elif action == 'set_protection_current':
+                op = SERVO_SET_PROTECTION_CURRENT
+                payload = encode_servo_protection_current(current_a)
             elif action == 'read':
                 op, payload = SERVO_READ, encode_servo(SERVO_READ, target_id)
             elif action == 'ping':
@@ -565,31 +499,34 @@ class Controller:
         with self.lock:
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
-            timeout_bypass = self._timeouts_disabled()
-            self._observe_timeouts_locked(time.monotonic(), age)
             if mode in ('hold','policy'):
                 lost = None
-                if not timeout_bypass and (not fb or age>.15 or not fb.imu_ok):
-                    lost = 'sensor feedback lost' if not fb or age>.15 else 'IMU feedback invalid'
+                if not fb or age>.15 or not fb.imu_ok:
+                    lost = 'sensor feedback lost; disarmed'
+                elif self.input_source == 'web' and time.monotonic()-self.web_time > 1.0:
+                    # Browser inactivity stops travel without releasing torque.
+                    # Voice/gamepad leases hold their own twist and stop explicitly.
+                    self.twist = [0.0]*3
                 if lost:
-                    self._pause_motion_locked(lost)
-                    mode = self.mode
+                    self.mode = mode = 'shadow'; self.generation += 1
+                    self.arm_pending = False; self.last_error = lost
                     generation = self.generation
                     self.recovery.reset(); self.policy_needs_reset = True
                     self._stop_pick_locked(); self._stop_roulade_locked()
-                if self.fault_hold:
-                    self._send_pause_locked()
-                    return
-                if getattr(self, '_arm_ack_seq', None) is not None:
-                    if not timeout_bypass and time.monotonic() >= self._arm_ack_deadline:
-                        self._pause_motion_locked('MCU enable acknowledgement timed out')
-                        self._send_pause_locked()
-                    # No policy targets are sent before ARM is acknowledged.
-                    return
             elif mode in EXCLUSIVE_MODES:
                 if time.monotonic()-self.web_time > 2.0:
-                    self.diagnostic_paused = True
-                    self.last_error = 'calibrate/servo_debug heartbeat lost; current positions retained until explicit exit.'
+                    previous = mode
+                    self.mode = mode = 'shadow'; self.generation += 1
+                    self.last_error = 'calibrate/servo_debug heartbeat lost; exited'
+                    generation = self.generation
+                    if previous == 'calibrate':
+                        self.cal_done = [False]*15
+                        self.cal_expected_index = None
+                        self.cal_reply_event.set()
+                        self.bridge.notify('duck_cal', encode_cal(CAL_EXIT))
+                    else:
+                        self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
+                    self._disarm_now()
             twist, head, mouth = list(self.twist), list(self.head), self.mouth
             valid = bool(fb and age < .15 and fb.imu_ok and filt
                          and filt['imu_fusion_ready'] and filt['imu_fusion_updated'])
@@ -630,11 +567,7 @@ class Controller:
             exclusive = mode in EXCLUSIVE_MODES
         if exclusive:
             return
-        # Missing/invalid samples do not latch a pause in the diagnostic build.
-        # Keep the previous target; never jump to DEFAULT_DEG or run ONNX on an
-        # invalid IMU merely because timeout handling was disabled.
-        target = (list(getattr(self, 'last_action', fb.angles))
-                  if timeout_bypass and mode == 'policy' and not valid else list(DEFAULT_DEG))
+        target = self.policy.default_deg
         if inferring and phase == 'default_pose':
             # Switch to getup immediately, but force action/history to zero for 1 s.
             with self.policy_lock:
@@ -679,15 +612,12 @@ class Controller:
             if fb is None: return
             self.last_action = list(target)
             self.seq = (self.seq+1)&0xffffffff
-            if command_mode == ARM:
-                self._arm_ack_seq = self.seq
-                self._arm_ack_deadline = time.monotonic() + .15
             payload = encode_command(self.seq, fb.sample_us, command_mode, target)
             self.bridge.notify('duck_command', payload)
             self.sent += 1
 
     def _keep_warm_idle(self):
-        """Run one dummy pass on an idle session so walk/getup/pick/roulade stay hot."""
+        """Run one dummy pass on an idle session so all policy sessions stay hot."""
         with self.lock:
             phase = self.recovery.phase
             rolling = self._roulade_on(time.monotonic()) and phase == 'walk'
@@ -700,7 +630,7 @@ class Controller:
                 active = self.policy
             else:
                 active = self.getup_policy
-            candidates = [p for p in (self.policy, self.getup_policy, self.pick_policy, self.roulade_policy) if p is not active]
+            candidates = [p for p in self._models() if p is not active]
         if not candidates:
             return
         self._warm_index = (self._warm_index + 1) % len(candidates)
@@ -718,8 +648,8 @@ class Controller:
                 self.step()
             except Exception as exc:
                 with self.lock:
-                    self.last_error = str(exc)
-                    self._pause_motion_locked('Control loop error: ' + str(exc))
+                    self.last_error = str(exc); self.mode = 'off'; self.generation += 1; self.arm_pending = False
+                    self._stop_pick_locked(); self._stop_roulade_locked()
             deadline += CONTROL_PERIOD
             now = time.monotonic()
             if deadline <= now:
@@ -737,9 +667,17 @@ class Controller:
     def stop(self):
         self.stop_event.set()
         with self.lock:
-            self._pause_motion_locked('App stopped')
-            if self.fault_hold:
-                self._send_pause_locked()
+            previous = self.mode
+            self.mode = 'off'; self.generation += 1; self.arm_pending = False
+            if previous == 'calibrate':
+                self.cal_done = [False]*15
+                self.cal_expected_index = None
+                self.cal_reply_event.set()
+                self.bridge.notify('duck_cal', encode_cal(CAL_EXIT))
+            elif previous == 'servo_debug':
+                self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
+            self.seq += 1
+            self.bridge.notify('duck_command', encode_command(self.seq, 0, DISARM, self.policy.default_deg))
 
     def status(self):
         now = time.monotonic()
@@ -760,28 +698,25 @@ class Controller:
                 bad_frames=self.bad_frames, sequence_gaps=self.gaps, loop_missed=self.loop_missed,
                 inference_ms=summary(self.infer_ms), receive_interval_ms=summary(self.rx_intervals),
                 feedback_age_ms=(now-self.rx_time)*1000 if fb else None,
-                uptime_s=now-self.started, last_error=self.last_error, command=self.twist, input_source=self.input_source,
-                fault_hold=self.fault_hold, pause_events=list(self.pause_events),
-                timeout_checks_disabled=self._timeouts_disabled(),
-                timeout_warning=getattr(self, 'timeout_warning', ''),
-                timeout_events=list(getattr(self, 'timeout_events', [])),
-                arming=self.arm_pending or getattr(self, '_arm_ack_seq', None) is not None,
-                diagnostic_paused=self.diagnostic_paused,
-                fault_hold_supported=bool(fb and fb.flags & FAULT_HOLD_CAPABLE),
+                uptime_s=now-self.started, last_error=self.last_error, command=self.twist,
+                input_source=self.input_source, arming=self.arm_pending,
                 head=self.head, mouth=self.mouth, policy_targets=self.last_action, motors=MOTOR_IDS, boot_pd=self.boot_pd,
                 full_robot_ready=bool(fb and fb.imu_ok and fb.mask==ALL_MASK and now-self.rx_time<.15),
-                raw_pos=list(self.raw_pos), zero_pos=list(self.zero_pos),
-                factory_zero_pos=list(FACTORY_ZERO), cal_done=list(self.cal_done),
-                cal_targets=list(self.cal_targets), raw_mask=self.raw_mask)
-            result['control_ready']=bool(fb and (self._timeouts_disabled() or
-                (fb.imu_ok and now-self.rx_time<.15)) and self.mode not in EXCLUSIVE_MODES)
-            result['servo_scan_version'] = 1
+                raw_pos=list(self.raw_pos), encoder_center=SERVO_CENTER_POS,
+                cal_done=list(self.cal_done), cal_hold_pos=CAL_HOLD_POS, raw_mask=self.raw_mask)
+            result['control_ready']=bool(fb and fb.imu_ok and now-self.rx_time<.15 and self.mode not in EXCLUSIVE_MODES)
+            result['servo_scan_version'] = 2
+            result['roller'] = dict(enabled=self.roller_mode, model=self.roller_policy.file,
+                                    walk_model=self.policy.file, default_deg=self.roller_policy.default_deg,
+                                    action_scale=self.roller_policy.action_scale,
+                                    action_alpha=self.roller_policy.action_alpha,
+                                    action_alpha_head=self.roller_policy.action_alpha_head)
             result['deployment'] = dict(reference='rl/raspi_deploy', control_hz=50,
-                home_deg=HOME_DEG.tolist(), default_deg=DEFAULT_DEG,
+                home_deg=self.policy.home_deg.tolist(), default_deg=self.policy.default_deg,
                 action_scale=self.policy.action_scale, action_alpha=self.policy.action_alpha,
                 action_alpha_head=self.policy.action_alpha_head,
                 gyro_alpha=self.filter.gyro_alpha, velocity_alpha=self.filter.vel_alpha,
-                gravity_tau_s=GRAVITY_TAU, imu_bias_deg=list(IMU_BIAS_DEG),
+                gravity_tau_s=self.filter.gravity_tau_s, imu_bias_deg=list(IMU_BIAS_DEG),
                 filter_clock='host_receive', snapshot='latest')
             result['recovery'] = self.recovery.status()
             result['recovery']['active'] = self.mode in ('shadow','policy')

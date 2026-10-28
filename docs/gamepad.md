@@ -52,7 +52,6 @@ Driver source: Linux v7.0 `drivers/hid/hid-nintendo.c` and `hid-ids.h` from http
 ```sh
 python3 tools/test-gamepad.py
 python3 tools/test-web-control.py
-python3 tools/test-servo-setup.py
 node tools/test-web-events.js
 ```
 

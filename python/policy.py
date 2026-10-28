@@ -7,7 +7,6 @@ import numpy as np
 from rl_core import (HOME_DEG, ACTION_SCALE, ACTION_ALPHA, ACTION_ALPHA_HEAD,
                      OBS_DIM, ACTION_DIM, State, build_obs as make_obs,
                      action_to_deg as deg_from_action)
-HOME_RAD = np.deg2rad(HOME_DEG)
 PYTHON_DIR = Path(__file__).resolve().parent
 
 def default_onnx() -> Optional[Path]:
@@ -25,14 +24,18 @@ class Policy:
     def loaded(self):
         return self.session is not None
 
+    @property
+    def default_deg(self):
+        return self.action_to_deg(np.zeros(ACTION_DIM, dtype=np.float32))
+
     def unload(self):
         self.session = None
         self.in_name = self.file = ''
-        self.home_rad = HOME_RAD.copy()
+        self.home_deg = HOME_DEG.copy()
         self._obs = np.empty(OBS_DIM, dtype=np.float32)
         self.reset_action_filter()
 
-    def load(self, path=None):
+    def load(self, path=None, *, use_model_home=False):
         p = Path(path) if path else default_onnx()
         if p is None:
             return False, 'default model xgoduck_walk.onnx was not found'
@@ -51,6 +54,14 @@ class Policy:
                 raise ValueError(f'expected observation shape [1,61], got {inp.shape}')
             if len(out.shape) != 2 or out.shape[-1] != ACTION_DIM:
                 raise ValueError(f'expected action shape [1,14], got {out.shape}')
+            self.home_deg = HOME_DEG.copy()
+            if use_model_home:
+                home = sess.get_modelmeta().custom_metadata_map.get('default_joint_pos')
+                if home is not None:
+                    home = np.array([float(v) for v in home.split(',')], dtype=np.float32)
+                    if home.shape != (ACTION_DIM,) or not np.isfinite(home).all():
+                        raise ValueError('default_joint_pos must contain 14 finite radians in policy order')
+                    self.home_deg = np.rad2deg(home)
             self.session, self.in_name = sess, inp.name
             self._outputs = [out.name]
             self.file = p.name
@@ -80,7 +91,7 @@ class Policy:
                    list(grav), list(gyro_rad))
         twist = np.zeros(3, dtype=np.float32) if cmd is None else cmd
         head_cmd = np.zeros(4, dtype=np.float32) if head is None else head
-        obs = make_obs(st, self.prev_action, twist, head_cmd, out=self._obs)
+        obs = make_obs(st, self.prev_action, twist, head_cmd, out=self._obs, home_deg=self.home_deg)
         if not np.isfinite(obs).all():
             raise ValueError('observation contains NaN or Inf')
         return obs
@@ -115,4 +126,5 @@ class Policy:
         self._act_filt = np.zeros(ACTION_DIM, dtype=np.float32)
 
     def action_to_deg(self, action):
-        return deg_from_action(np.asarray(action, dtype=np.float32))
+        return deg_from_action(np.asarray(action, dtype=np.float32),
+                               home_deg=self.home_deg, action_scale=self.action_scale)

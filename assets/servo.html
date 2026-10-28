@@ -1,22 +1,17 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css">
+<title>Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261021-3">
 <main class="page-servo">
 <header>
   <div><small>ARDUINO UNO Q</small><h1>Servo setup</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html" aria-current="page">Servo setup</a><a href="/audio.html">Audio</a><a href="/gamepad.html">Gamepad</a><a href="/mobile.html">Cockpit</a></nav>
+    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html" aria-current="page">Servo setup</a></nav>
     <button class="stop" id="exit">Exit</button>
   </div>
 </header>
 <p class="warn">When changing an ID, connect only the servo you want to change. Duplicate IDs cannot be distinguished on the same bus.</p>
-<p id="message" role="status">Enter setup to begin.</p>
+<p id="message" role="status">Scan for servos, then select an ID to read or change its settings.</p>
 <section class="servo-panel">
-  <div class="servo-toolbar">
-    <label>Current / target ID<input id="target-id" type="number" min="0" max="253" value="1"></label>
-    <button id="start">Enter setup</button>
-    <button id="exit2">Exit</button>
-  </div>
   <div class="servo-scan">
     <div class="servo-scan-actions">
       <button id="scan">Scan all IDs</button>
@@ -25,33 +20,44 @@
     </div>
     <progress id="scan-progress" max="254" value="0" hidden aria-label="Servo scan progress"></progress>
     <div id="scan-results" class="servo-scan-results" aria-label="Discovered servo IDs"></div>
-    <p class="hint">Click a found ID or type any ID from 0 to 253. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
+    <p class="hint">Select a found ID to read or change that servo's settings. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
   </div>
   <div class="servo-grid">
-    <div class="servo-row">
-      <span class="servo-label">Move to</span>
-      <input id="goto-pos" type="number" min="0" max="4095" value="2047" title="Raw position">
-      <button id="goto">Write</button>
+    <div class="servo-row servo-action-row">
+      <button id="reset-mid" disabled>Reset Mid</button>
     </div>
     <div class="servo-row">
       <span class="servo-label">Set KP/KD</span>
-      <input id="kp" type="number" min="0" max="255" value="5" title="KP">
-      <input id="kd" type="number" min="0" max="255" value="20" title="KD">
-      <button id="set-gains">Write</button>
+      <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
+      <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
+      <button id="set-gains" disabled>Set KpKd</button>
     </div>
     <div class="servo-row">
       <span class="servo-label">Change ID to</span>
-      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID">
-      <button id="set-id">Change ID</button>
+      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" disabled>
+      <button id="set-id" disabled>Change ID</button>
     </div>
-    <div class="servo-row">
-      <span class="servo-label">Read</span>
-      <input id="read-id" type="number" min="0" max="253" value="1" title="Servo ID">
+    <div class="servo-row servo-action-row">
+      <button id="read" disabled>Read</button>
       <strong id="read-out" class="servo-readout">—</strong>
-      <button id="read">Read</button>
     </div>
   </div>
 </section>
+<section class="servo-panel servo-protection">
+  <h2>All-servo voltage / overcurrent protection</h2>
+  <div class="protection-controls">
+    <button id="enable-protection">Enable</button>
+    <button id="disable-protection">Disable</button>
+    <span id="protection-out" class="servo-readout" role="status">Not applied</span>
+  </div>
+  <div class="protection-controls">
+    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" aria-label="Protection current in amperes">
+    <span>A</span>
+    <button id="set-protection-current">Set protection current</button>
+    <span id="protection-current-out" class="servo-readout" role="status">Not applied</span>
+  </div>
+  <p class="hint">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
+</section>
 </main>
-<script src="servo.js"></script>
+<script src="servo.js?v=20261021-3"></script>
 </html>

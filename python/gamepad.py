@@ -168,7 +168,7 @@ class GamepadControl:
                 raise ValueError('Finish or cancel button binding first.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration or servo setup first.')
-            self.controller.pause_motion('Gamepad control selected; explicitly resume with Walk/Hold')
+            self.controller.twist = [0.0]*3
             self.controller.input_source = 'gamepad'
             self.identity, self.buttons = data['id'], dict(data['buttons'])
             self.enabled, self.error = True, ''

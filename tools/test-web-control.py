@@ -1,7 +1,12 @@
-"""Controller behavior with no browser heartbeat; no hardware or ONNX required."""
+"""Controller behavior with no browser heartbeat; no hardware or ONNX required.
+
+Shared fixture for the AI motion tests: the real Controller class is executed
+against the real wire ABI with a mocked Bridge, policy sessions and feedback.
+"""
 import ast
 import collections
 import json
+import math
 from pathlib import Path
 import sys
 import threading
@@ -17,28 +22,42 @@ from recovery import Recovery
 
 source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
-ns = dict(vars(wire), threading=threading, time=time, json=json, DEFAULT_DEG=[0.] * 15,
-          MOUTH_INDEX=14, EXCLUSIVE_MODES=('calibrate', 'servo_debug'))
+ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
+          DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14,
+          EXCLUSIVE_MODES=('calibrate', 'servo_debug'))
 exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
+
+
+def policy_mock(file_name='mock.onnx'):
+    p = Mock()
+    p.file = file_name
+    p.default_deg = [0.] * 15
+    p.home_deg = Mock()
+    p.infer.return_value = [0.] * 14
+    p.action_to_deg.return_value = [0.] * 15
+    return p
 
 
 class WebControlTest(unittest.TestCase):
     def setUp(self):
         c = self.c = Controller.__new__(Controller)
         c.lock = threading.RLock()
+        c.servo_op_lock = threading.Lock()
+        c.cal_op_lock = threading.Lock()
         c.policy_lock = threading.RLock()
         c.mode = 'hold'
         c.generation = c.seq = c.sent = c.inferred = 0
         c.arm_pending = False
+        # AI-layer compatibility attributes.
+        c.input_source = 'web'
+        c.fault_hold = False
         c._arm_ack_seq, c._arm_ack_deadline = None, 0.0
-        c.fault_hold, c._pause_sent = False, False
-        c.pause_events = collections.deque(maxlen=8)
-        c.diagnostic_paused = False
         c.web_time = time.monotonic() - 3600
         c.rx_time = time.monotonic()
         c.feedback = SimpleNamespace(imu_ok=True, sample_us=123, angles=[0.] * 15, enabled=True,
-                                     flags=wire.FAULT_HOLD_CAPABLE | 3, mask=wire.ALL_MASK)
+                                     flags=3, mask=wire.ALL_MASK, command_seq=0,
+                                     command_age_us=10000, imu_us=0, work_us=0)
         c.filtered = dict(imu_fusion_ready=True, imu_fusion_updated=True, grav=[0, 0, -1],
                           gyro_rad=[0.] * 3, angles_deg=[0.] * 15, vels_deg=[0.] * 15)
         c.twist, c.head, c.mouth = [0.] * 3, [0.] * 4, 0.
@@ -49,9 +68,16 @@ class WebControlTest(unittest.TestCase):
         c.last_error = ''
         c.infer_times, c.infer_ms = collections.deque(), collections.deque()
         c.bridge = Mock()
-        c.policy = c.getup_policy = c.pick_policy = c.roulade_policy = Mock()
-        c.policy.infer.return_value = [0.] * 14
-        c.policy.action_to_deg.return_value = [0.] * 15
+        c.walk_policy = c.policy = policy_mock()
+        c.roller_policy = policy_mock('roller.onnx')
+        c.getup_policy = policy_mock('getup.onnx')
+        c.pick_policy = policy_mock('pick.onnx')
+        c.roulade_policy = policy_mock('roulade.onnx')
+        c.cal_done = [False] * 15
+        c.cal_expected_index = None
+        c.cal_reply_event = threading.Event()
+        c.raw_pos = [wire.SERVO_CENTER_POS] * 15
+        c.boot_pd = {}
 
     def command_mode(self):
         method, payload = self.c.bridge.notify.call_args.args
@@ -70,31 +96,33 @@ class WebControlTest(unittest.TestCase):
         self.assertEqual(self.command_mode(), wire.POLICY)
         self.assertEqual(self.c.inferred, 1)
 
-    def test_stale_sensor_feedback_pauses_without_disarming(self):
+    def test_stale_sensor_feedback_disarms(self):
         self.c.rx_time -= 1
         self.c.step()
-        self.assertEqual(self.command_mode(), wire.PAUSE)
-        self.assertTrue(self.c.fault_hold)
-        self.assertEqual(self.c.mode, 'hold')
+        self.assertEqual(self.c.mode, 'shadow')
+        self.assertEqual(self.command_mode(), wire.DISARM)
         self.assertIn('sensor feedback lost', self.c.last_error)
 
-    def test_invalid_imu_pauses_without_disarming(self):
+    def test_invalid_imu_disarms(self):
         self.c.feedback.imu_ok = False
         self.c.step()
-        self.assertEqual(self.command_mode(), wire.PAUSE)
+        self.assertEqual(self.c.mode, 'shadow')
+        self.assertEqual(self.command_mode(), wire.DISARM)
 
     def test_manual_stop_still_disarms(self):
         self.c.set_mode('off')
         self.c.step()
         self.assertEqual(self.command_mode(), wire.DISARM)
 
-    def test_calibration_session_timeout_retains_positions_without_disarming(self):
+    def test_calibration_session_timeout_exits_and_disarms(self):
         self.c.mode = 'calibrate'
         self.c.step()
-        self.assertEqual(self.c.mode, 'calibrate')
+        self.assertEqual(self.c.mode, 'shadow')
         self.assertIn('heartbeat lost', self.c.last_error)
-        self.assertTrue(self.c.diagnostic_paused)
-        self.c.bridge.notify.assert_not_called()
+        modes = [wire.CAL.unpack(call.args[1])[2] for call in self.c.bridge.notify.call_args_list
+                 if call.args[0] == 'duck_cal']
+        self.assertIn(wire.CAL_EXIT, modes)
+        self.assertEqual(self.command_mode(), wire.DISARM)
 
 
 if __name__ == '__main__':

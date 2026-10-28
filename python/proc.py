@@ -2,18 +2,30 @@
 from __future__ import annotations
 import math
 import time
-from rl_core import State, ImuFilter, FEEDBACK_PERIOD, VEL_ALPHA, GYRO_ALPHA
+from rl_core import State, ImuFilter, FEEDBACK_PERIOD, VEL_ALPHA, GYRO_ALPHA, GRAVITY_TAU
 
 class SignalFilter:
     def __init__(self):
         self.gyro_alpha = GYRO_ALPHA
         self.vel_alpha = VEL_ALPHA
+        self.gravity_tau_s = GRAVITY_TAU
         self.reset()
 
     def reset(self):
-        self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha)
+        self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s)
         self._last_t = None
         self._last = None
+
+    def set_imu_filters(self, gyro_alpha=None, gravity_tau_s=None):
+        gyro = self.gyro_alpha if gyro_alpha is None else float(gyro_alpha)
+        tau = self.gravity_tau_s if gravity_tau_s is None else float(gravity_tau_s)
+        if not math.isfinite(gyro) or not 0 <= gyro <= 0.95:
+            raise ValueError('gyro alpha must be between 0 and 0.95')
+        if not math.isfinite(tau) or not 0.01 <= tau <= 2.0:
+            raise ValueError('gravity tau must be between 0.01 and 2 seconds')
+        self.gyro_alpha = self._imu.gyro_alpha = gyro
+        self.gravity_tau_s = self._imu.gravity_tau_s = tau
+        return {'gyro_alpha': gyro, 'gravity_tau_s': tau}
 
     def update(self, acc_ms2, gyro_dps, angles_deg, vels_deg, *, timestamp=None, imu_ok=True):
         acc, gyro = list(acc_ms2), list(gyro_dps)
@@ -30,7 +42,7 @@ class SignalFilter:
             return out
         dt = FEEDBACK_PERIOD if self._last_t is None else now - self._last_t
         if self._last_t is None:
-            self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha)
+            self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s)
         self._last_t = now
         # QMI firmware already outputs policy body axes. Invert the ESP32 Python
         # mapping [z,-x,-y] here so ImuFilter applies it exactly once overall.

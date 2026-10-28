@@ -27,10 +27,10 @@ MOTOR_IDS = [
     30, 31, 32, 33, 34,
 ]
 
-q = 23.0
+# Ordinary walking/fallback pose, in MOTOR_IDS order; Roller uses its ONNX home.
 DEFAULT_DEG = [
-    0.0, -5.0, -q, 0.0, q,
-    0.0, 5.0, q, 0.0, -q,
+    0.0, -5.0, -22.0, 0.0, 22.0,
+    0.0, 5.0, 22.0, 0.0, -22.0,
     20.0, 20.0, 0.0, 0.0, 0.0,
 ]
 
@@ -56,7 +56,7 @@ ACTION_SCALE = 1.0
 
 ACTION_ALPHA = 0.45
 
-ACTION_ALPHA_HEAD = 0.45
+ACTION_ALPHA_HEAD = 0.2
 
 @dataclass
 class State:
@@ -89,9 +89,11 @@ def _rotate_imu_bias(vec: List[float]) -> List[float]:
 class ImuFilter:
     """Body-frame gravity: gyro prediction plus accel-magnitude-weighted correction. No bias estimate."""
 
-    def __init__(self, gyro_alpha: float = GYRO_ALPHA, vel_alpha: float = VEL_ALPHA) -> None:
+    def __init__(self, gyro_alpha: float = GYRO_ALPHA, vel_alpha: float = VEL_ALPHA,
+                 gravity_tau_s: float = GRAVITY_TAU) -> None:
         self.gyro_alpha = gyro_alpha
         self.vel_alpha = vel_alpha
+        self.gravity_tau_s = gravity_tau_s
         self._gravity: Optional[List[float]] = None
         self._gyro: Optional[List[float]] = None
         self._vel: Optional[List[float]] = None
@@ -118,7 +120,7 @@ class ImuFilter:
             pnorm = math.sqrt(sum(v * v for v in predicted))
             predicted = [v / pnorm for v in predicted]
             trust = max(0.0, 1.0 - abs(norm / 9.8 - 1.0) / 0.2)
-            gain = (1.0 - math.exp(-dt / GRAVITY_TAU)) * trust
+            gain = (1.0 - math.exp(-dt / self.gravity_tau_s)) * trust
             if acc_unit is not None:
                 predicted = [(1 - gain) * p + gain * a for p, a in zip(predicted, acc_unit)]
             pnorm = math.sqrt(sum(v * v for v in predicted))
@@ -133,11 +135,11 @@ class ImuFilter:
         st.vels = list(self._vel)
         return st
 
-def policy_from_state(st: State) -> Tuple[np.ndarray, np.ndarray]:
+def policy_from_state(st: State, home_deg=HOME_DEG) -> Tuple[np.ndarray, np.ndarray]:
     """Absolute joint degrees minus the home pose, then converted to radians."""
     q_deg = np.asarray(st.angles, dtype=np.float32)[POLICY_INDEX]
     v_deg = np.asarray(st.vels, dtype=np.float32)[POLICY_INDEX]
-    return np.deg2rad(q_deg - HOME_DEG), np.deg2rad(v_deg)
+    return np.deg2rad(q_deg - home_deg), np.deg2rad(v_deg)
 
 def build_obs(
     st: State,
@@ -145,20 +147,22 @@ def build_obs(
     twist: np.ndarray,
     head: np.ndarray,
     out: np.ndarray | None = None,
+    home_deg=HOME_DEG,
 ) -> np.ndarray:
     obs = np.empty(OBS_DIM, dtype=np.float32) if out is None else out
     obs[0:3] = st.gyro_rad
     obs[3:6] = st.grav
-    obs[6:20], obs[20:34] = policy_from_state(st)
+    obs[6:20], obs[20:34] = policy_from_state(st, home_deg)
     obs[34:48] = prev_action
     obs[48:51] = twist
     obs[51:55] = head
     obs[55:61] = 0.0
     return obs
 
-def action_to_deg(action: np.ndarray, mouth_deg: float = 0.0) -> List[float]:
+def action_to_deg(action: np.ndarray, mouth_deg: float = 0.0, *, home_deg=HOME_DEG,
+                  action_scale=ACTION_SCALE) -> List[float]:
     """Policy output is radians relative to home. Convert to degrees and add the home pose."""
-    q_deg = HOME_DEG + np.rad2deg(ACTION_SCALE * action)
+    q_deg = home_deg + np.rad2deg(action_scale * action)
     targets = np.zeros(len(MOTOR_IDS), dtype=np.float32)
     targets[POLICY_INDEX] = q_deg
     targets[MOUTH_INDEX] = float(np.clip(mouth_deg, 0.0, MOUTH_MAX_DEG))

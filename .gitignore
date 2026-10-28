@@ -3,10 +3,10 @@
 .build/
 __pycache__/
 *.pyc
-data/zero_pos.json
+*.log
+*.bak
 .venv/
 data/*
-!data/.gitkeep
 dist/
 tools/offline/
 uv.toml

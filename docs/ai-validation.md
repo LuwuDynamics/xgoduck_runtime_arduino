@@ -1,5 +1,8 @@
 # XGO Duck AI 检查记录
 
+> **0.2.29 note:** this log records the AI-branch control layer that used PAUSE / torque-preserving holds. After merging upstream `master`, the control layer and MCU firmware follow upstream; entries describing `fault_hold`, `PAUSE`, timeout bypass or the 0.2.17/0.2.22 behaviours are historical and do not describe the merged code.
+
+
 ## 0.2.28 双麦与唤醒采集缓冲（2026-10-27）
 
 - 在 `ai-chat-move` 更新双麦采集及诊断；本轮没有修改原网页、运动控制或 STM32。新麦克风 USB ID 为 `0c45:636b`，宿主机描述符声明 S16_LE、2 通道和 8–48 kHz 的多个采样率。容器内只看到虚拟声卡时，由硬件辅助服务只读提供实际能力。默认选择稳定的一路，另一通道能量持续 0.5 秒高出约 6 dB 才切换；选择后再进行单声道 AEC/Opus，单麦行为保留。未实现波束成形。
