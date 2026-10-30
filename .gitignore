@@ -1,7 +1,38 @@
-# ignore app cache folder
+# Build and runtime caches. Required ONNX policy files remain versioned.
 .cache/
 .build/
+build/
 __pycache__/
-*.pyc
+*.py[cod]
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+*.lst
+*.d
+.venv/
+venv/
+
+# Local settings, logs and temporary archives.
+.env
+.env.*
+!.env.example
 *.log
+*.tmp
 *.bak
+*.orig
+*.rej
+*.zip
+*.rar
+.DS_Store
+Thumbs.db
+
+# Local validation scripts are not part of the distributed app.
+tests/
+test_*.py
+*_test.py
+.pytest_cache/
+.coverage*
+htmlcov/

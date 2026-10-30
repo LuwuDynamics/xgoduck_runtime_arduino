@@ -14,6 +14,7 @@ sys.setswitchinterval(0.001)
 controller = Controller(Bridge)
 ui = WebUI(port=9527, cors_origins='')
 Bridge.provide('duck_state', controller.receive)
+Bridge.provide('duck_diagnostics', controller.receive_diagnostics)
 Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
 Bridge.provide('duck_raw', controller.receive_raw)
 Bridge.provide('duck_servo_reply', controller.receive_servo_reply)
@@ -51,6 +52,18 @@ def pick(_body: dict = None):
 
 def roulade(_body: dict = None):
     try: return controller.start_roulade()
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
+def sitstand(body: dict):
+    try: return controller.set_sitstand(body['action'])
+    except (KeyError, TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def right_kick(_body: dict = None):
+    try: return controller.start_kick('right')
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
+def left_kick(_body: dict = None):
+    try: return controller.start_kick('left')
     except ValueError as exc: raise HTTPException(400, str(exc))
 
 def cal_enter(_body: dict = None):
@@ -95,6 +108,9 @@ ui.expose_api('POST', '/api/imu-filter', imu_filtering)
 ui.expose_api('POST', '/api/action-scale', action_scale)
 ui.expose_api('POST', '/api/pick', pick)
 ui.expose_api('POST', '/api/roulade', roulade)
+ui.expose_api('POST', '/api/sitstand', sitstand)
+ui.expose_api('POST', '/api/right_kick', right_kick)
+ui.expose_api('POST', '/api/left_kick', left_kick)
 ui.expose_api('POST', '/api/cal/enter', cal_enter)
 ui.expose_api('POST', '/api/cal/exit', cal_exit)
 ui.expose_api('POST', '/api/cal/heartbeat', cal_heartbeat)

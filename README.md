@@ -1,6 +1,6 @@
 # XGO Duck
 
-Control an XGO Duck from a web browser using Arduino Uno Q. Includes walking, roller walking, get-up, pick, and roulade policies.
+Control an XGO Duck from a web browser using Arduino Uno Q. Includes walking, roller walking, get-up, sit/stand, pick, roulade, and left/right-kick policies.
 
 Based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Robotics](https://pollen-robotics.com/microduck/).
 
@@ -23,6 +23,15 @@ sudo bash tools/router-2m.sh
 Then click **Run** in App Lab. Repeat this preparation if the board's library cache is replaced. It configures the 2 Mbps connection required by this app.
 
 Connect the servo bus to **D0/D1** and the QMI8658 IMU to **D20/D21**.
+
+The STM32 runs independent 100 Hz servo and IMU threads. IMU initialization and
+I²C retries do not block the servo watchdog. Feedback uses the latest complete
+snapshots, and Linux integrates IMU samples using their MCU timestamps.
+
+`tools/prepare-bridge.py` also installs bounded RPC waits and retry-safe Bridge
+initialization for the pinned libraries. Initialization retries use backoff;
+reconnection leaves the robot unloaded until motion is explicitly enabled again.
+`/api/status` includes `mcu_runtime` diagnostics for both loops and Bridge retries.
 
 ## Servo setup
 
@@ -67,12 +76,20 @@ These are separate actions and apply to **all connected servos**. No scan or ID 
 | **Walk / get up** | Enables walking and automatic recovery after a fall. |
 | **Pick** | Plays one pick action, then returns to the selected walking model. |
 | **Roulade** | Plays one roll action, then returns to the selected walking model. |
+| **Sit / Stand** | Sit enables the sit/stand policy and holds the seated position. Sit/Stand uses fixed action scale 1.1. Stand runs the standing command for 1 s, then returns to walking/recovery. |
+| **left_kick / right_kick** | Runs the selected kick policy for 0.4 s with velocity and pose commands at zero, then returns to walking. Kick uses its own scale 0.8 and leg/head α 0. A fall cancels the kick and enters normal recovery. |
 | **Zero motion** | Stops travel while keeping the current control mode. |
 | **Torque off** | Unloads the motors. |
 
 Use the left pad to move and the right pad to turn. Release a pad to return it to center. Use **Head and mouth** to adjust the head and mouth. **Pick** and **Roulade** are available while walking upright.
 
 Leaving the Control page stops travel but keeps motor torque enabled. Use **Torque off** when you want the robot to rest.
+
+Sit/Stand uses `python/xgoduck_sitstand.onnx` with fixed action scale 1.1; its leg/head α follow the ordinary-model sliders. Stand runs for 1 s before returning to walking/recovery. Its scale is independent of the Action scale slider. The policy command is `[1, 0, 0]` while sitting and `[0, 0, 0]` while standing. Walk, Pick, Roulade and Roller mode are disabled during sit/stand; motion controls cannot replace the sit/stand command. The standing interval also disables the Sit/Stand button. Changing to another control mode cancels sit/stand; Torque off remains available throughout.
+
+A fall cancels sit/stand and enters the existing recovery flow (default-pose hold, then get-up). After recovery the selected walking policy resumes; the robot does not sit down again automatically.
+
+`left_kick` and `right_kick` use `python/xgoduck_ballkick_left.onnx` and `python/xgoduck_ballkick_right.onnx`, respectively, and are available while walking upright, including an unloaded preview in Inference only. The velocity, head and body command observations are all zero throughout each 0.4 s action; browser motion and pose inputs cannot override them. At 0.4 s the controller returns to the selected walking policy. Both kick policies use fixed action scale 0.8 and leg/head α 0. The Action settings sliders and Roulade smoothing do not change kick settings; kick settings do not change the other policies. Other action buttons and Roller mode are unavailable during the kick. Torque off and other control modes can cancel it. The existing fall detection stays active and recovery returns to the selected walking policy without resuming the kick.
 
 ## Roller walking
 
@@ -89,21 +106,23 @@ Recovery uses the get-up policy and then returns to roller walking. Turn **Rolle
 
 | Joystick range | Ordinary walking | Roller walking |
 | --- | --- | --- |
-| Forward / backward | -0.2 to +0.4 | -0.4 to +0.4 |
+| Forward / backward | -0.2 to +0.35 | -0.4 to +0.4 |
 | Sideways | ±0.3 | 0 |
 | Turning | ±1.0 | ±0.25 |
+
+Joystick commands use `0.75 × previous + 0.25 × target` smoothing on all motion axes.
 
 **Heat warning:** Holding a toe-out stance for long periods heats up the roll motors. Take regular breaks to let them cool down. A yellow reminder appears above the motion controls while Roller mode is on. Use a level, clear surface and keep **Torque off** within reach when trying a new model or setting.
 
 ## Adjusting the sliders
 
-The Action settings sliders follow the Roller mode switch. Each group keeps its own settings until the app restarts.
+The Action settings sliders follow the Roller mode switch. Each group keeps its own settings until the app restarts. Kick has separate fixed settings: scale 0.8, leg α 0 and head α 0.
 
 | Default setting | Ordinary walking / other models | Roller walking |
 | --- | --- | --- |
 | Action scale | 1.0 | 0.7 |
-| Leg α | 0.45 | 0.4 |
-| Head α | 0.2 | 0.5 |
+| Leg α | 0.35 | 0.4 |
+| Head α | 0.45 | 0.5 |
 
 - **Action scale** changes movement amplitude around the default pose. **0** holds the default pose; **1** uses the original amplitude.
 - Higher **Leg α** or **Head α** gives smoother, slower responses.
@@ -116,8 +135,17 @@ Release a slider to apply its value. Restarting the app restores defaults. Get-u
 - **The page looks outdated:** press **Ctrl+F5** to reload it.
 - **A servo is missing:** check power, wiring, and its assigned ID. Use **Scan all IDs** to find it.
 - **There is no Bridge feedback:** stop the app in App Lab, run `sudo systemctl restart arduino-router` on the Uno Q, then click **Run** again.
+- The system's Router stop script also resets the STM32. After restarting that service, run the app again to reload its firmware and refresh the container's socket mount. Bridge retries recover communication interruptions while the MCU app remains running.
 - **Startup tries to download an already installed toolchain:** run `python3 tools/reuse-toolchain.py` on the Uno Q and try again.
 
 ## Project files
 
 `assets/` contains the web interface, `python/` the controller and models, `sketch/` the Uno Q firmware, and `tools/` the installation helpers.
+
+See [Program architecture](docs/architecture.md) for the block diagram, thread timing, Bridge recovery, and validation results.
+
+Build caches, local validation scripts, logs, and temporary backups are excluded from the distributed app. ONNX policy files are required runtime assets and remain included.
+
+## Sources and licensing
+
+See [Third-party sources and notices](THIRD_PARTY_NOTICES.md) for upstream attribution and the original third-party license texts. An overall license for this repository and its ONNX policies has not been declared.

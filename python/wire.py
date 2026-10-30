@@ -4,6 +4,7 @@ import math
 import struct
 
 STATE = struct.Struct('<4sBBH10I6h45f')
+DIAGNOSTIC = struct.Struct('<4s16I')
 COMMAND = struct.Struct('<4sIIIBBH15f')
 CAL = struct.Struct('<4sIBB')
 CAL_REPLY = struct.Struct('<4sIBB')
@@ -11,6 +12,7 @@ SERVO = struct.Struct('<4sBBBBBBH')
 RAW = struct.Struct('<4sHH15H')
 SERVO_REPLY = struct.Struct('<4sBBBBHHBB')
 ALL_MASK = 0x7fff  # hardware order: 10..14,20..24,30..34
+IMU_STALE_S = 0.5  # Mirrored by protocol.h IMU_STALE_US.
 DISARM, ARM, POLICY, HOLD = range(4)
 
 CAL_ENTER, CAL_EXIT, CAL_CENTER_ONE = range(3)
@@ -28,6 +30,7 @@ SERVO_OPS = (SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID,
              SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT)
 
 assert STATE.size == 240
+assert DIAGNOSTIC.size == 68
 assert COMMAND.size == 80
 assert CAL.size == 10
 assert CAL_REPLY.size == 10
@@ -83,13 +86,26 @@ def decode_state(data):
                     tuple(v/32 for v in x[17:20]), tuple(x[20:35]),
                     tuple(x[35:50]), tuple(x[50:65]))
 
-def encode_command(seq, sample_us, mode, targets, ttl_us=250000):
+def decode_diagnostics(data):
+    if not isinstance(data, (bytes, bytearray)) or len(data) != DIAGNOSTIC.size:
+        raise ValueError('expected 68-byte diagnostics')
+    values = DIAGNOSTIC.unpack(data)
+    if values[0] != b'DQD1':
+        raise ValueError('invalid diagnostic ABI')
+    names = ('bridge_state', 'bridge_attempts', 'bridge_failures', 'notify_drops',
+             'imu_seq', 'imu_us', 'imu_period_us', 'imu_work_us', 'imu_overruns',
+             'imu_errors', 'imu_init_attempts', 'servo_writes', 'servo_reads',
+             'servo_wait_us', 'reconnects', 'bridge_ready_us')
+    return dict(zip(names, values[1:]))
+
+def encode_command(seq, sample_us, mode, targets, ttl_us=0):
     if mode not in range(4):
         raise ValueError('invalid command mode/mask')
     if len(targets) != 15 or not all(math.isfinite(v) for v in targets):
         raise ValueError('15 finite targets required')
-    if not 0 < ttl_us <= 250000:
-        raise ValueError('invalid command lifetime')
+    # Legacy ABI field, ignored by the MCU; movement commands do not expire.
+    if not isinstance(ttl_us, int) or not 0 <= ttl_us <= 0xffffffff:
+        raise ValueError('invalid legacy command lifetime field')
     return COMMAND.pack(b'DQC1', seq & 0xffffffff, sample_us & 0xffffffff,
                         ttl_us, mode, 0, 0, *targets)
 

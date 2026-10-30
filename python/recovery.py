@@ -1,4 +1,4 @@
-"""Raspberry Pi recovery logic: 50 Hz condition counters and wall-clock hold."""
+"""Recovery logic: control-period condition counters and wall-clock hold."""
 import math
 
 
@@ -6,9 +6,8 @@ class Recovery:
     FALL_DEG, FALL_SECONDS = 55.0, 0.15
     STAND_DEG, STAND_SECONDS = 15.0, 1.0
     HOLD_SECONDS = 1.0
-    PERIOD = 1.0 / 50.0
-
-    def __init__(self):
+    def __init__(self, period_s=0.02):
+        self.PERIOD = period_s
         self.reset()
 
     def reset(self):

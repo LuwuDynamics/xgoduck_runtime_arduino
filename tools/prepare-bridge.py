@@ -47,3 +47,7 @@ else:
     if updated != source: path.write_text(updated)
     print('RPClite 0.3.1 bounded framing installed / updated')
 (path.parent/'duck_msgpack_frame.h').write_text((patches/'duck_msgpack_frame.h').read_text())
+
+from bridge_patch import patch_libraries
+patch_libraries(root)
+print('Installed bounded RPC waits, retry-safe Bridge setup and late-response recovery')
