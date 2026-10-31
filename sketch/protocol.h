@@ -27,7 +27,8 @@ enum ServoOp : uint8_t {
   SERVO_PING = 7,
   SERVO_RESET_MID = 8,
   SERVO_SET_PROTECTION = 9,
-  SERVO_SET_PROTECTION_CURRENT = 10
+  SERVO_SET_PROTECTION_CURRENT = 10,
+  SERVO_READ_BYTE = 11
 };
 
 // Little endian, binary payload inside MessagePack RPC. ABI shared with wire.py.
@@ -67,8 +68,8 @@ struct __attribute__((packed)) CalReplyPacket {
 struct __attribute__((packed)) ServoPacket {
   char magic[4];
   uint8_t op, targetId, newId, kp, kd;
-  union { uint8_t reserved; uint8_t protectionFlags; };
-  union { uint16_t reserved2; uint16_t protectionCurrent; };
+  union { uint8_t reserved; uint8_t protectionFlags; uint8_t registerAddress; };
+  union { uint16_t reserved2; uint16_t protectionCurrent; uint16_t requestId; };
 };
 struct __attribute__((packed)) RawPacket {
   char magic[4];
@@ -78,9 +79,9 @@ struct __attribute__((packed)) RawPacket {
 struct __attribute__((packed)) ServoReplyPacket {
   char magic[4];
   uint8_t op, targetId, ok;
-  union { uint8_t reserved; uint8_t protectionFlags; };
-  union { uint16_t rawPos; uint16_t protectionCurrent; };
-  uint16_t centerPos;
+  union { uint8_t reserved; uint8_t protectionFlags; uint8_t registerAddress; };
+  union { uint16_t rawPos; uint16_t protectionCurrent; uint16_t registerValue; };
+  union { uint16_t centerPos; uint16_t requestId; };
   uint8_t kp, kd;
 };
 static_assert(sizeof(CommandPacket) == 80, "Command ABI");

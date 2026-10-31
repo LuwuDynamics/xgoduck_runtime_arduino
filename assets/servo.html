@@ -58,6 +58,18 @@
   </div>
   <p class="hint">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
 </section>
+<section class="servo-panel">
+  <h2>Supply voltage</h2>
+  <div class="servo-row" style="display:flex;flex-wrap:wrap">
+    <label for="voltage-servo-id">Servo ID</label>
+    <input id="voltage-servo-id" type="number" min="0" max="253" step="1" value="32" aria-label="Servo ID for voltage reading">
+    <strong id="supply-voltage" class="servo-readout">—</strong>
+    <button id="read-voltage" type="button" disabled>Read voltage</button>
+    <span id="supply-voltage-detail" role="status">Not read yet</span>
+  </div>
+  <p class="hint">Default ID: 32 (range 0–253). Click to read the selected servo’s supply voltage once. No automatic sampling, scan or motor enable is required. The value is measured at the servo terminals.</p>
+</section>
 </main>
-<script src="servo.js?v=20261021-3"></script>
+<script src="voltage.js?v=20261101-voltage-en"></script>
+<script src="servo.js?v=20261031-select-voltage"></script>
 </html>

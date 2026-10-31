@@ -195,9 +195,10 @@ setInterval(async()=>{
   try{
     const s=await api('status');
     if(busy||closing)return;
+    showSupplyVoltage(s.supply_voltage);
     active=s.mode==='servo_debug';
     if(active)await api('servo/enter',{});
-  }catch(_){}
+  }catch(_){showSupplyVoltage(null);}
   finally{statusBusy=false;}
 },1000);
 lock(false);

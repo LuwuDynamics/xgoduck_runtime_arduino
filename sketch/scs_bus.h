@@ -242,7 +242,9 @@ static void drainServoRx() {
   resetServoParser();
 }
 
-static void parseServoRx() {
+// Optional ID returns one register byte, or -1 if no valid matching reply.
+static int parseServoRx(uint8_t readId = 0xFF) {
+  int value = -1;
   while (Serial1.available()) {
     uint8_t res = (uint8_t)Serial1.read();
     switch (servoParserFlag) {
@@ -266,7 +268,7 @@ static void parseServoRx() {
         break;
       case 3:
         servoRxBuffer[3] = res;
-        if (res == 0x02 || res == 0x04 || res == 0x08 || res == 0x09 || res == 0x0B) {
+        if (res == 0x02 || res == 0x03 || res == 0x04 || res == 0x08 || res == 0x09 || res == 0x0B) {
           servoParserFlag = 4;
           servoRxLen = 0;
           servoRxDataLen = res;
@@ -298,6 +300,10 @@ static void parseServoRx() {
             servoPingSeen = true;
             break;
           }
+          if (dataLen == 3 && readId <= 253 && sid == readId && servoRxBuffer[4] == 0) {
+            if (value < 0) value = servoRxBuffer[5];
+            break;
+          }
           const int idx = motorIndexById(sid);
           if (dataLen == 4 && servoRxBuffer[4] == 0) {
             if (servoParamsId <= 253 && sid == servoParamsId) {
@@ -326,6 +332,23 @@ static void parseServoRx() {
         break;
     }
   }
+  return value;
+}
+
+// Single-byte read using the existing packet sender/parser; servo task only.
+static bool scsReadByte(uint8_t id, uint8_t address, uint8_t &out, uint32_t timeoutUs) {
+  if (id > 253 || !timeoutUs) return false;
+  drainServoRx();
+  const uint8_t data[2] = {address, 1};
+  scsWriteBuf(id, 0x02, data, 2);
+  Serial1.flush();
+  const uint32_t start = micros();
+  do {
+    const int value = parseServoRx(id);
+    if (value >= 0) { out = uint8_t(value); return true; }
+    k_sleep(K_USEC(100));
+  } while ((uint32_t)(micros() - start) < timeoutUs);
+  return false;
 }
 
 static void waitServoReply() {

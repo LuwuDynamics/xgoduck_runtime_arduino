@@ -148,7 +148,7 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
   bool valid = bytes.size() == sizeof(pkt);
   if (valid) {
     memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_CURRENT && pkt.op != 4;
+    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_READ_BYTE && pkt.op != 4;
     if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
       valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;
       if (pkt.op == SERVO_SET_PROTECTION) {
@@ -157,6 +157,8 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
       } else {
         valid = valid && !pkt.protectionFlags;
       }
+    } else if (pkt.op == SERVO_READ_BYTE) {
+      valid = valid && pkt.targetId <= 253 && !pkt.newId && !pkt.kp && !pkt.kd && pkt.requestId;
     } else {
       valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;
     }
@@ -288,6 +290,10 @@ static void applyServoOp(const ServoPacket &pkt) {
   reply.targetId = pkt.targetId;
   reply.centerPos = SERVO_CENTER_POS;
   reply.ok = 1;
+  if (pkt.op == SERVO_READ_BYTE) {
+    reply.registerAddress = pkt.registerAddress;
+    reply.requestId = pkt.requestId;
+  }
   if (servoMidId != 0xFF && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {
     reply.ok = 0;
     publishServoReply(reply);
@@ -344,6 +350,20 @@ static void applyServoOp(const ServoPacket &pkt) {
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
       reply.ok = pingServo(pkt.targetId) ? 1 : 0;
       break;
+    case SERVO_READ_BYTE: {
+      // Read-only: no mode/torque change. Reuse the normal servo RPC queue/reply.
+      static uint32_t lastReadUs = 0;
+      const uint32_t now = micros();
+      if (hostMode == HOST_CAL || (lastReadUs && uint32_t(now - lastReadUs) < 1000000u)) {
+        reply.ok = 0;
+        break;
+      }
+      lastReadUs = now;
+      uint8_t value = 0;
+      reply.ok = scsReadByte(pkt.targetId, pkt.registerAddress, value, 1000);
+      reply.registerValue = value;
+      break;
+    }
     case SERVO_READ: {
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
       uint16_t pos = 0;

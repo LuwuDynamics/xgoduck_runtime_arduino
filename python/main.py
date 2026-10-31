@@ -32,6 +32,10 @@ def command(body: dict):
     try: return controller.command(**body)
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
+def voltage_read(body: dict = None):
+    try: return controller.request_voltage(**(body if body is not None else {}))
+    except (KeyError, TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
 def filtering(body: dict):
     try:
         leg, head = controller.set_action_alphas(**body)
@@ -100,6 +104,7 @@ def servo_action(body: dict):
         raise HTTPException(400, str(exc))
 
 ui.expose_api('GET', '/api/status', controller.status)
+ui.expose_api('POST', '/api/voltage/read', voltage_read)
 ui.expose_api('POST', '/api/mode', mode)
 ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/command', command)

@@ -3,6 +3,11 @@ from dataclasses import dataclass
 import math
 import struct
 
+VOLTAGE_REQUEST_TIMEOUT_S = 2.0
+VOLTAGE_MIN_INTERVAL_S = 1.0
+VOLTAGE_SERVO_ID = 32
+VOLTAGE_ADDRESS = 0x3E
+
 STATE = struct.Struct('<4sBBH10I6h45f')
 DIAGNOSTIC = struct.Struct('<4s16I')
 COMMAND = struct.Struct('<4sIIIBBH15f')
@@ -22,12 +27,13 @@ SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID = range(4)
 SERVO_SET_PERM_KP_KD, SERVO_READ, SERVO_PING, SERVO_RESET_MID = range(5, 9)
 SERVO_SET_PROTECTION = 9
 SERVO_SET_PROTECTION_CURRENT = 10
+SERVO_READ_BYTE = 11
 BROADCAST_ID = 254
 PROTECTION_CURRENT_UNIT_A = 0.0065
 PROTECTION_DISABLED, PROTECTION_ENABLED = 0x04, 0x0D
 SERVO_OPS = (SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID,
              SERVO_SET_PERM_KP_KD, SERVO_READ, SERVO_PING, SERVO_RESET_MID,
-             SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT)
+             SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT, SERVO_READ_BYTE)
 
 assert STATE.size == 240
 assert DIAGNOSTIC.size == 68
@@ -125,7 +131,7 @@ def decode_cal_reply(data):
     return {'seq': seq, 'index': index, 'ok': bool(ok)}
 
 def encode_servo(op, target_id, new_id=0, kp=5, kd=20, *, protection_flags=0, protection_current_raw=0):
-    if op not in SERVO_OPS:
+    if op not in SERVO_OPS or op == SERVO_READ_BYTE:
         raise ValueError('invalid servo op')
     if op in (SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT):
         if target_id != BROADCAST_ID:
@@ -145,6 +151,14 @@ def encode_servo(op, target_id, new_id=0, kp=5, kd=20, *, protection_flags=0, pr
         raise ValueError('invalid new id')
     return SERVO.pack(b'DQV2', op, int(target_id) & 0xff, int(new_id) & 0xff,
                       int(kp) & 0xff, int(kd) & 0xff, 0, 0)
+
+def encode_servo_read_byte(request_id, servo_id, address):
+    if (type(request_id) is not int or not 1 <= request_id <= 0xffff or
+            type(servo_id) is not int or not 0 <= servo_id <= 253 or
+            type(address) is not int or not 0 <= address <= 255):
+        raise ValueError('invalid register read request')
+    # Reuse the existing servo packet's reserved fields, without changing its size.
+    return SERVO.pack(b'DQV2', SERVO_READ_BYTE, servo_id, 0, 0, 0, address, request_id)
 
 def encode_servo_protection(enabled):
     if not isinstance(enabled, bool):
@@ -188,6 +202,11 @@ def decode_servo_reply(data):
                 'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
     if x[2] > 253:
         raise ValueError('invalid servo reply ID')
+    if x[1] == SERVO_READ_BYTE:
+        if not x[6] or x[5] > 255 or x[7] or x[8]:
+            raise ValueError('invalid byte read reply')
+        return {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]),
+                'address': x[4], 'value': x[5], 'request_id': x[6]}
     return {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]),
             'raw_pos': x[5], 'center_pos': x[6], 'kp': x[7], 'kd': x[8]}
 
