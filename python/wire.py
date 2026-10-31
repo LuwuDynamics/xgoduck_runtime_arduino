@@ -3,6 +3,17 @@ from dataclasses import dataclass
 import math
 import struct
 
+VOLTAGE = struct.Struct('<4sIH15B')
+
+def decode_voltage(data):
+    if not isinstance(data, (bytes, bytearray)) or len(data) != VOLTAGE.size:
+        raise ValueError('expected 25-byte voltage packet')
+    magic, sample_us, mask, *raw = VOLTAGE.unpack(data)
+    if magic != b'DQV1' or mask & ~0x7fff:
+        raise ValueError('invalid voltage ABI')
+    return sample_us, [v / 10.0 if mask & (1 << i) and 0 < v < 255 else None
+                       for i, v in enumerate(raw)]
+
 STATE = struct.Struct('<4sBBH10I6h45f')
 DIAGNOSTIC = struct.Struct('<4s16I')
 COMMAND = struct.Struct('<4sIIIBBH15f')

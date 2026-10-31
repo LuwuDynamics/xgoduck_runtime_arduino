@@ -23,6 +23,7 @@ static StatePacket snapshot = {};
 static RawPacket rawSnapshot = {};
 static bool rawSnapshotEveryTick = false;
 static DiagnosticPacket diagnosticSnapshot = {};
+static VoltagePacket voltageSnapshot = {};
 static atomic_t bridgeReady = ATOMIC_INIT(0), bridgeStage = ATOMIC_INIT(0);
 static atomic_t bridgeAttempts = ATOMIC_INIT(0), bridgeFailures = ATOMIC_INIT(0);
 static atomic_t notifyDrops = ATOMIC_INIT(0), bridgeReconnects = ATOMIC_INIT(0);
@@ -507,6 +508,10 @@ static void controlTask(void*, void*, void*) {
     s.reportDrops = reportDrops; snapshot = s;
     rawSnapshot = raw; rawSnapshotEveryTick = rawNotifyEveryTick;
     diagnosticSnapshot = diagnostic;
+    memcpy(voltageSnapshot.magic, "DQV1", 4);
+    voltageSnapshot.sampleUs = sampleUs;
+    voltageSnapshot.mask = servoRxMask;
+    memcpy(voltageSnapshot.decivolts, servoVoltage, NUM_MOTORS);
     k_mutex_unlock(&stateMu);
     k_sem_give(&reportReady);
     deadline += TICK_US;
@@ -528,10 +533,11 @@ static void reportTask(void*, void*, void*) {
     k_sem_take(&reportReady, K_FOREVER);
     RawPacket raw;
     DiagnosticPacket diagnostic;
+    VoltagePacket voltage;
     bool rawEveryTick;
     k_mutex_lock(&stateMu, K_FOREVER);
     memcpy(bytes.data(), &snapshot, sizeof(snapshot));
-    raw = rawSnapshot; diagnostic = diagnosticSnapshot;
+    raw = rawSnapshot; diagnostic = diagnosticSnapshot; voltage = voltageSnapshot;
     rawEveryTick = rawSnapshotEveryTick;
     k_mutex_unlock(&stateMu);
     if (!atomic_get(&bridgeReady)) continue;
@@ -576,6 +582,10 @@ static void reportTask(void*, void*, void*) {
       }
     }
     if ((reports % 10) == 0) {
+      MsgPack::bin_t<uint8_t> vb;
+      vb.resize(sizeof(voltage));
+      memcpy(vb.data(), &voltage, sizeof(voltage));
+      if (!Bridge.tryNotify("duck_voltage", vb)) atomic_inc(&notifyDrops);
       MsgPack::bin_t<uint8_t> db;
       db.resize(sizeof(diagnostic));
       memcpy(db.data(), &diagnostic, sizeof(diagnostic));

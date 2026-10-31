@@ -91,6 +91,9 @@ class Controller:
         self._imu_source_us = None
         self._imu_source_time = 0.0
         self.diagnostics = {}
+        self.voltage_values = [None] * 15
+        self.voltage_rx_time = 0.0
+        self.voltage_sample_us = None
         self.mode = 'shadow'
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
@@ -156,6 +159,18 @@ class Controller:
                 return
             self.servo_reply = pkt
             self.servo_reply_event.set()
+
+    def receive_voltage(self, raw):
+        try:
+            sample_us, values = decode_voltage(raw)
+        except ValueError:
+            return
+        with self.lock:
+            if sample_us == self.voltage_sample_us:
+                return
+            self.voltage_sample_us = sample_us
+            self.voltage_values = values
+            self.voltage_rx_time = time.monotonic()
 
     def receive_diagnostics(self, raw):
         try:
@@ -892,6 +907,16 @@ class Controller:
                 gravity_tau_s=self.filter.gravity_tau_s, imu_bias_deg=list(IMU_BIAS_DEG),
                 filter_clock='mcu_imu', snapshot='latest',
                 command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000)
+            age = now - self.voltage_rx_time if self.voltage_sample_us is not None else None
+            fresh = age is not None and age <= 1.0 and now - self.rx_time <= 0.15
+            values = list(self.voltage_values) if fresh else [None] * 15
+            valid = sorted(v for v in values if v is not None)
+            n = len(valid)
+            median = (valid[(n-1)//2] + valid[n//2]) / 2 if n else None
+            result['supply_voltage'] = dict(volts=median, min_volts=min(valid) if n else None,
+                max_volts=max(valid) if n else None, per_servo=values, valid_count=n,
+                age_ms=age * 1000 if age is not None else None, source='servo_bus',
+                available=bool(n))
             result['mcu_runtime'] = dict(self.diagnostics)
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']

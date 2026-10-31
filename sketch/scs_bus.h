@@ -5,6 +5,7 @@
 
 extern struct k_mutex motorsMu;
 static uint16_t servoRxMask = 0;
+static uint8_t servoVoltage[NUM_MOTORS] = {};
 static uint16_t servoPdMask = 0;
 static uint8_t servoBootP[NUM_MOTORS] = {}, servoBootD[NUM_MOTORS] = {};
 static uint8_t servoParserFlag = 0;
@@ -309,14 +310,15 @@ static void parseServoRx() {
             }
             break;
           }
-          // Only accept the requested 6-byte status, with no device error.
-          if (dataLen != 8 || servoRxBuffer[4] != 0) {
+          // Position, speed, load and voltage (0x38..0x3E).
+          if (dataLen != PRESENT_LEN + 2 || servoRxBuffer[4] != 0) {
             break;
           }
           if (servoReadId <= 253 && sid == servoReadId) {
             servoReadSeen = true;
             servoReadPos = (uint16_t)hostWord(servoRxBuffer[5], servoRxBuffer[6]);
           }
+          if (idx >= 0) servoVoltage[idx] = servoRxBuffer[11];
           applyMotorFb(sid, hostWord(servoRxBuffer[5], servoRxBuffer[6]),
                        hostVelSignMag(servoRxBuffer[7], servoRxBuffer[8]));
         }

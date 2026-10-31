@@ -48,6 +48,13 @@ struct __attribute__((packed)) StatePacket {
   int16_t acc[3], gyro[3];
   float angle[15], velocity[15], target[15];
 };
+struct __attribute__((packed)) VoltagePacket {
+  char magic[4];
+  uint32_t sampleUs;
+  uint16_t mask;
+  uint8_t decivolts[15];
+};
+static_assert(sizeof(VoltagePacket) == 25, "Voltage ABI");
 struct __attribute__((packed)) DiagnosticPacket {
   char magic[4];
   uint32_t bridgeState, bridgeAttempts, bridgeFailures, notifyDrops;
