@@ -93,6 +93,16 @@ A fall cancels sit/stand and enters the existing recovery flow (default-pose hol
 
 `left_kick` and `right_kick` use `python/xgoduck_ballkick_left.onnx` and `python/xgoduck_ballkick_right.onnx`, respectively, and are available while walking upright, including an unloaded preview in Inference only. The velocity, head and body command observations are all zero throughout each 0.4 s action; browser motion and pose inputs cannot override them. At 0.4 s the controller returns to the selected walking policy. Both kick policies use fixed action scale 0.8 and leg/head α 0. The Action settings sliders and Roulade smoothing do not change kick settings; kick settings do not change the other policies. Other action buttons and Roller mode are unavailable during the kick. Torque off and other control modes can cancel it. The existing fall detection stays active and recovery returns to the selected walking policy without resuming the kick.
 
+## Keyboard control
+
+Open **Keyboard** in the navigation or visit `/keyboard.html`. Opening the page does not enable motors. Keyboard input is enabled by default. Select **Walk / get up** (行走 / 起身), then hold a movement key. Inference-only mode can also preview commands without torque.
+
+- Hold **W/S** or **↑/↓** to move forward/backward, **A/D** to strafe, and **Q/E** or **←/→** to turn. Keys can be combined; opposing keys cancel.
+- Releasing a key requests zero on that axis; the controller decelerates smoothly. **Esc** stops travel. **Space** unloads the motors. Press a movement key again to resume only when the selected mode permits it.
+- Speed starts at **100%**; the slider scales the existing walking/roller limits. Roller mode disables strafing.
+- Switching modes, playing an action, changing speed, losing focus, or hiding the page clears held keys and stops travel. Once the page is focused and the mode is ready, a fresh key press resumes control; there is no enable/pause button. Actions and motor enable are explicit buttons, not movement shortcuts.
+- The page sends commands every 50 ms while movement keys are held, and sends zero when released or interrupted. The existing controller stops travel after 1 s without browser commands in hold/walk modes, preserving torque. Use only one control page at a time.
+
 ## Roller walking
 
 Use this mode with the roller-equipped robot.
@@ -108,11 +118,20 @@ Recovery uses the get-up policy and then returns to roller walking. Turn **Rolle
 
 | Joystick range | Ordinary walking | Roller walking |
 | --- | --- | --- |
-| Forward / backward | -0.18 to +0.2 | -0.4 to +0.4 |
-| Sideways | ±0.3 | 0 |
-| Turning | ±1.0 | ±0.25 |
+| Forward / backward | -0.4 to +0.7 | -0.8 to +0.8 |
+| Sideways | ±0.6 | 0 |
+| Turning | ±2.0 | ±0.5 |
 
 Joystick commands use `0.75 × previous + 0.25 × target` smoothing on all motion axes.
+All browser/API locomotion commands additionally use a 50 Hz controller slew limit:
+0.5 m/s² forward/backward, 0.4 m/s² lateral, and 1.5 rad/s² yaw at the default 1× factor.
+The Keyboard **加减速快慢** slider configures this factor from 0.25× to 3×
+for all control pages via `/api/motion-ramp`; it resets to 1× on restart.
+Smaller values give gentler acceleration and a longer stopping distance. Normal stopping
+preserves torque and ramps to zero (1.5 s at full lateral speed and the default factor; 6 s at 0.25×).
+Torque off bypasses this ramp. Recovery and actions clear ramp history;
+a fall clears the requested velocity. `/api/status` exposes requested `command`
+and smoothed `motion_command` separately.
 
 **Heat warning:** Holding a toe-out stance for long periods heats up the roll motors. Take regular breaks to let them cool down. A yellow reminder appears above the motion controls while Roller mode is on. Use a level, clear surface and keep **Torque off** within reach when trying a new model or setting.
 

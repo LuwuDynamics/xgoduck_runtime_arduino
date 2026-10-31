@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>键盘控制 · XGO Duck</title><link rel="stylesheet" href="style.css?v=20261023"><link rel="stylesheet" href="keyboard.css?v=20261030-1"></head>
+<body><main>
+<header><div><small>ARDUINO UNO Q</small><h1>键盘控制</h1></div><div class="header-actions"><nav class="nav"><a href="/">Control</a><a href="/keyboard.html" aria-current="page">Keyboard</a><a href="/calibrate.html">Calibration</a><a href="/servo.html">Servo setup</a></nav><button class="stop" id="stop">空格 · 卸力</button></div></header>
+<p id="message" role="status">正在连接机器人…</p>
+<section class="metrics"><article><small>控制模式</small><strong id="mode">—</strong></article><article><small>舵机在线</small><strong id="servos">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article><article><small>反馈</small><strong id="rx">—</strong></article></section>
+<section><h2>1 · 选择机器人模式</h2><div class="buttons"><button data-mode="shadow" disabled>仅推理</button><button data-mode="hold" disabled>默认姿态</button><button data-mode="policy" disabled>行走 / 起身</button><label class="mode-toggle"><input id="roller" type="checkbox" disabled>滚轮模式</label></div><p class="hint">打开页面不会自动启用电机。行走前请先检查姿态。仅推理可预览命令，默认姿态保持站姿。</p><p id="roller-warning" class="warn" hidden>滚轮模式不支持侧移。长时间保持外八站姿会使电机发热，请定期卸力休息。</p></section>
+<section><div class="keyboard-heading"><h2>2 · 键盘控制 · 按住移动</h2></div><p id="keyboard-state" role="status">键盘默认启用 · 等待连接</p>
+<div class="key-layout" aria-label="键位说明">
+<div class="key-grid"><div class="key" data-key="KeyQ"><kbd>Q</kbd><span>左转</span></div><div class="key" data-key="KeyW"><kbd>W / ↑</kbd><span>前进</span></div><div class="key" data-key="KeyE"><kbd>E</kbd><span>右转</span></div><div class="key" data-key="KeyA"><kbd>A</kbd><span>左移</span></div><div class="key" data-key="KeyS"><kbd>S / ↓</kbd><span>后退</span></div><div class="key" data-key="KeyD"><kbd>D</kbd><span>右移</span></div></div>
+<div class="keyboard-help"><p><kbd>← / →</kbd> 左转 / 右转</p><p><kbd>Esc</kbd> 停止移动</p><p><kbd>Space</kbd> 电机卸力</p><p>可组合按键；松开对应按键后平稳减速至零。切换窗口会停止移动，返回后重新按键即可。</p></div></div>
+<div class="velocity"><span>前后 vx <output id="vx">0.00</output></span><span>侧移 vy <output id="vy">0.00</output></span><span>转向 ωz <output id="wz">0.00</output></span></div>
+<p id="applied-motion" class="hint">控制器速度：—</p>
+<label class="speed-label" for="speed">速度比例 <output id="speed-value">100%</output><input id="speed" type="range" min="10" max="100" step="10" value="100"></label><p id="limits" class="hint"></p><label class="speed-label" for="ramp">加减速快慢 <output id="ramp-value">1.00×</output><input id="ramp" type="range" min="0.25" max="3" step="0.25" value="1" disabled></label><p class="hint">越小越柔和、停止距离更长；越大响应更快。松开滑块生效，作用于所有控制页面；重启恢复 1×。</p><p id="ramp-info" class="hint"></p><button id="zero">停止移动</button><p class="hint">正常停止会平稳减速（时长由加减速设置决定），保留电机力矩；需要休息请按空格卸力。失焦、页面隐藏或离开会发送零速度；控制器在收不到命令 1 秒后停止行走。请只使用一个控制页面。</p></section>
+<section><h2>动作</h2><div class="buttons"><button data-action="pick" disabled>拾取</button><button data-action="roulade" disabled>翻滚</button><button id="sitstand" disabled>坐下</button><button data-action="left_kick" disabled>左踢</button><button data-action="right_kick" disabled>右踢</button></div><p class="hint">执行动作时清除移动按键，完成后重新按键即可。更多头部、滤波和舵机设置请前往 Control。</p><p id="model" class="hint">—</p></section>
+</main><script src="keyboard.js?v=20261031-4"></script></body></html>

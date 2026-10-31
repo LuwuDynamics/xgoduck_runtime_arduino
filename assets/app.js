@@ -4,8 +4,8 @@ let rollerEnabled=false;
 let sitstandPhase='idle', sitstandBusy=false, sitstandReady=false;
 let kickActive=false, kickBusy=false;
 const motionRanges={
-  walk:{forward:.2,backward:.18,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
-  roller:{forward:.4,backward:.4,strafe:0,yaw:.25,keyboard:[.4,0,.25]}
+  walk:{forward:.7,backward:.4,strafe:.6,yaw:2,keyboard:[.4,.3,1]},
+  roller:{forward:.8,backward:.8,strafe:0,yaw:.5,keyboard:[.8,0,.5]}
 };
 for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>head ${i+1}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
 $('head-controls').insertAdjacentHTML('beforeend','<label>Mouth 34 (°)<input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>');

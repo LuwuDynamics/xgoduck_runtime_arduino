@@ -32,6 +32,10 @@ def command(body: dict):
     try: return controller.command(**body)
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
+def motion_ramp(body: dict):
+    try: return controller.set_motion_ramp(**body)
+    except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
 def filtering(body: dict):
     try:
         leg, head = controller.set_action_alphas(**body)
@@ -103,6 +107,7 @@ ui.expose_api('GET', '/api/status', controller.status)
 ui.expose_api('POST', '/api/mode', mode)
 ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/command', command)
+ui.expose_api('POST', '/api/motion-ramp', motion_ramp)
 ui.expose_api('POST', '/api/filter', filtering)
 ui.expose_api('POST', '/api/imu-filter', imu_filtering)
 ui.expose_api('POST', '/api/action-scale', action_scale)

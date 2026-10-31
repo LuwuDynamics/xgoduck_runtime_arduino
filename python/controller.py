@@ -5,6 +5,7 @@ import threading
 import time
 from policy import Policy
 from recovery import Recovery
+from motion import MotionRamp
 from proc import SignalFilter
 from rl_core import MOTOR_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG
 from wire import *
@@ -94,6 +95,7 @@ class Controller:
         self.mode = 'shadow'
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
+        self.motion = MotionRamp()
         self.web_time = 0.0
         self.arm_pending = False
         self.seq = self.received = self.inferred = self.sent = self.bad_frames = self.gaps = 0
@@ -254,6 +256,7 @@ class Controller:
             self.last_error = ''
             self.web_time = time.monotonic()
             self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
+            self.motion.reset()
             self.arm_pending = fb is not None and not fb.enabled
             if previous == 'calibrate' and mode != 'calibrate':
                 self.cal_done = [False]*15
@@ -298,6 +301,7 @@ class Controller:
                         and not self._roulade_on(time.monotonic())):
                     self.policy_needs_reset = True
                 self.twist = [0.0]*3
+                self.motion.reset()
                 self.web_time = time.monotonic()
             return dict(enabled=self.roller_mode, model=self.policy.file,
                         action_scale=self.policy.action_scale, action_alpha=self.policy.action_alpha,
@@ -488,6 +492,11 @@ class Controller:
                 self.roulade_policy.warm(2)
         return {'ok': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
 
+    def set_motion_ramp(self, factor):
+        with self.lock:
+            self.motion.configure(factor)
+            return {'factor': self.motion.factor, 'acceleration_limits': list(self.motion.rates)}
+
     def command(self, twist=None, head=None, mouth=None):
         def values(seq, limits):
             if len(seq)!=len(limits): raise ValueError('wrong command dimension')
@@ -495,7 +504,7 @@ class Controller:
             if any(not math.isfinite(v) or abs(v)>limit for v,limit in zip(seq,limits)):
                 raise ValueError('command exceeds bounds')
             return seq
-        t = values(twist, [.4,.3,1.0]) if twist is not None else None
+        t = values(twist, [.8,.6,2.0]) if twist is not None else None
         h = values(head, [1.0]*4) if head is not None else None
         m = None
         if mouth is not None:
@@ -505,8 +514,10 @@ class Controller:
         with self.lock:
             if self.mode in EXCLUSIVE_MODES:
                 raise ValueError('motion commands disabled in calibrate/servo_debug')
-            if t is not None and not self.roller_mode and not -.18 <= t[0] <= .2:
-                raise ValueError('walking vx must be between -0.18 and 0.2')
+            if t is not None and not self.roller_mode and not -.4 <= t[0] <= .7:
+                raise ValueError('walking vx must be between -0.4 and 0.7')
+            if t is not None and self.roller_mode and (t[1] != 0 or abs(t[2]) > .5):
+                raise ValueError('roller vy must be zero and yaw within ±0.5')
             if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until: self.twist = t
             if h is not None and not self.pick_active and not self.kick_until: self.head = h
             if m is not None and not self.pick_active and not self.kick_until: self.mouth = m
@@ -693,6 +704,8 @@ class Controller:
                                                now, valid)
                 self.policy_needs_reset |= changed
                 if changed and self.recovery.phase != 'walk':
+                    self.twist = [0.0]*3
+                    self.motion.reset()
                     self._stop_pick_locked()
                     self._stop_sitstand_locked()
                     self._stop_kick_locked()
@@ -722,6 +735,13 @@ class Controller:
                 selected = self.pick_policy
             else:
                 selected = self.policy if phase == 'walk' else self.getup_policy
+            # Smooth only ordinary locomotion commands. Action phase encodings,
+            # get-up and disarm bypass the ramp and discard its history.
+            if (mode in ('shadow', 'policy') and valid and phase == 'walk'
+                    and not (kicking or sitting or rolling or picking)):
+                twist = self.motion.update(self.twist, CONTROL_PERIOD)
+            else:
+                self.motion.reset()
             reset_policy = self.policy_needs_reset
             inferring = mode in ('shadow','policy') and valid
             if inferring:
@@ -873,6 +893,7 @@ class Controller:
                 inference_ms=summary(self.infer_ms), receive_interval_ms=summary(self.rx_intervals),
                 feedback_age_ms=(now-self.rx_time)*1000 if fb else None,
                 uptime_s=now-self.started, last_error=self.last_error, command=self.twist,
+                motion_command=list(self.motion.value),
                 head=self.head, mouth=self.mouth, policy_targets=self.last_action, motors=MOTOR_IDS, boot_pd=self.boot_pd,
                 full_robot_ready=bool(fb and fb.imu_ok and fb.mask==ALL_MASK and now-self.rx_time<.15),
                 raw_pos=list(self.raw_pos), encoder_center=SERVO_CENTER_POS,
@@ -891,7 +912,9 @@ class Controller:
                 gyro_alpha=self.filter.gyro_alpha, velocity_alpha=self.filter.vel_alpha,
                 gravity_tau_s=self.filter.gravity_tau_s, imu_bias_deg=list(IMU_BIAS_DEG),
                 filter_clock='mcu_imu', snapshot='latest',
-                command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000)
+                command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000,
+                motion_acceleration_limits=list(self.motion.rates),
+                motion_ramp_factor=self.motion.factor)
             result['mcu_runtime'] = dict(self.diagnostics)
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']
