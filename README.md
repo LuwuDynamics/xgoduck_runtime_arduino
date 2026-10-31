@@ -60,6 +60,8 @@ Under **All-servo voltage / overcurrent protection**:
 
 These are separate actions and apply to **all connected servos**. No scan or ID selection is needed.
 
+Leg and head servo KP/KD values are preserved at startup, on arming, and through calibration. The app only applies fixed temporary gains to mouth servo **ID 34**: KP **10**, KD **20**. Explicit **Set KpKd** operations still update the selected servo. Previously applied temporary values are not automatically restored by this change; power-cycle the servo supply to reload its saved power-on values.
+
 ## Calibration
 
 1. Open **Calibration**. All servos unload automatically.
@@ -106,7 +108,7 @@ Recovery uses the get-up policy and then returns to roller walking. Turn **Rolle
 
 | Joystick range | Ordinary walking | Roller walking |
 | --- | --- | --- |
-| Forward / backward | -0.2 to +0.35 | -0.4 to +0.4 |
+| Forward / backward | -0.18 to +0.2 | -0.4 to +0.4 |
 | Sideways | ±0.3 | 0 |
 | Turning | ±1.0 | ±0.25 |
 

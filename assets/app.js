@@ -4,7 +4,7 @@ let rollerEnabled=false;
 let sitstandPhase='idle', sitstandBusy=false, sitstandReady=false;
 let kickActive=false, kickBusy=false;
 const motionRanges={
-  walk:{forward:.35,backward:.2,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
+  walk:{forward:.2,backward:.18,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
   roller:{forward:.4,backward:.4,strafe:0,yaw:.25,keyboard:[.4,0,.25]}
 };
 for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>head ${i+1}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
@@ -97,6 +97,7 @@ function updateMotion(){
   targetMotion=[keys.has('w')||keys.has('s')?key('w','s')*limits.keyboard[0]:forward*(forward<0?limits.backward:limits.forward),
     keys.has('a')||keys.has('d')?key('a','d')*limits.keyboard[1]:deadzone(-sticks.left.x)*limits.strafe,
     keys.has('q')||keys.has('e')?key('q','e')*limits.keyboard[2]:deadzone(-sticks.right.x)*limits.yaw];
+  targetMotion[0]=Math.max(-limits.backward,Math.min(limits.forward,targetMotion[0]));
 }
 function showMotion(){
   ['vx','vy','wz'].forEach((id,i)=>$(id+'Value').textContent=motion[i].toFixed(2));

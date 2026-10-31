@@ -30,12 +30,9 @@ static const uint8_t ADDR_PROTECTION_CURRENT = 0x1C;
 static const uint8_t PROTECTION_DISABLED = 0x04; // Keep overheat protection on.
 static const uint8_t PROTECTION_ENABLED = 0x0D; // Voltage, overheat, overcurrent.
 
-static const uint8_t TEMP_KP_RUN = 6;
-static const uint8_t TEMP_KD_RUN = 20;
 static const uint8_t TEMP_KP_MOUTH = 10;
+static const uint8_t TEMP_KD_MOUTH = 20;
 static const uint8_t MOUTH_MOTOR_ID = 34;
-static const uint8_t TEMP_KP_CAL = 3;
-static const uint8_t TEMP_KD_CAL = 0;
 
 static const uint8_t MOTOR_IDS[NUM_MOTORS] = {
     10, 11, 12, 13, 14,

@@ -212,7 +212,7 @@ static void applyCalOp(const CalPacket &pkt) {
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       setTorqueEnable(false);
-      setRunKpKd();
+      setMouthKpKd();
       break;
     case CAL_CENTER_ONE:
       if (hostMode != HOST_CAL || calIndex != 0xFF ||
@@ -245,8 +245,7 @@ static void advanceCalibration() {
     return;
   }
   // Only this servo is loaded. No goals are written for other joints.
-  scsWriteByte(id, ADDR_TEMP_KP, TEMP_KP_CAL);
-  scsWriteByte(id, ADDR_TEMP_KD, TEMP_KD_CAL);
+  // Keep the servo's existing gains while holding its calibrated center.
   scsWriteByte(id, ADDR_TORQUE, 1);
   writeSingleGoalRaw(id, CAL_HOLD_POS);
   Serial1.flush();
@@ -300,7 +299,7 @@ static void applyServoOp(const ServoPacket &pkt) {
       rawNotifyEveryTick = true;
       servoMidId = 0xFF;
       setTorqueEnable(false);
-      setRunKpKd();
+      setMouthKpKd();
       break;
     case SERVO_EXIT:
       if (hostMode != HOST_SERVO_DEBUG) break;
@@ -308,7 +307,7 @@ static void applyServoOp(const ServoPacket &pkt) {
       rawNotifyEveryTick = false;
       servoMidId = 0xFF;
       setTorqueEnable(false);
-      setRunKpKd();
+      setMouthKpKd();
       break;
     case SERVO_UNLOCK:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
@@ -365,7 +364,7 @@ static void controlTask(void*, void*, void*) {
   Serial1.begin(SERVO_BAUD);
   enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(DT_PHANDLE_BY_IDX(DT_PATH(zephyr_user), serials, 0))));
   for (unsigned i=0; i<3; ++i) { setTorqueEnable(false); k_msleep(5); }
-  setRunKpKd();
+  setMouthKpKd();
   // Read temporary KP/KD once at boot (address 50, 2 bytes). Missing IDs stay unset.
   readAllRegisters(ADDR_TEMP_KP, 2); Serial1.flush();
   const uint32_t pdStart=micros();
@@ -416,7 +415,7 @@ static void controlTask(void*, void*, void*) {
       k_mutex_unlock(&motorsMu);
       enabled = false; timedOut = true;
       setTorqueEnable(false);
-      setRunKpKd();
+      setMouthKpKd();
     }
     const bool busTaken = hostMode != HOST_NORMAL;
     if (got && !busTaken) {
@@ -428,7 +427,7 @@ static void controlTask(void*, void*, void*) {
         if (cmd.mode == ARM && !enabled && atomic_get(&bridgeReady) && imuFresh &&
             (uint32_t)(start-sampledImu.sampleUs) < 50000) {
           enabled = true; timedOut = false;
-          setRunKpKd();
+          setMouthKpKd();
         }
         k_mutex_lock(&motorsMu, K_FOREVER);
         for (unsigned i = 0; i < NUM_MOTORS; ++i) motors[i].desAngleDeg = cmd.target[i];

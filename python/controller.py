@@ -505,8 +505,8 @@ class Controller:
         with self.lock:
             if self.mode in EXCLUSIVE_MODES:
                 raise ValueError('motion commands disabled in calibrate/servo_debug')
-            if t is not None and not self.roller_mode and not -.2 <= t[0] <= .35:
-                raise ValueError('walking vx must be between -0.2 and 0.35')
+            if t is not None and not self.roller_mode and not -.18 <= t[0] <= .2:
+                raise ValueError('walking vx must be between -0.18 and 0.2')
             if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until: self.twist = t
             if h is not None and not self.pick_active and not self.kick_until: self.head = h
             if m is not None and not self.pick_active and not self.kick_until: self.mouth = m

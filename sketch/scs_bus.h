@@ -93,16 +93,11 @@ static void setTorqueEnable(bool enabled) {
   Serial1.flush();
 }
 
-static void setTempKpKd(uint8_t kp, uint8_t kd) {
-  scsWriteByte(0xFE, ADDR_TEMP_KP, kp);
-  Serial1.flush();
-  scsWriteByte(0xFE, ADDR_TEMP_KD, kd);
-  Serial1.flush();
-}
-
-static void setRunKpKd() {
-  setTempKpKd(TEMP_KP_RUN, TEMP_KD_RUN);
+static void setMouthKpKd() {
+  // Leave every leg/head servo's existing gains unchanged.
   scsWriteByte(MOUTH_MOTOR_ID, ADDR_TEMP_KP, TEMP_KP_MOUTH);
+  Serial1.flush();
+  scsWriteByte(MOUTH_MOTOR_ID, ADDR_TEMP_KD, TEMP_KD_MOUTH);
   Serial1.flush();
 }
 
