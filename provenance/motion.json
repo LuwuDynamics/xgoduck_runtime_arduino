@@ -56,7 +56,7 @@
     "python/controller.py": "168b77d2c7d708368c9ebf4423941df104b760386e95c8b86f347cdc0ae35272",
     "python/duck_thing.py": "d092e952ea029799dc8a35bdd918b9af9fd75e1f0101cdc12067b508c509e839",
     "python/gamepad.py": "232f679043d8cf76d5844db40e866b9962e224ecad58b1fcfaba40ad1227c525",
-    "python/main.py": "e50968a9199c05e68f90b5c5a7ce4b7ea2ba81e3372e31bb7a13864f89b6c36b",
+    "python/main.py": "126648e9c6c98ff2d5f613ef11930d91b8f745f05965593cc76ba5ed697aeb34",
     "python/motion_access.py": "a34cc6d26e9a88dd3ae108d5e142e1fb06535925194eb0fc6f02b7f3dd60a190",
     "python/motion_calibration.py": "9253d9caf0b84fdc2f65839545a26abd2f73116146b6c355b2f2408a966226b8",
     "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
@@ -86,7 +86,8 @@
     "python/imu_calibration.py": "ee1d7c8fb0eab143ff81d6f264ea7930ca1ff06a339faaa80b3c78d4a64b2312",
     "tools/calibrate-imu.py": "c9db505ca916a8fd3e8e7f6a4cbe2797e086b1324295c54bc1c56cb1f30b36db",
     "python/runtime_gains.py": "9df29218402f7beb5175c0568da412fe2a98f829dedba4abe1ed197bae99bcad",
-    "python/forward_avoidance.py": "56fd66d9b0a1005226ccdcc132fd5d5d5e251002f54d9df3bcf6d5a56d989a95"
+    "python/forward_avoidance.py": "56fd66d9b0a1005226ccdcc132fd5d5d5e251002f54d9df3bcf6d5a56d989a95",
+    "python/voice_region.py": "fc0c6c829e1f521203078f991953270df3e6cc67a00377cbf82de0dd04a18a41"
   },
   "stable_exact_files": [
     "assets/app.js",
@@ -160,7 +161,7 @@
     "status": "Expose the app input-source owner."
   },
   "preserved_sha256": {
-    "assets/mobile-i18n.js": "b1af0bd57ff7a4f3c7f0a800050a91c0b8e33d9a22b06932ef8915e8473dbc6a",
+    "assets/mobile-i18n.js": "afbc65d0c4aa793ef67f0ea2c45724b70a42c899bcd58fab49011259156c2b93",
     "assets/mobile-tof.css": "63f141b35f703e52e502f470540b70f1e12057c9867943ec8a0ce373d5640104",
     "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
     "python/tof_status.py": "9adabb825be2808538ebd720c1dec4e585505bc44639362def27bf7f524f084a",
@@ -177,7 +178,7 @@
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
     "assets/mobile.css": "8a59deb2564a4c040605057d1afbed597bb0c9ce73d93c6502b4fec667b8af3f",
-    "assets/mobile.html": "ae74c32419cd3edc3b1759da355181cff6e64cfb1f28a10082314ff1e0320a01",
+    "assets/mobile.html": "8ac5fdafee4b34b937167ce31b285ec41819a4e8b99fbc0bbc7e9e037526d6de",
     "assets/mobile.js": "22f5cb7fceb083942fc487e841d1c9297d3dbcf65dbaf90bb2c141332fbbce52",
     "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
@@ -225,9 +226,9 @@
     "python/vendor/microduck_voice/NOTICE.md": "8b600d72ccaca4acf005e07394aff20e736f44f3eea55299b93bb6f766163f96",
     "python/vendor/microduck_voice/__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
     "python/voice_application.py": "3ff5fa03e1bc7a1a063fad694ad69882614f33a57e94908ab7df31d0849c3002",
-    "python/voice_config.py": "22d82bd499bb6840cb7add69071564954e47db53f6f03d0582c7670ad9887874",
+    "python/voice_config.py": "49e43e60cb42f15fd987fe71f6e26d81119ed4631fdde326d3329b52b329dbad",
     "python/voice_media.py": "b458e4f54c2beef1f67b6b951fe5a45d0dc1c2b4a10863282560a4280a092378",
-    "python/voice_process.py": "0cac8b6f518587c455e6cf7c2e50685c15b330243c43fd7a690954184f375b99",
+    "python/voice_process.py": "5b081afd1a668d95eaa296441a6202a445bf39c52ea05359b3576810d2b7a028",
     "python/voice_supervisor.py": "fe38af4572b30e11af3ce0fc0e1189cf6937b8422b96a338c6a6207761dc368c",
     "sketch/src/vl53l5cx/LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
     "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.cpp": "9c7668b87766eac634d1b008e46e4528726144ffa26923838799ad3af17b43f0",
@@ -245,7 +246,9 @@
     "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.cpp": "dbcee07fc4da31c2fb88866c34610cf39bdf5183cff26edd9186922be6a3fdd6",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
-    "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1"
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1",
+    "assets/mobile-binding.css": "9dda56a932efa505e9b006ee4ca58b47d31ab76c217451f9f681e738c2aaa70e",
+    "assets/mobile-binding.js": "26051bbf9637f518167879ac64212af8f7585931361af291e6284696556f8ff6"
   },
   "preserved_snapshot": {
     "kind": "working-tree-before-motion-sync",
@@ -412,5 +415,18 @@
       "scope": "Fixed-speed ordinary forward entry without speed argument. Explicit slow/numeric Move keeps the supplied speed; omitted Move speed uses directional defaults. Phone RemoteMove, motion core, ToF rules, models and MCU unchanged. Restart the voice child to refresh the tool catalog."
     },
     "scope": "All MCP Move directions default to 0.1 m/s and reject speeds above 0.15, including Roller. Forward normal/fast profiles select 0.1/0.15. Explicit values within the cap are preserved. Web/core limits, angular rates, RemoteMove percentage mapping, ToF, models and MCU unchanged."
+  },
+  "ai_binding_overlay": {
+    "date": "2026-11-02",
+    "scope": "Explicit browser-selected cn/global region via same-origin POST and voice IPC. Selection persists and reconnects voice only, preserving identity, conversation language, audio settings and motion. Platform links, UI language and phone provisioning never select a cloud automatically. First setup may remain unconfigured until the user applies a region.",
+    "links": {
+      "cn": "https://agent.xgorobot.com/devices",
+      "global": "https://agent.luwudynamics.ai/"
+    },
+    "previous_sha256": {
+      "assets/mobile-i18n.js": "b1af0bd57ff7a4f3c7f0a800050a91c0b8e33d9a22b06932ef8915e8473dbc6a",
+      "assets/mobile.html": "ae74c32419cd3edc3b1759da355181cff6e64cfb1f28a10082314ff1e0320a01"
+    },
+    "validation": "8 region configuration/HTTP tests, 3 actual parent/voice IPC integration tests, 23 headless and 5 CLI configuration checks; real zh/en region-selection UI and 8 viewport layouts verified. MCU, models and motion math unchanged."
   }
 }

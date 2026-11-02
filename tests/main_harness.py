@@ -146,6 +146,15 @@ def main():
                     voice = wait_for(lambda: (s if (s := client.get('/api/voice/status').json()).get('state') == 'disabled' else None))
                     assert Bridge.servo_ops == [], 'Voice startup touched servo parameters'
                     assert client.get('/api/status').json()['runtime_gains'] == dict(state='manual', auto_apply=False)
+                    # Exercise real parent -> voice IPC region selection without a cloud or robot.
+                    assert client.get('/api/voice/region').json()['cloud_region'] is None
+                    for region in ('global', 'cn'):
+                        changed = client.post('/api/voice/region', json={'cloud_region': region}, headers={'X-Device-Test': '1'})
+                        assert changed.status_code == 200 and changed.json()['changed']
+                        assert client.get('/api/voice/region').json()['cloud_region'] == region
+                    unchanged = client.post('/api/voice/region', json={'cloud_region': 'cn'}, headers={'X-Device-Test': '1'})
+                    assert unchanged.status_code == 200 and not unchanged.json()['changed']
+                    assert not Bridge.servo_ops, 'Server selection touched servo parameters'
                     assert helper.host and helper.switches == 0 and helper.checks == 1
                     assert client.get('/api/status').json()['full_robot_ready']
                     from local_ipc import request

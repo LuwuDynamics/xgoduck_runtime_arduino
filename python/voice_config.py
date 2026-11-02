@@ -66,6 +66,30 @@ class VoiceConfig:
                 raise ValueError('camera_device must be a /dev/v4l/by-id/ path or null')
         return changes
 
+    def region_status(self):
+        """Read only public region metadata; never expose an advanced OTA URL."""
+        with self.lock:
+            config = dict(DEFAULTS)
+            try:
+                config.update(self.validate(json.loads(self.path.read_text())))
+            except FileNotFoundError:
+                pass
+            except (OSError, ValueError, TypeError) as exc:
+                raise ValueError('Saved voice configuration is invalid; repair it before switching servers.') from exc
+            return dict(cloud_region=config['cloud_region'], custom_endpoint=bool(config['ota_url']),
+                        configured=bool(config['ota_url'] or config['cloud_region']))
+
+    def select_region(self, region):
+        """Explicit user selection preserves all unrelated settings and identity."""
+        if region not in ('cn', 'global'):
+            raise ValueError('Select cn or global.')
+        with self.lock:
+            before = self.region_status()
+            changed = before['cloud_region'] != region or before['custom_endpoint']
+            if changed:
+                self.update(dict(cloud_region=region, ota_url=''))
+            return dict(self.region_status(), changed=changed, reconnecting=changed)
+
     def update(self, changes):
         self.validate(changes)
         with self.lock:

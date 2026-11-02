@@ -72,6 +72,8 @@ class Runtime:
                         wake_capture=dict(getattr(getattr(self.app, 'wakeword', None), '_capture_stats', {})),
                         device_id=os.environ.get('DUCK_DEVICE_ID', ''), audio_ready=self.audio_ready,
                         cloud_connected=bool(getattr(getattr(self.app, 'protocol', None), '_mqtt_connected', False)),
+                        session_cloud_region=(self.session_settings[0].get('cloud_region')
+                                              if self.app is not None and self.session_settings else None),
                         onboarding=self.onboarding.snapshot())
 
     async def play_connection_sound(self, event, kind, gain):
@@ -263,6 +265,10 @@ class Runtime:
             return self.status()
         if method == 'POST' and path == '/config':
             return self.config.update(body)
+        if method == 'POST' and path == '/region':
+            if not isinstance(body, dict) or set(body) != {'cloud_region'}:
+                raise ValueError('Select cn or global.')
+            return self.config.select_region(body['cloud_region'])
         if method == 'POST' and path == '/stop':
             self.loop.call_soon_threadsafe(self.stop.set)
             return {'ok': True}
@@ -310,7 +316,7 @@ class Runtime:
                     setup = self.onboarding.snapshot()
                     self.update(state=setup['state'], bound=self.onboarding.bound,
                                 message=setup.get('hardware_error') or
-                                        ('Select cn/global with tools/configure-ai.py on the board.'
+                                        ('Select China/International in the cockpit AI binding panel.'
                                          if setup['state'] == 'awaiting_cloud_config' else '') or
                                         'Waiting for Wi-Fi and phone account binding; USB audio is optional.')
                 try:

@@ -1,5 +1,7 @@
 # XGO Duck AI App: installation and headless operation
 
+> You can also choose China/International in the cockpit’s **Link AI** window and click **Apply and reconnect**. First-time setup may run before choosing a region; select it in the web page after the first Run. The CLI option below remains supported. Phone provisioning does not change the region automatically.
+
 ## AEC playback headroom and interruption stop (0.2.36)
 
 **Live acceptance has not passed:** 12 dB headroom improved the echo-only bench recording, but real cloud replies still reappeared as user speech. The user accepted the hardware-volume audition without digital boost; the current debugging baseline is `output_gain_db: 0` and `aec_output_headroom_db: 0`. The optional headroom control is not a completed AEC fix.

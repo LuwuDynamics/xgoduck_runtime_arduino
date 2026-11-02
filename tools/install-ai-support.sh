@@ -33,9 +33,9 @@ import pathlib, sys
 root = pathlib.Path(sys.argv[1])
 sys.path.insert(0, str(root / 'python'))
 from voice_config import VoiceConfig
-config = VoiceConfig(root / 'data/voice_config.json').get()
-if not config['ota_url'] and config['cloud_region'] not in ('cn', 'global'):
-    raise SystemExit('Choose your cloud first: python3 tools/configure-ai.py --region cn (or global)')
+region = VoiceConfig(root / 'data/voice_config.json').region_status()
+if not region['configured']:
+    print('Choose China/International in the cockpit AI binding panel after the first Run.')
 PY
 runuser -u arduino -- python3 "$app_root/tools/configure-ai-python.py"
 # Resolve and verify the exact MCU build dependencies before changing services.

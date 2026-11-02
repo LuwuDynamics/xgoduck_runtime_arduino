@@ -20,6 +20,7 @@ from media_proxy import register_media
 from gamepad import register_gamepad
 from motion_access import MotionAccess
 from voice_config import VoiceConfig
+from voice_region import register_voice_region
 from voice_supervisor import VoiceSupervisor
 from local_ipc import JsonServer
 from app_paths import PRIVATE
@@ -159,6 +160,7 @@ def servo_action(body: dict):
 ui.expose_api('GET', '/api/status', controller.status)
 ui.expose_api('GET', '/api/tof/status', tof.status)
 ui.expose_api('GET', '/api/voice/status', voice.status)
+register_voice_region(ui, voice, voice_config)
 ui.expose_api('POST', '/api/mode', mode)
 ui.expose_api('POST', '/api/command', command)
 ui.expose_api('POST', '/api/filter', filtering)

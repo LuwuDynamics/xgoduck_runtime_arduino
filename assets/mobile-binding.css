@@ -1,0 +1,42 @@
+.binding-entry{color:#c6f8db;border-color:#9be6bf66;background:#183d33;min-height:34px;font-weight:650}
+.binding-entry:hover{background:#245443}
+.binding-region-chip{font-size:10px;color:#a1cdb8;border-left:1px solid #9be6bf44;padding-left:7px}
+@media(max-width:420px){.status-row .optional{display:none}.status-row{gap:6px}.status-row .chip{padding-inline:8px}}
+#bindingDialog{width:min(680px,calc(100vw - 24px));height:fit-content;max-height:calc(100dvh - 24px);overflow:auto;overscroll-behavior:contain}
+#bindingDialog .dialog-head{padding:22px 24px 10px}
+.binding-body{padding:0 24px 24px}
+.binding-body>p{font-size:13px;line-height:1.65;margin:8px 0 16px}
+.binding-device{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:14px 16px;margin:18px 0;border:1px solid #ffffff16;border-radius:12px;background:#08151d}
+.binding-device>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.binding-device span{font-size:11px;color:#9aafb9}
+.binding-device strong{font-size:13px;font-weight:550;color:#e5efed;overflow-wrap:anywhere}
+#bindingStatus[data-state=online]{color:#9be6bf}
+.binding-choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.binding-card{display:flex;flex-direction:column;border:1px solid #7ab49c66;border-radius:16px;padding:18px;color:#eef7f3;background:linear-gradient(135deg,#19372f,#13232c);text-decoration:none;min-width:0;transition:border-color .15s,background .15s}
+.binding-card:hover{border-color:#9be6bf;background:linear-gradient(135deg,#214c3d,#172c38)}
+.binding-card-top{display:flex;justify-content:space-between;align-items:center;color:#9be6bf}
+.binding-symbol{font:700 10px/1.2 ui-monospace,monospace;letter-spacing:.13em;padding:7px 8px;border:1px solid #9be6bf44;border-radius:7px}
+.binding-card h3,.binding-card-title{display:block;font-size:21px;font-weight:600;margin:15px 0 4px}
+.binding-card p,.binding-card-hint{display:block;font-size:11px;color:#b4c8c5;margin:0 0 13px}
+.binding-domain{font:11px/1.5 ui-monospace,monospace;color:#93adaf;overflow-wrap:anywhere}
+.binding-link{display:block;color:#9be6bf;font-size:13px;font-weight:600;margin-top:20px;min-height:24px}
+.binding-server-options{border:0;padding:0;margin:0;min-width:0}
+.binding-server-options legend{font-size:12px;color:#b7cacd;margin:0 0 10px;padding:0}
+.binding-choice{min-width:0;border:1px solid #7ab49c44;border-radius:16px;overflow:hidden}
+.binding-choice .binding-card{border:0;border-radius:0;cursor:pointer}
+.binding-card-top{gap:8px}
+.binding-card input{margin-left:auto;accent-color:#9be6bf;width:18px;height:18px}
+.binding-card[data-selected=true]{background:linear-gradient(135deg,#285342,#172c38);box-shadow:inset 0 0 0 2px #9be6bf}
+.binding-current{display:none;font-size:10px;color:#9be6bf}
+.binding-card[data-current=true] .binding-current{display:inline}
+.binding-platform{display:block;min-height:44px;padding:12px 16px;background:#11231f;color:#9be6bf;text-decoration:none;font-size:12px;font-weight:600}
+.binding-platform:hover{background:#1e3e32}
+.binding-apply{display:flex;align-items:center;gap:14px;margin-top:16px}
+.binding-apply button{background:#9be6bf;color:#102b20;border-color:#9be6bf;font-size:12px;font-weight:650;white-space:nowrap}
+.binding-apply p{font-size:11px;line-height:1.5;margin:0;color:#b9cccf}
+.binding-steps{font-size:12px;line-height:1.7;color:#c1d0d4;margin:22px 0 18px;padding-left:20px}
+.binding-steps li+li{margin-top:7px}
+.binding-body .binding-note{padding:12px 14px;border-radius:10px;background:#182a32;color:#c5d5d8;font-size:12px;margin-bottom:10px}
+.binding-body .binding-browser{font-size:11px;color:#9db1bb;margin:0}
+@media(max-width:420px){#bindingDialog .dialog-head{padding:18px 18px 8px}.binding-body{padding:0 18px 18px}.binding-choices{grid-template-columns:1fr;gap:10px}.binding-card{padding:14px 16px}.binding-card h3{font-size:19px;margin:10px 0 3px}.binding-card p{margin-bottom:6px}.binding-link{margin-top:10px}.binding-device{gap:10px;padding:12px}.binding-steps{margin-top:18px}.binding-entry{padding-inline:9px}}
+@media(orientation:landscape) and (max-height:500px){#bindingDialog{max-height:calc(100dvh - 12px)}#bindingDialog .dialog-head{padding:14px 20px 5px}.binding-body{padding:0 20px 18px}.binding-card{padding:12px 16px}.binding-device{margin:10px 0}.binding-card h3{margin:8px 0 3px}.binding-link{margin-top:10px}}
