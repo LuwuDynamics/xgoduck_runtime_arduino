@@ -24,7 +24,9 @@ source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
 ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
           DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14,
-          EXCLUSIVE_MODES=('calibrate', 'servo_debug'))
+          FACTORY_ZERO=[2047] * 15, collections=collections,
+          EXCLUSIVE_MODES=('calibrate', 'servo_debug'),
+          CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4)
 exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
 
@@ -63,6 +65,11 @@ class WebControlTest(unittest.TestCase):
         c.twist, c.head, c.mouth = [0.] * 3, [0.] * 4, 0.
         c.recovery = Recovery()
         c.roulade_until, c._roulade_alpha = 0., None
+        c.roller_mode = False
+        c.sitstand_phase, c.sitstand_until = 'idle', 0.
+        c.kick_until, c.kick_side = 0., None
+        c._imu_source_us, c._imu_source_time = None, 0.
+        c.diagnostics = {}
         c.pick_active, c.pick_phi = False, 0.
         c.policy_needs_reset = False
         c.last_error = ''
@@ -73,10 +80,17 @@ class WebControlTest(unittest.TestCase):
         c.getup_policy = policy_mock('getup.onnx')
         c.pick_policy = policy_mock('pick.onnx')
         c.roulade_policy = policy_mock('roulade.onnx')
+        c.sitstand_policy = policy_mock('sitstand.onnx')
+        c.left_kick_policy = policy_mock('left-kick.onnx')
+        c.right_kick_policy = policy_mock('right-kick.onnx')
+        c.kick_policies = {'left': c.left_kick_policy, 'right': c.right_kick_policy}
         c.cal_done = [False] * 15
         c.cal_expected_index = None
         c.cal_reply_event = threading.Event()
-        c.raw_pos = [wire.SERVO_CENTER_POS] * 15
+        c.raw_pos = [2047] * 15
+        c.zero_pos = [2047] * 15
+        c.raw_mask = 0
+        c._zeros_pushed = True
         c.boot_pd = {}
 
     def command_mode(self):

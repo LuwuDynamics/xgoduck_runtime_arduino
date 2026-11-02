@@ -16,9 +16,11 @@ BUTTON_NAMES = ('south', 'east', 'north', 'west', 'lb', 'rb', 'back', 'start', '
                 'lt', 'rt', 'f1', 'f3', 'up', 'down', 'left', 'right')
 
 
-def motion_from_input(data):
+def motion_from_input(data, roller=False):
     a = data['axes']
-    return [-a['ly'] * .4, -a['lx'] * .3, -a['rx']]
+    forward = -a['ly']
+    vx = forward * (.4 if roller else .18 if forward < 0 else .2)
+    return [vx, -a['lx'] * (0. if roller else .3), -a['rx'] * (.25 if roller else 1.)]
 
 
 class GamepadControl:
@@ -148,7 +150,7 @@ class GamepadControl:
             self.controller.input_source = 'web'
             self.error = reason
             if active and stop:
-                self.controller.pause_motion(reason or 'Gamepad control released')
+                self.controller.set_mode('off')
 
     def enable(self, enabled):
         if not isinstance(enabled, bool):
@@ -168,7 +170,7 @@ class GamepadControl:
                 raise ValueError('Finish or cancel button binding first.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration or servo setup first.')
-            self.controller.twist = [0.0]*3
+            self.controller.set_mode('off')
             self.controller.input_source = 'gamepad'
             self.identity, self.buttons = data['id'], dict(data['buttons'])
             self.enabled, self.error = True, ''
@@ -203,7 +205,8 @@ class GamepadControl:
                         else:
                             self.controller.start_roulade()
                         break
-                self.controller.command(twist=motion_from_input(data), source='gamepad')
+                self.controller.command(twist=motion_from_input(
+                    data, roller=getattr(self.controller, 'roller_mode', False) is True), source='gamepad')
                 self.error = ''
             except ValueError as e:
                 self.error = str(e)

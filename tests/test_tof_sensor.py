@@ -127,7 +127,9 @@ static struct {
 #include "tof_sensor.h"
 static void reset() {
   sim = {}; sim.now = 10; tofSnapshot = {}; tofSensor = {};
-  startTof(); assert(sim.priority==8 && Bridge.route=="duck_tof");
+  startTof(); assert(sim.priority==8);
+  // The reconnecting Bridge task registers this independently of sensor startup.
+  Bridge.provide("duck_tof", readTof); assert(Bridge.route=="duck_tof");
 }
 int main() {
   reset(); tofTask(nullptr,nullptr,nullptr);

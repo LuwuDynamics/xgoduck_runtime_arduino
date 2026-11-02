@@ -248,7 +248,8 @@ class MouthMotionTest(unittest.TestCase):
         changes = [dict(mode='shadow'), dict(mode='off'), dict(mode='calibrate'),
                    dict(mode='servo_debug'), dict(enabled=False), dict(source='gamepad'),
                    dict(phase='getup'), dict(phase='default_pose'), dict(pick=True),
-                   dict(roll=1000), dict(ready=False), dict(watchdog=True)]
+                   dict(roll=1000), dict(sitstand='sit'), dict(kick='left'), dict(kick='right'),
+                   dict(ready=False), dict(watchdog=True)]
         for change in changes:
             with self.subTest(change=change):
                 self.setUp()
@@ -258,6 +259,9 @@ class MouthMotionTest(unittest.TestCase):
                 self.c.recovery.phase = change.get('phase', 'walk')
                 self.c.pick_active = change.get('pick', False)
                 self.c.roulade_until = change.get('roll', 0)
+                self.c.sitstand_phase = change.get('sitstand', 'idle')
+                self.c.kick_until = 1000 if 'kick' in change else 0
+                self.c.kick_side = change.get('kick')
                 self.f.motion_status.update(full_robot_ready=change.get('ready', True),
                                             mcu_watchdog=change.get('watchdog', False))
                 before = self.c.mode, self.c.input_source, self.c.bridge.notify.call_count

@@ -93,19 +93,6 @@ static void setTorqueEnable(bool enabled) {
   Serial1.flush();
 }
 
-static void setTempKpKd(uint8_t kp, uint8_t kd) {
-  scsWriteByte(0xFE, ADDR_TEMP_KP, kp);
-  Serial1.flush();
-  scsWriteByte(0xFE, ADDR_TEMP_KD, kd);
-  Serial1.flush();
-}
-
-static void setRunKpKd() {
-  setTempKpKd(TEMP_KP_RUN, TEMP_KD_RUN);
-  scsWriteByte(MOUTH_MOTOR_ID, ADDR_TEMP_KP, TEMP_KP_MOUTH);
-  Serial1.flush();
-}
-
 static void syncWriteGoalsFromDesPos() {
   uint8_t order[NUM_MOTORS * 7];
   for (uint8_t i = 0; i < NUM_MOTORS; i++) {
@@ -366,11 +353,11 @@ static bool readServoPresent(uint8_t id, uint16_t &pos) {
   return servoReadSeen;
 }
 
-static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd) {
+static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd, uint8_t address = ADDR_PERM_KP_KD) {
   drainServoRx();
   servoParamsId = id;
   servoParamsSeen = false;
-  const uint8_t data[2] = {ADDR_PERM_KP_KD, 2};
+  const uint8_t data[2] = {address, 2};
   scsWriteBuf(id, 0x02, data, 2);
   Serial1.flush();
   waitServoReply();

@@ -1,6 +1,6 @@
 # USB 摄像头与音频页面
 
-`ai-chat-move` 的 **XGO Duck AI** 新 App 已把音视频接口并入聊天进程，并在安装及开机时、App 容器创建之前准备 USB Host。请按 [AI App 安装说明](ai-chat.md) 部署；下文的独立 `duck-device-test.service` 和手动 Host 默认行为用于原 Duck App。
+`ai-chat-audio-video-tof` 的 **XGO Duck AI** 新 App 已把音视频接口并入聊天进程，并在安装及开机时、App 容器创建之前准备 USB Host。请按 [AI App 安装说明](ai-chat.md) 部署；下文的独立 `duck-device-test.service` 和手动 Host 默认行为用于原 Duck App。
 
 Duck 的主控制页（9527 端口）包含 USB camera 面板，点击开启后显示连续 MJPEG 视频流，可以保存 JPEG 照片。请求采集 640×480 / 30 fps，页面显示的是摄像头实测采集帧率，实际速度受设备曝光及网络影响。页面在后台会断开预览，20 秒无人观看后后台释放摄像头。
 

@@ -23,6 +23,11 @@ def application_type(base, runtime):
             self.audio.play_wav(str(WAKE_CUE))
 
         def _handle_tts(self, data):
+            if (data.get('state') == 'stop'
+                    and getattr(self, '_is_server_tts_interrupt', lambda _: False)(data)):
+                # An abort must not wait behind a local Duck.Quack sound or
+                # replay its deferred old answer after the interruption.
+                self.duck_sounds.cancel('server interrupted')
             if self.duck_sounds.defer('tts', dict(data)):
                 return
             result = super()._handle_tts(data)

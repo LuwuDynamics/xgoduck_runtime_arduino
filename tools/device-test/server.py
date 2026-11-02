@@ -82,6 +82,10 @@ class Bench:
         self.last_view = 0
         self.camera_error = ''
         self.camera_device = ''
+        self.light = dict(supported=False, enabled=None, error='')
+        self.light_device = ''
+        self.light_checked = 0
+        self.light_requested = None
         self.audio = None
         self.audio_kind = ''
         self.audio_error = ''
@@ -104,6 +108,68 @@ class Bench:
     def camera_path():
         paths = sorted(glob.glob('/dev/v4l/by-id/*-video-index0'))
         return paths[0] if paths else None
+
+    @staticmethod
+    def camera_usb_id(device):
+        node = Path('/sys/class/video4linux') / Path(os.path.realpath(device)).name / 'device'
+        try:
+            node = node.resolve(strict=True)
+            for parent in (node, *node.parents):
+                if (parent / 'idVendor').is_file():
+                    return ((parent / 'idVendor').read_text().strip().lower(),
+                            (parent / 'idProduct').read_text().strip().lower())
+        except OSError:
+            pass
+        return None
+
+    @staticmethod
+    def read_camera_light(device):
+        result = subprocess.run(['v4l2-ctl', '-d', device, '--get-ctrl=gain'],
+                                check=True, capture_output=True, text=True, timeout=3)
+        match = re.search(r'\bgain:\s*(-?\d+)\b', result.stdout)
+        if not match or int(match[1]) not in (0, 1):
+            raise ValueError('无法确认补光灯状态。')
+        return bool(int(match[1]))
+
+    def camera_light_status(self):
+        with self.lock:
+            device = self.camera_path() or ''
+            if device != self.light_device or time.monotonic() - self.light_checked > 5:
+                self.light_device, self.light_checked = device, time.monotonic()
+                # This camera repurposes gain as a lamp switch. On other USB
+                # cameras it controls image gain, so never treat it as a lamp.
+                supported = bool(device) and self.camera_usb_id(device) == ('0c45', '636b')
+                self.light = dict(supported=supported, enabled=None, error='')
+                if supported:
+                    try:
+                        self.light['enabled'] = self.read_camera_light(device)
+                    except (OSError, subprocess.SubprocessError, ValueError):
+                        self.light['error'] = '读取补光灯状态失败，请检查摄像头连接。'
+            return dict(self.light)
+
+    def set_camera_light(self, enabled):
+        if not isinstance(enabled, bool):
+            raise ValueError('补光灯开关必须为 true 或 false。')
+        with self.lock:
+            self.light_checked = 0
+            status = self.camera_light_status()
+            if not status['supported']:
+                raise ValueError('当前摄像头不支持补光灯控制。')
+            self.light['enabled'] = None
+            try:
+                subprocess.run(['v4l2-ctl', '-d', self.light_device,
+                                '--set-ctrl=gain=' + str(int(enabled))],
+                               check=True, capture_output=True, text=True, timeout=3)
+                actual = self.read_camera_light(self.light_device)
+                self.light = dict(supported=True, enabled=actual, error='')
+                self.light_checked = time.monotonic()
+                if actual != enabled:
+                    raise ValueError('补光灯状态没有生效，请重试。')
+                self.light_requested = enabled
+            except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                message = str(exc) if isinstance(exc, ValueError) else '设置补光灯失败，请检查摄像头连接。'
+                self.light['error'] = message
+                raise ValueError(message) from None
 
     @staticmethod
     def audio_card():
@@ -151,6 +217,7 @@ class Bench:
 
     def read_camera(self, proc, log):
         buf = bytearray()
+        restore_light = True
         try:
             while chunk := proc.stdout.read(65536):
                 buf.extend(chunk)
@@ -170,6 +237,13 @@ class Bench:
                     with self.lock:
                         if self.camera is not proc:
                             return
+                        if restore_light:
+                            restore_light = False
+                            if self.light_requested is not None:
+                                try:
+                                    self.set_camera_light(self.light_requested)
+                                except ValueError:
+                                    pass  # Lamp errors must not interrupt the preview.
                         self.jpeg = jpeg
                         self.frames += 1
                         self.last_frame = time.monotonic()
@@ -347,6 +421,7 @@ class Bench:
             return dict(camera=dict(available=bool(self.camera_path()),
                 running=bool(self.camera and self.camera.poll() is None), ready=self.jpeg is not None,
                 device=self.camera_device, frames=self.frames, error=self.camera_error,
+                light=self.camera_light_status(),
                 fps=round((len(self.frame_times)-1)/(self.frame_times[-1]-self.frame_times[0]),1)
                     if len(self.frame_times)>1 and time.monotonic()-self.last_frame<2 else 0),
                 audio=dict(available=card is not None, card=card, volume=volume, volume_error=self.volume_error,
@@ -523,6 +598,8 @@ class Handler(BaseHTTPRequestHandler):
                     b.camera_start()
                 elif path == '/api/camera/stop':
                     b.camera_stop()
+                elif path == '/api/camera/light':
+                    b.set_camera_light(args.get('enabled'))
                 elif path == '/api/audio/volume':
                     b.set_volume(args.get('volume'))
                 elif path == '/api/audio/play':

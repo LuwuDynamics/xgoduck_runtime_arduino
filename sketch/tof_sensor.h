@@ -106,7 +106,6 @@ static void startTof() {
   tofSnapshot.version = 1;
   tofSnapshot.width = tofSnapshot.height = 8;
   tofSnapshot.address = 0x29;
-  Bridge.provide("duck_tof", readTof);
   k_thread_create(&tofThread, tofStack, K_THREAD_STACK_SIZEOF(tofStack),
                   tofTask, nullptr, nullptr, nullptr, 8, 0, K_NO_WAIT);
   k_thread_name_set(&tofThread, "duck_tof5");

@@ -18,7 +18,7 @@ from speech_mouth import SpeechMouthPublisher
 from mouth_ipc import MouthSender
 from connection_sounds import ConnectionSounds
 from capture_channels import CaptureChannels, hardware_channels
-from audio_devices import capture_capabilities
+from audio_devices import capture_capabilities, aec_playback_transform
 
 
 class Runtime:
@@ -62,6 +62,7 @@ class Runtime:
                         input_auto_gain=self.config.get().get('input_auto_gain'),
                         input_gain_db=self.config.get()['input_gain_db'],
                         output_gain_db=self.config.get()['output_gain_db'],
+                        aec_output_headroom_db=self.config.get()['aec_output_headroom_db'],
                         tts_mouth_enabled=self.config.get()['tts_mouth_enabled'],
                         tts_mouth=self.mouth.status(),
                         duck_sound=dict(getattr(getattr(self.app, 'duck_sounds', None), 'last', {'state': 'idle'})),
@@ -196,7 +197,10 @@ class Runtime:
             audio=dict(output_sample_rate=16000, input_device=input_index, output_device=output_index,
                        input_channels=channels, input_latency=.32, output_latency=.5, prebuffer_ms=1000, aec_ref_delay_ms=500),
             wakeword=wakeword,
-            input_transform=capture_gain.pcm, output_transform=self.volume.pcm,
+            input_transform=capture_gain.pcm,
+            output_transform=aec_playback_transform(self.volume, cfg['aec_output_headroom_db'],
+                lambda: (app.audio is not None and app.audio.aec_enabled
+                         and app.audio._capture_enabled and app.audio.input_stream is not None)),
             input_downmix=self.capture_channels.pcm,
             tts_mouth_enabled=cfg['tts_mouth_enabled'], output_observer=self.mouth.observe,
             output_reset_observer=self.mouth.stop,

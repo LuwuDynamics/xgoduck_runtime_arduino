@@ -7,7 +7,7 @@ Open `http://<duck-host>:9527/gamepad.html`. All navigation and setup text is En
 3. Select **Pair & connect** beside the intended controller. Existing pairings offer **Connect**, **Disconnect**, and **Forget**.
 4. Wait for **Input ready**. Center both sticks, release all buttons, and select **Enable gamepad control**.
 
-Pairing and enabling the input source do not arm motors. Default buttons are Menu/Start for walk, the bottom face button (Xbox A) for default pose, and the right face button (Xbox B) for torque off. Move sticks directly; no LB modifier is required. Centering the sticks zeros movement. Left Y maps to forward ±0.4, left X to strafe ±0.3, right X to yaw ±1.0. The input deadzone is 14% and remaining travel is rescaled to full range.
+Pairing and enabling the input source do not arm motors. Default buttons are Menu/Start for walk, the bottom face button (Xbox A) for default pose, and the right face button (Xbox B) for torque off. Move sticks directly; no LB modifier is required. Centering the sticks zeros movement. In ordinary walking, left Y maps to forward 0.2 / backward 0.18 m/s, left X to strafe ±0.3 m/s, and right X to yaw ±1.0 rad/s. In Roller mode the ranges are forward/backward ±0.4 m/s, strafe 0 and yaw ±0.25 rad/s. The input deadzone is 14% and remaining travel is rescaled to full range.
 
 While gamepad control is enabled, periodic browser movement messages are ignored. Explicit browser mode controls and Torque off remain available. A disconnected/replaced gamepad, stale input snapshot, or failed worker connection disarms and releases the input source. Reconnection requires explicitly enabling control again. Calibration and servo setup release gamepad ownership.
 

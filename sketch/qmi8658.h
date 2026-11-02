@@ -23,6 +23,11 @@ struct ImuSample {
   int16_t gyroRaw[3];
 };
 
+struct ImuSnapshot {
+  ImuSample sample;
+  uint32_t seq, sampleUs, periodUs, workUs, overruns, errors, initAttempts;
+};
+
 static ImuSample imu = {};
 
 static bool qmiWrite(uint8_t reg, uint8_t value) {
@@ -103,12 +108,7 @@ static bool initImu() {
 
 static bool updateImu() {
   if (qmiAddr == 0) {
-    static uint32_t lastProbeMs = 0;
-    const uint32_t now = millis();
-    if ((uint32_t)(now - lastProbeMs) >= 1000u) {
-      lastProbeMs = now;
-      initImu();
-    }
+    // Initialization and retry timing belong to the dedicated IMU thread.
     return false;
   }
 

@@ -114,8 +114,8 @@ class McpServer:
                 properties = {}
                 required = []
                 for p in method["parameters"]:
-                    # 参数描述 ≤4 字符 (如"秒"/"mm") 时省略: 名字已自说明,
-                    # 且 tools/list 应答受网关 max_mqtt_payload_size(8192B) 硬限制
+                    # 短单位可由参数名说明。实际网关上限由部署配置决定；
+                    # 预算检查必须包含 send_mcp_message 信封和 JSON 转义。
                     prop = {"type": {"number": "number", "boolean": "boolean",
                                      "string": "string"}.get(p.value_type, "number")}
                     if len(p.description) > 4:

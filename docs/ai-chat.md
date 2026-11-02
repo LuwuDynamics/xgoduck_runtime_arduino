@@ -1,11 +1,64 @@
 # XGO Duck AI App
 
-> **0.2.29 控制层说明：** 运动控制/STM32 协议/滚轮/舵机保护已改为跟随上游 `master`。旧文档中的“保扭矩暂停（0.2.17）”“PAUSE 命令”“超时旁路（0.2.22）”“fault_hold / timeout_* 状态”不再适用于合并后的固件与控制代码；STM32 超时后按主分支规则卸力。AI 聊天、语音控制、手柄和媒体功能保持不变。
+## 0.2.36 AEC 播放余量与打断停声
+
+**实机验收尚未通过：** 12 dB 余量改善了单独播放的测试录音，但真实聊天仍把自身回答识别为用户说话。用户试听后认可声卡 100%、无额外数字放大的原声；当前调试基准为 `output_gain_db: 0`、`aec_output_headroom_db: 0`。不要把余量参数当成已完成的 AEC 修复。
+
+
+新增 `aec_output_headroom_db`（0–18 dB，默认 0），只在实际 AEC 已启用、采集流已打开且正在收音时，给聊天输出预留数字幅度。它会让这段播放变小声；例如原 `output_gain_db: 6` 加上 `aec_output_headroom_db: 12`，有效数字增益为 -6 dB。不开启时保留旧音量；关闭 AEC、待机唤醒反馈和原网页媒体继续使用原音量。不要把它理解为可恢复已经削波的麦克风数据。
+
+余量与原音量/软件增益合并后只限幅一次，消回声参考仍取实际送往扬声器的 PCM。某双麦硬件在同一段测试人声下，纯播放段能量降低从约 3 dB 改善到约 26 dB；这是特定摆放和素材的实测，不保证所有音量、距离或同时说话场景。硬件采集增益虽能读回变化，但实测仍饱和，未将其固化为默认值。可以在板上设置后重连聊天：
+
+```bash
+python3 tools/configure-ai.py --aec-output-headroom-db 12
+```
+
+板端区分已验证云端的打断停止包和普通完成包：打断立即清掉解码、PCM、声卡尾音及嘴型；普通结束仍等整段声音播完。收到服务端打断后不再重复发送 abort 或 listen:start，以免重置正在收集的插话。旧回答的等待任务不能切换或清空新回答。服务器、服务器 VAD/ASR、运动、ONNX、STM32 和 9527 网页不变。
+
+首次升级请先停止旧 App，再安装并启动新版，让两个进程加载新配置结构；确认新版运行后，才执行上面的余量设置命令。不要在旧进程仍运行时先写入新字段，旧版会把不认识的配置视为无效并可能回写默认值。之后调整该参数只需聊天自动重连。
+
+## 0.2.35 本地 AEC 参考连续性
+
+本地 AEC 沿用现有 WebRTC 后端，由小程序的“自动打断” / `self.set_aec` 控制并持久保存；切换配置允许重连聊天。开启后，播放期间持续消回声并上传，服务器继续使用原有 VAD/ASR 与打断保护，不增加本地 VAD。
+
+正常 TTS 开始和播放结束切回倾听时，保留连续的播放参考，供仍在麦克风采集缓存中的回声使用；显式打断与播放超时仍清空音频和参考、停止嘴型。`/api/voice/status` 的 `audio_playback` 增加 `aec_enabled`、`aec_backend`、`aec_frames` 和 `aec_reference_resets`，区分开启配置与实际处理帧数。音量、缓存时长、双麦选择和原网页不变。此修补针对参考时序；实际回声抑制与 USB 断连仍需分别验收。
+
+## 0.2.34 短会话提示音
+
+发送与回答完成提示音参考本地 RIG-Omni 的 `message_send.ogg` / `over.ogg`，均为 0.30 秒，额外衰减 6 dB，并加 5/8 ms 淡入/淡出。相较原素材，发送音 RMS 降低约 7.8 dB，结束音降低约 11.3 dB。输出为 16 kHz、单声道、16 位 PCM，来源与参数见 `provenance/audio-cues.json`。
+
+只替换这两个本地 WAV；提示音继续走不驱动嘴型的本地队列。播放器在每次播放时读取文件，可热更新，无需重新烧录 STM32。
+
+> **当前控制层：** 运动部分同步 master [`b401d85`](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/b401d85d20bb5bfd0237242a8a5ab6847fc962a2)，包括 8 个运动模型、配套网页/MCU 和 Bridge 重连处理。保留原有语音权限、手机遥控、手柄控制权、嘴型互斥、硬件中点迁移与 ToF 独立任务；普通行走前进/后退上限为 0.2/0.18 m/s。验证范围见[检查记录](ai-validation.md)。
+
+以下 0.2.33 小节记录上一次稳定包集成；当前来源以 `provenance/motion.json` 为准，硬件中点迁移流程继续适用。
+
+## 0.2.33 配套网页与硬件中点校准
+
+- 稳定包的 8 个网页文件原样复制。`policy.py`、`proc.py`、`rl_core.py`、`recovery.py`、五个运动模型、`wire.py` 和配套 MCU 头文件也与来源逐字节一致。Controller 仅补入已有 AI/手柄控制权字段和命令来源门控，30 个其余方法与稳定包 AST 一致。`sketch.ino` 仅保留独立 ToF 的 include/start 两行，其余与稳定包逐字节一致。来源见 `provenance/motion.json`。
+- 需要成套更新 App 并通过 Run 编译/上传配套 STM32；只替换网页或 Python 会造成协议不匹配。部署后强制刷新浏览器，确保新网页与后端匹配。普通 Walk 默认开启对应模型；Roller 默认关闭，仅用于对应的轮滑硬件。
+- 现在中点保存在各舵机中，编码器中心固定为 2047；Calibration 页面进入后全部卸力，逐关节手动摆机械中点，再点 **Set center & hold**，最后退出。支持 Reset Mid、读取 KP/KD、全总线保护开关和独立保护电流设置。
+- `data/zero_pos.json` 保留备份但不再加载。如果旧软件零位不是全部 2047（或文件损坏），App 会拒绝 Hold / Policy / 语音起身，提示先完成新版 15 关节校准。仅对收到成功 MCU 回执的关节记入 `data/hardware-centers.json`；全部完成且记录落盘后解除迁移限制。旧文件不会被重写，失败/部分校准、旧回执、记录写入失败均不能误报完成。
+- 已按硬件中点校准且旧文件全为 2047 的机器保持兼容；不含旧文件的新安装遵循稳定包原有首次校准流程。不要为了跳过迁移把旧零位强行改成 2047，也不要运行下方历史版本的软件零位迁移命令。
+- Roller 开关会取消旧语音/手机待执行动作并转交网页控制，避免旧动作在换模型后继续执行。有效语音动作保留 10 秒原截止时间与输入心跳续期；聊天和媒体接口保留，新增网页按稳定包布局，不添加聊天标签。
+
+0.2.33 已完成 UNO Q 目标编译、配套 STM32 烧录与 App 启动，8 个网页文件通过板端 HTTP 哈希核对。实体机械校准和站立/行走尚未验收；部署中出现过 USB Hub 重枚举及命令通道停滞，不能将启动成功当作这两个问题已修复。详细结果见检查记录。
+
+## 历史：0.2.31–0.2.32 软件零位迁移（不适用 0.2.33）
+
+Python 控制器、`wire.py` 和 STM32 sketch 必须成套更新；仅覆盖 Python 或模型不能完成本次恢复。首次 Run 会编译并上传匹配的 STM32 程序。校准恢复为软件零位：`data/zero_pos.json` 保存每只机器独立的 15 个原始编码器中点。
+
+- 已使用该分支的软件零位：保留当前机器的 `data/zero_pos.json`。
+- 从 0.2.29/0.2.30 迁移，且已按该版本完成全部 15 个舵机的硬件中点校准：在 App 停止时，在本 App 根目录运行 `python3 tools/migrate-hardware-centers.py --from-hardware-centers`，生成 15 个均为 2047 的软件零位，使角度换算继续使用已校准的硬件中点。脚本只创建文件，不驱动舵机；若软件零位文件已存在则拒绝覆盖，先核对文件来源。
+- 无法确认此前的中点方式：在恢复后的 Calibration 网页按旧流程逐关节重新校准。不要使用另一只鸭子的零位，也不要将未校准新机器的默认工厂值当作实测结果。
+
+首次实测先支撑鸭子检查 Default pose，再验证 Walk / get up。代码恢复和软件测试不能证明实体已经站稳。
+
 
 
 [English guide](ai-chat-en.md) · [中文 README](../README_CN.md) · [检查记录](ai-validation.md)
 
-这是给用户自行购买的 **Arduino UNO Q** 安装的开源 App，需要先用电脑完成一次安装。它不是预装系统镜像。安装完成后，开机自动运行，手机通过蓝牙配 Wi-Fi、绑定账号；遥控通过云端 MCP。原 9527 网页、9528 音视频接口、Audio/豆包页面、校准和舵机设置保留，没有新增聊天标签。
+这是给用户自行购买的 **Arduino UNO Q** 安装的开源 App，需要先用电脑完成一次安装。它不是预装系统镜像。安装完成后，开机自动运行，手机通过蓝牙配 Wi-Fi、绑定账号；遥控通过云端 MCP。配套稳定版 9527 网页、9528 音视频接口、Audio/豆包页面、校准和舵机设置保留，没有新增聊天标签。
 
 ## 1. 先选择服务器和客户端
 
@@ -37,7 +90,7 @@
 推荐在电脑打包，通过 App Lab **导入为新 App**：
 
 ```sh
-git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
+git clone --branch ai-chat-audio-video-tof https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
 cd xgoduck_runtime_arduino
 python3 tools/package-ai-app.py
 ```
@@ -48,11 +101,11 @@ python3 tools/package-ai-app.py
 
 ```sh
 mkdir -p ~/ArduinoApps
-git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git ~/ArduinoApps/xgoduck_ai
+git clone --branch ai-chat-audio-video-tof https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git ~/ArduinoApps/xgoduck_ai
 cd ~/ArduinoApps/xgoduck_ai
 ```
 
-停止已有 Duck App，避免共用 Bridge、舵机、9527 和 9528。旧 App 可以保留。要沿用这只鸭子的校准和手柄映射，在两个 App 都停止时，把旧目录的 `data/zero_pos.json`、`data/gamepad-bindings.json`（若存在）复制到新目录的 `data/`。不要复制其他机器人的校准或绑定身份。ZIP 排除了所有运行数据，不会自动迁移。
+停止已有 Duck App，避免共用 Bridge、舵机、9527 和 9528。旧 App 可以保留。要沿用这只鸭子的校准和手柄映射，在两个 App 都停止时，按需保留同一只鸭子的 `data/gamepad-bindings.json`；若要带上历史 `data/zero_pos.json`，本版会据此要求完成硬件中点迁移。已经使用本版校准的同一只鸭子可保留其 `data/hardware-centers.json` 及对应旧零位文件。不要复制其他机器人的校准或绑定身份。ZIP 排除了所有运行数据，不会自动迁移。
 
 ## 4. 在板端选区、安装硬件支持
 
@@ -80,6 +133,7 @@ bash tools/install-ai-support.sh
 - 为当前板子创建并保留稳定设备 ID，优先使用永久 WLAN MAC；没有可用永久 MAC 时生成一次随机本地 ID。身份保存在 `data/voice-state/device-id`，不使用容器 MAC 或扫描时随机 MAC。
 - 通过官方 `arduino-app-cli properties set default <App目录>` 设置开机默认 App，并启用 `arduino-app-cli.service`；启动顺序在硬件辅助服务之后。
 - 关闭旧 `duck-device-test.service` 的用户级自启，避免抢占 9528 和 USB 音频。有旧豆包配置时仅首次复制一份，保留原文件。
+- 安装并启用 nginx 网页入口，打开 `http://<板子IP>/` 即进入移动驾驶页，无需端口号和页面后缀。已有安装可单独运行 `sudo bash tools/install-mobile-web.sh`；该步骤可在 App 运行时执行。
 - 如已安装旧 `duck-gamepad.service`、`duck-usb-device.service` 或 `duck-usb-host.service`，停用其自启，由新辅助服务接管，避免重复读取手柄或晚启动的旧 USB 服务反向切换模式；旧 unit 文件保留。
 
 脚本可重复执行；App 目录改变或硬件辅助代码升级后需重跑。**先停止所有 App，通过 Wi-Fi/SSH 执行。安装脚本会准备 USB Host，需要时重启共享 router，但不启动 App、不烧写 MCU。** 运行中的 App 会使安装器直接拒绝继续。安装器启用 `xgoduck-ai-usb-host.service`，以后每次开机在 App CLI 和容器启动之前完成 Host 准备。
@@ -207,6 +261,8 @@ sudo systemctl daemon-reload
 
 按旧安装实际使用过的服务，恢复 `sudo systemctl enable --now duck-gamepad.service` 和 `systemctl --user enable --now duck-device-test.service`。如果以前使用开机 USB Device 默认服务，恢复 `sudo systemctl enable duck-usb-device.service`，正常重启一次后生效。然后用 App Lab 或 `arduino-app-cli app start "$duck_previous_app"` 启动旧 App。若原来没有默认 App，可用 `arduino-app-cli properties set default none` 恢复为不自动启动。旧 Duck 同样使用 2 Mbps Bridge，无需反复改变 router；切其他速率应用时再按技术参考处理。
 
+如需移除新增的 80 端口入口，删除 `/etc/nginx/sites-enabled/xgoduck-mobile`，运行 `sudo nginx -t && sudo systemctl reload nginx`。原站点配置备份在 `/var/backups/xgoduck-mobile-web/`。只有确定 nginx 没有其他用途时，才停用其服务。
+
 ## 日常网页、聊天和遥控
 
 两个常驻业务进程：
@@ -278,17 +334,9 @@ USB 麦克风声音太弱时，可在 `data/voice_config.json` 设置 `"input_au
 首次运动时，放好鸭子并留出起身空间，先说“开启语音运动”，再说“站起来”。`Duck.Stand` 本身不修改权限，使用零方向速度运行原策略；也可以通过原网页的 Policy 明确启动平衡。起立请求返回“已接受”不代表已经站好：`Duck.GetStatus` 的 `movement_ready` 才表示移动条件已经满足，起立五秒内未确认就报告失败。
 
 
-**临时通信排查（0.2.22）。** 本版 `MOTION_TIMEOUT_CHECKS_ENABLED=false`，STM32 不因命令 250 ms 或 IMU 健康数据 100 ms 超时而暂停/卸力，暂时不按源采样时间戳 150 ms 拒绝新序号目标。固件用状态位 64 宣告 `timeout_checks_disabled`；Linux 收到此位后不因反馈超过 150 ms、IMU 无效或使能确认迟到而锁定暂停，MCP 同步忽略这些时效拦截。仍需真实 ARM 回执才继续下发策略，不把确认等待当成已使能。普通网页 1 秒心跳检查在本分支此前已移除。
+**当前通信保护（0.2.33）。** 按 `next-audio-video-tof` 恢复：STM32 有效命令中断超过 250 ms、IMU 健康数据超过 100 ms 未更新时卸力，并检查目标来源的采样时间。Linux 在运动模式下遇到反馈超过 150 ms 或 IMU 无效时切到仅推理并发送卸力。普通网页不需要心跳来维持站立；超过 1 秒没有输入会清零行走速度，有效语音动作由接入层按原定时长续期；校准/舵机设置页面仍有 2 秒会话超时。当前没有 PAUSE 命令、保扭矩故障暂停或超时旁路，历史实现和测试见 `ai-validation.md`。本版切换为配套稳定网页与硬件中点协议，必须同步更新随包的 STM32 固件。
 
-断流/无效 IMU 时保留上个目标，不使用无效采集推理或突然切换默认姿态；收到有效数据后直接继续原控制请求，因此可能接续断流前的动作。本版没有用自动回零速度替代被取消的超时处理。日志 `[motion-timeout-observed]` 和 `/api/status` 的 `timeout_warning`、`timeout_events` 保留实测年龄，持续异常日志最多每五秒一次；`full_robot_ready`、`feedback_warning` 仍报告真实健康状况，不能把旁路状态当成通信已修复。需要完整上传本版 sketch，只有 Python 更新时仍沿用旧固件保护。
-
-明确 Stop/TorqueOff、初次使能的 IMU 就绪、首次反馈不存在、缺失本次所需舵机、报文格式/有限值/序号、权限、动作时长与控制权检查保留。App 退出、手柄断连、模型异常和 MCU 重启仍可进入显式保扭矩暂停。这是为排查断流而临时取消超时动作，原网页资源和持久配置保持原样。下述 0.2.17 时效保护说明适用于未宣告状态位 64 的固件。
-
-**保扭矩暂停（0.2.17）。** 日常反馈超过 150 ms 未更新、IMU 异常、控制推理报错、App 退出或手柄断连只停止动作并保持当前可靠关节位置，不主动关扭矩。STM32 在命令超过 250 ms 或 IMU 健康状态超过 100 ms 未更新时也锁定保持位置。陈旧/乱序数据仍拒绝；普通 POLICY/HOLD 帧不能解除暂停，断连前的走路/翻滚和队列不会重放。恢复后明确要求“站起来”或选择原网页 Policy/Hold，由新鲜反馈生成 ARM；明确 TorqueOff、Off、Inference only 或明确退出诊断模式仍可卸力。
-
-Linux 重启连接到已使能的 MCU 时先保扭矩暂停，并接续 MCU 命令序号；校准/舵机调试超时或 App 退出保留最后诊断位置，直至明确控制/退出。新的 `PAUSE=4` 不接收 Linux 目标、不依赖源时间戳，始终在 MCU 本地捕获可靠关节位置，且不能使能原本卸力的舵机。状态 `fault_hold`、`fault_hold_supported`、`pause_events` 分别给出暂停、固件能力与最近原因/反馈年龄；MCP GetStatus 也返回暂停字段。必须同步更新本版 sketch：capability flag 32 未出现时拒绝新使能。断电、MCU 硬件重启或舵机自身的硬件保护无法由 Linux 保证扭矩。
-
-高频嘴部目标改走 App 私有目录中权限为 0600 的 Unix datagram socket，含每次 App 启动的临时令牌、会话/回合/序号校验。发送不等待 HTTP 回复，仍有界、过期丢弃、按 DAC 时间执行；音频回调只入队。MCP/普通控制命令仍使用原有认证的回环 HTTP。嘴部在保扭矩故障暂停时停止，不能解除身体暂停。
+高频嘴部目标改走 App 私有目录中权限为 0600 的 Unix datagram socket，含每次 App 启动的临时令牌、会话/回合/序号校验。发送不等待 HTTP 回复，仍有界、过期丢弃、按 DAC 时间执行；音频回调只入队。MCP/普通控制命令仍使用原有认证的回环 HTTP。嘴部在身体未使能、姿态不适合或反馈异常时停止，不会自行使能身体。
 
 **方向键不会开启舵机或自动起身。** 板端要求已在 Policy、STM32 已使能、十个腿部舵机和 IMU 反馈新鲜、运动命令到达 STM32 的间隔不超过 150 ms、恢复阶段为 `walk`，且身体倾角小于 15° 连续一秒。趴倒、正在起身、抓取/翻滚中或状态未知时拒绝移动并返回具体原因。语音 Move/Turn 和抓取/翻滚也须先通过站立检查；单独头颈/嘴部命令仍要求身体已使能、直立且处于 walk，但不重复等待站稳一秒。Stand 是明确启动平衡的入口。Stop 不受站立门槛限制。
 

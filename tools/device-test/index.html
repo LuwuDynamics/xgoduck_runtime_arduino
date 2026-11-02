@@ -18,7 +18,9 @@
 <div class="grid">
 <section class="card"><div class="card-head"><div><div class="eyebrow">01 / CAMERA</div><h2>摄像头</h2></div><span class="badge" id="camBadge">检测中</span></div>
 <div class="view"><div class="placeholder" id="placeholder"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="13" width="36" height="27" rx="6"/><path d="M16 13l3-6h10l3 6"/><circle cx="24" cy="26" r="8"/></svg><div id="cameraHint">画面将在开启后显示</div><p>板载 USB 摄像头 · 640 × 480</p></div><img id="frame" alt="板子 USB 摄像头实时画面" hidden><div class="live" id="live" hidden>LIVE</div></div>
-<div class="row"><button class="primary" id="camStart">开启摄像头</button><button id="camStop" disabled>关闭</button><button id="snapshot" disabled>保存照片</button></div><div id="cameraError" class="error" role="status"></div><div class="meta"><span id="camDevice">等待设备</span><span id="frameCount">尚未采集</span></div>
+<div class="row"><button class="primary" id="camStart">开启摄像头</button><button id="camStop" disabled>关闭</button><button id="snapshot" disabled>保存照片</button></div>
+<div class="row" style="margin-top:12px"><button id="lightOn" disabled>打开补光灯</button><button id="lightOff" disabled>关闭补光灯</button><span class="small" id="lightStatus" role="status">补光灯：正在读取…</span></div><div id="lightError" class="error" role="status"></div>
+<div id="cameraError" class="error" role="status"></div><div class="meta"><span id="camDevice">等待设备</span><span id="frameCount">尚未采集</span></div>
 </section>
 <div class="side">
 <section class="card"><div class="card-head"><div><div class="eyebrow">02 / SPEAKER</div><h2>音乐播放</h2></div><span class="badge" id="audioBadge">检测中</span></div>
@@ -48,6 +50,10 @@ function render(s){
  $('connection').textContent=`● 已连接 ${location.hostname}`;
  $('camBadge').textContent=c.running?(c.ready?'采集中':'启动中'):c.available?'已识别':'未发现';$('camBadge').className='badge'+(c.running?' on':'');
  $('camStart').disabled=busy||!c.available||c.running;$('camStop').disabled=busy||!c.running;$('snapshot').disabled=!c.ready;
+ const light=c.light||{};
+ $('lightOn').disabled=busy||!light.supported||light.enabled===true;$('lightOff').disabled=busy||!light.supported||light.enabled===false;
+ $('lightStatus').textContent=!c.available?'补光灯：未检测到摄像头':!light.supported?'当前摄像头暂不支持补光灯控制':light.enabled===true?'补光灯：已打开':light.enabled===false?'补光灯：已关闭':'补光灯：状态未知';
+ $('lightError').textContent=light.error||'';
  $('cameraError').textContent=c.error;$('camDevice').textContent=c.device||'USB Camera';$('frameCount').textContent=c.frames?`采集 ${c.fps||0} fps · 连续视频流`:'尚未采集';
  $('cameraHint').textContent=c.running?'正在获取画面…':'画面将在开启后显示';
  syncStream();
@@ -67,6 +73,7 @@ function render(s){
 }
 async function act(path,data){if(busy)return;busy=true;if(state)render(state);notice();try{render(await request(path,data));}catch(e){notice(e.message);}finally{busy=false;if(state)render(state);}}
 $('camStart').onclick=()=>act('/api/camera/start');$('camStop').onclick=()=>act('/api/camera/stop');
+$('lightOn').onclick=()=>act('/api/camera/light',{enabled:true});$('lightOff').onclick=()=>act('/api/camera/light',{enabled:false});
 $('volume').oninput=()=>{$('volumeValue').textContent=$('volume').value+'%';};
 $('play').onclick=()=>act('/api/audio/play',{source,volume:+$('volume').value});
 $('audioStop').onclick=$('recordStop').onclick=()=>act('/api/audio/stop');

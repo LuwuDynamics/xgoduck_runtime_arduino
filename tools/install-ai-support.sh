@@ -120,7 +120,9 @@ arduino_uid="$(id -u arduino)"
 if [ -S "/run/user/$arduino_uid/bus" ]; then
     runuser -u arduino -- env XDG_RUNTIME_DIR="/run/user/$arduino_uid" systemctl --user disable --now duck-device-test.service 2>/dev/null || true
 fi
+bash "$app_root/tools/install-mobile-web.sh"
 echo 'Support and default App installed. On next boot XGO Duck AI starts automatically.'
+echo 'Mobile cockpit is available at http://<board-ip>/ on port 80.'
 echo 'USB Host is ready; USB/ADB computer access is disconnected. BluFi works without USB audio.'
 echo 'MCU compile and ELF checks passed. First Run still needs internet for container/Python dependencies.'
 echo 'After the first successful Run, verify an offline cold boot.'

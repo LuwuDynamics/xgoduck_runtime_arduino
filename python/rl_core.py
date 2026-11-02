@@ -1,3 +1,6 @@
+# Adapted from Microduck deployment processing (Pollen Robotics).
+# Modified for XGO Duck joint mapping, policies, filtering and MCU sample timing.
+# Upstream portions: Apache-2.0; see THIRD_PARTY_NOTICES.md and LICENSES/.
 """Policy/filter math synchronized with rl/raspi_deploy infer.py and duck.py."""
 from __future__ import annotations
 import math
@@ -10,7 +13,7 @@ GYRO_ALPHA = 0.5
 
 VEL_ALPHA = 0.4
 
-FEEDBACK_PERIOD = 0.01  # Firmware sendState: 100 Hz; protocol has no sample timestamp.
+FEEDBACK_PERIOD = 0.01  # 100 Hz feedback and EMA reference interval.
 
 GRAVITY_TAU = 0.3
 
@@ -54,9 +57,9 @@ ACTION_DIM = 14
 
 ACTION_SCALE = 1.0
 
-ACTION_ALPHA = 0.45
+ACTION_ALPHA = 0.35
 
-ACTION_ALPHA_HEAD = 0.2
+ACTION_ALPHA_HEAD = 0.45
 
 @dataclass
 class State:
@@ -98,7 +101,20 @@ class ImuFilter:
         self._gyro: Optional[List[float]] = None
         self._vel: Optional[List[float]] = None
 
-    def update(self, st: State, dt: float = FEEDBACK_PERIOD) -> State:
+    def update(self, st: State, dt: float = FEEDBACK_PERIOD, *, imu_dt=None,
+               update_imu=True) -> State:
+        velocity_dt = max(0.001, min(dt, 0.1))
+        if self._vel is None or dt > 0.1:
+            self._vel = list(st.vels)
+        else:
+            va = self.vel_alpha ** (velocity_dt / FEEDBACK_PERIOD)
+            self._vel = [va * o + (1 - va) * n for o, n in zip(self._vel, st.vels)]
+        if not update_imu:
+            st.grav = list(self._gravity or [0.0, 0.0, -1.0])
+            st.gyro_rad = [math.radians(v) for v in (self._gyro or [0.0]*3)]
+            st.vels = list(self._vel)
+            return st
+        dt = dt if imu_dt is None else imu_dt
         acc_n = _rotate_imu_bias([st.acc[2], -st.acc[0], -st.acc[1]])
         gyro_n = _rotate_imu_bias([st.gyro[2], -st.gyro[0], -st.gyro[1]])
         norm = math.sqrt(sum(v * v for v in acc_n))
@@ -109,7 +125,6 @@ class ImuFilter:
         if reset:
             self._gravity = acc_unit if acc_unit is not None else [0.0, 0.0, -1.0]
             self._gyro = gyro_n
-            self._vel = list(st.vels)
         else:
             gx, gy, gz = self._gravity
             wx, wy, wz = [math.radians(v) for v in gyro_n]
@@ -125,11 +140,9 @@ class ImuFilter:
                 predicted = [(1 - gain) * p + gain * a for p, a in zip(predicted, acc_unit)]
             pnorm = math.sqrt(sum(v * v for v in predicted))
             self._gravity = [v / pnorm for v in predicted]
-            # Preserve the previous smoothing at 100 Hz, also when USB delivers batches.
+            # IMU smoothing follows source time; servo velocity follows receive time.
             ga = self.gyro_alpha ** (dt / FEEDBACK_PERIOD)
-            va = self.vel_alpha ** (dt / FEEDBACK_PERIOD)
             self._gyro = [ga * o + (1 - ga) * n for o, n in zip(self._gyro, gyro_n)]
-            self._vel = [va * o + (1 - va) * n for o, n in zip(self._vel, st.vels)]
         st.grav = list(self._gravity)
         st.gyro_rad = [v * math.pi / 180.0 for v in self._gyro]
         st.vels = list(self._vel)

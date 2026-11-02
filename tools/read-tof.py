@@ -4,13 +4,40 @@
 Run inside the App container using its Python/Arduino Bridge installation.
 """
 import argparse
+from contextlib import contextmanager
+from importlib import import_module
 import json
+import os
 import statistics
 import struct
 import time
 
 PACKET = struct.Struct('<4s8B6I64h64B64B')
 STATES = ('starting', 'absent', 'initializing', 'ranging', 'error', 'offline')
+
+
+@contextmanager
+def open_bridge():
+    """Use the public router client when available; support older App SDKs."""
+    try:
+        router = import_module('arduino.router_bridge')
+    except ModuleNotFoundError as exc:
+        if exc.name not in ('arduino', 'arduino.router_bridge'):
+            raise
+        utilities = import_module('arduino.app_utils')
+        legacy = import_module('arduino.app_utils.bridge')
+        try:
+            yield utilities.Bridge
+        finally:
+            legacy.ClientServer().stop()
+        return
+    bridge = router.Bridge(os.environ.get('APP_SOCKET', router.DEFAULT_ADDRESS))
+    try:
+        if not bridge.connect(timeout=5):
+            raise ConnectionError('Could not connect to the Arduino Router.')
+        yield bridge
+    finally:
+        bridge.disconnect()
 
 
 def decode(data):
@@ -61,12 +88,11 @@ def main():
     args = parser.parse_args()
     if not 0 < args.seconds <= 3600:
         parser.error('--seconds must be in (0, 3600]')
-    from arduino.app_utils import Bridge
-    from arduino.app_utils.bridge import ClientServer
-    deadline, previous, have_frame = time.monotonic()+args.seconds, None, False
-    try:
+    previous, have_frame = None, False
+    with open_bridge() as bridge:
+        deadline = time.monotonic()+args.seconds
         while time.monotonic() < deadline:
-            data = decode(Bridge.call('duck_tof', timeout=3))
+            data = decode(bridge.call('duck_tof', timeout=3))
             key = (data['state'], data['seq'], data['fresh'], data['last_error'])
             if key != previous:
                 previous = key
@@ -83,8 +109,6 @@ def main():
             if data['state'] in ('absent', 'error', 'offline'):
                 return 1
             time.sleep(0.1)
-    finally:
-        ClientServer().stop()
     return 0 if have_frame else 1
 
 

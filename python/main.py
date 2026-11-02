@@ -15,7 +15,7 @@ enable_host()
 from fastapi import HTTPException
 from arduino.app_utils import App, Bridge
 from arduino.app_bricks.web_ui import WebUI
-from controller import Controller
+from motion_calibration import AppController as Controller
 from media_proxy import register_media
 from gamepad import register_gamepad
 from motion_access import MotionAccess
@@ -24,6 +24,9 @@ from voice_supervisor import VoiceSupervisor
 from local_ipc import JsonServer
 from app_paths import PRIVATE
 from mouth_ipc import MouthReceiver
+from tof_status import ToFMonitor
+from forward_avoidance import ForwardAvoidance
+from app_paths import DATA
 
 # Bound GIL handoff latency between the 100 Hz receiver, policy and WebUI.
 sys.setswitchinterval(0.001)
@@ -38,6 +41,13 @@ mouth_receiver = MouthReceiver(mouth_path, token, access.speech)
 def voice_dispatch(method, path, body):
     if method == 'GET' and path == '/state':
         return {'motion': controller.status(), 'control': access.state()}
+    if method == 'GET' and path == '/tof':
+        sensor = tof.status()
+        # A read still works when avoidance is disabled (no guard worker).
+        # No concurrent guard sampling exists in this configuration.
+        if not avoidance.settings['enabled']:
+            avoidance.update(sensor)
+        return {'sensor': sensor, 'front': avoidance.status()}
     if method == 'POST' and path == '/heartbeat':
         return access.heartbeat(**body)
     if method == 'POST' and path == '/action':
@@ -57,7 +67,11 @@ os.environ['DUCK_MEDIA_URL'] = f'http://127.0.0.1:{media_port}'
 ui = WebUI(port=9527, cors_origins='')
 register_media(ui)
 gamepad_control = register_gamepad(ui, controller)
+tof = ToFMonitor(retry=1.)
+avoidance = ForwardAvoidance(tof, settings_path=DATA / 'obstacle-avoidance.json')
+controller.attach_forward_avoidance(avoidance)
 Bridge.provide('duck_state', controller.receive)
+Bridge.provide('duck_diagnostics', controller.receive_diagnostics)
 Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
 Bridge.provide('duck_raw', controller.receive_raw)
 Bridge.provide('duck_servo_reply', controller.receive_servo_reply)
@@ -65,10 +79,6 @@ Bridge.provide('duck_cal_reply', controller.receive_cal_reply)
 
 def mode(body: dict):
     try: return access.web_mode(body['mode'])
-    except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
-
-def roller(body: dict):
-    try: return controller.set_roller_mode(body['enabled'])
     except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def command(body: dict):
@@ -80,6 +90,10 @@ def filtering(body: dict):
         leg, head = controller.set_action_alphas(**body)
         return {'leg':leg,'head':head}
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def roller(body: dict):
+    try: return access.web_roller(body['enabled'])
+    except (KeyError, TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def imu_filtering(body: dict):
     try: return controller.set_imu_filters(**body)
@@ -95,6 +109,18 @@ def pick(_body: dict = None):
 
 def roulade(_body: dict = None):
     try: return access.web_action('roulade')
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
+def sitstand(body: dict):
+    try: return access.web_sitstand(body['action'])
+    except (KeyError, TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def right_kick(_body: dict = None):
+    try: return access.web_action('kick', 'right')
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
+def left_kick(_body: dict = None):
+    try: return access.web_action('kick', 'left')
     except ValueError as exc: raise HTTPException(400, str(exc))
 
 def cal_enter(_body: dict = None):
@@ -131,15 +157,19 @@ def servo_action(body: dict):
         raise HTTPException(400, str(exc))
 
 ui.expose_api('GET', '/api/status', controller.status)
+ui.expose_api('GET', '/api/tof/status', tof.status)
 ui.expose_api('GET', '/api/voice/status', voice.status)
 ui.expose_api('POST', '/api/mode', mode)
-ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/command', command)
 ui.expose_api('POST', '/api/filter', filtering)
+ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/imu-filter', imu_filtering)
 ui.expose_api('POST', '/api/action-scale', action_scale)
 ui.expose_api('POST', '/api/pick', pick)
 ui.expose_api('POST', '/api/roulade', roulade)
+ui.expose_api('POST', '/api/sitstand', sitstand)
+ui.expose_api('POST', '/api/right_kick', right_kick)
+ui.expose_api('POST', '/api/left_kick', left_kick)
 ui.expose_api('POST', '/api/cal/enter', cal_enter)
 ui.expose_api('POST', '/api/cal/exit', cal_exit)
 ui.expose_api('POST', '/api/cal/heartbeat', cal_heartbeat)
@@ -148,6 +178,7 @@ ui.expose_api('POST', '/api/servo/enter', servo_enter)
 ui.expose_api('POST', '/api/servo/exit', servo_exit)
 ui.expose_api('POST', '/api/servo', servo_action)
 worker = threading.Thread(target=controller.run, name='policy50', daemon=True)
+avoidance.start()
 worker.start()
 ipc.start()
 mouth_receiver.start()
@@ -156,6 +187,8 @@ voice.start()
 try:
     App.run()
 finally:
+    avoidance.close()
+    tof.close()
     mouth_receiver.close()
     access.close()
     voice.close()

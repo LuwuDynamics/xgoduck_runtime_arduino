@@ -1,0 +1,416 @@
+{
+  "repository": "https://github.com/LuwuDynamics/xgoduck_runtime_arduino",
+  "source": {
+    "kind": "git",
+    "label": "origin/master",
+    "upstream_commit": "b401d85d20bb5bfd0237242a8a5ab6847fc962a2",
+    "commit_date": "2026-10-31T16:06:07+08:00",
+    "sha256": {
+      "assets/app.js": "05e55d128ae97d9ad7166482a48df48344922fa2c7593eb277af491b919c2351",
+      "assets/calibrate.html": "661d8c8ccaf72e1859b0782d4fba5d510926ea9018ce640f8d545c3a91601134",
+      "assets/calibrate.js": "d107d84fe798d6e275d317ac8cffb19cb0ff3d44115b076d350db8715a4b9389",
+      "assets/index.html": "bcbbdcb88adaaf7db97b0c5ce001a34b09946154608d13de53a5db367f6a1ad8",
+      "assets/servo.css": "224af95d6cafce18925045fe67a2f4e557510429ecf5d54d26db8cb5068d5427",
+      "assets/servo.html": "5c7c6893eae4eb7cca4f37d7703c692186577ecd5c1394e86314242baf0e6eb2",
+      "assets/servo.js": "5f9e5071a173ae8d27263173361bbf7bbf564490a49dc33f6603c00470873104",
+      "assets/style.css": "45cace22f84a3e0b2465a81dd3e4e9fac0da2cb9f3869ae50bad1810d0652f98",
+      "python/controller.py": "f16fb9cb4284ca0c7796e29c447e90603a77457d898483cdf1662c738a9d627b",
+      "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
+      "python/proc.py": "54a89a001dc2c66030a3741978779f0095921812ea3f47e3be9fcdf4edc115ba",
+      "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
+      "python/rl_core.py": "6710b0a7fd791cf5c4879f20f47df3771629dd0093158f2200a9964990aafa6c",
+      "python/wire.py": "8242ac5fe66be21419e484084aadda7be44e3663c12c74871264ad1e54f08dfb",
+      "python/xgoduck_ballkick_left.onnx": "a64d35e9eef18a8b4851c0ae64323c0aabf9f26c8e64100b9a5100e01417f8c9",
+      "python/xgoduck_ballkick_right.onnx": "c173b2f076552a9a1d6672cdcc627e5a153804ff3aca1a07b23b481f83b319b1",
+      "python/xgoduck_getup.onnx": "c414f2bd84b0a79b89f0ba6997135eb45e4ecd9df9271ea989c237864027b2a3",
+      "python/xgoduck_pick.onnx": "f34e990dda785e9a8c53890bdcd0f7f1d457592691fd3703f3776b48fb2d14b8",
+      "python/xgoduck_roller.onnx": "126d75bf206f26e57e0d173b42fb5ef021820e1a06dde7ae9f8c2269361e06e6",
+      "python/xgoduck_roulade.onnx": "8adb1e6bc3f5eef751ce4edbf940f6d5a25fdec3ec4a798e1d9ca135c8248e97",
+      "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
+      "python/xgoduck_walk.onnx": "5eaae52c92df20139a779b4656e49ab824bb501fdd219e1241bcda91386fd75a",
+      "sketch/duck_config.h": "13930d512d0ca8796fe8efd63decf63251aa1142cc670db0854a09bf8824728f",
+      "sketch/protocol.h": "61d3614e5936c7db46d3238908b6574755265ef0eb8380a0d0215dcec64a30ee",
+      "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
+      "sketch/scs_bus.h": "92ff70ca57b49dcc0481dc4f390da1f3d6365feac82bee8f8a0f3ad1a202304f",
+      "sketch/sketch.ino": "4d73814035bafa9828cf11e9f0e652ba2da6d9c05823fc69349eb3d461e557cc",
+      "sketch/sketch.yaml": "46f0c79abfd9e04755661d3a878d9688cbd51fa35bb958ddf62c92209bf6d2ef",
+      "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
+      "tools/bridge_patch.py": "a07d6e63ea15d3de21351e342b4f46d3af678ca90dc9f1723ee2cf853dbddde0",
+      "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2"
+    }
+  },
+  "previous_motion_baseline": {
+    "source_kind": "local-directory",
+    "source_label": "稳定版本-hanqing/xgoduck_runtime_arduino-master",
+    "integration": "Stable control/calibration/servo web files and MCU protocol. Retain AI source ownership and independent ToF task. AppController blocks arming for nondefault legacy software zeros until all hardware centers are acknowledged. Chat/media/dual-mic/wake/mouth remain."
+  },
+  "sha256": {
+    "assets/app.js": "05e55d128ae97d9ad7166482a48df48344922fa2c7593eb277af491b919c2351",
+    "assets/calibrate.html": "661d8c8ccaf72e1859b0782d4fba5d510926ea9018ce640f8d545c3a91601134",
+    "assets/calibrate.js": "d107d84fe798d6e275d317ac8cffb19cb0ff3d44115b076d350db8715a4b9389",
+    "assets/index.html": "bcbbdcb88adaaf7db97b0c5ce001a34b09946154608d13de53a5db367f6a1ad8",
+    "assets/servo.css": "224af95d6cafce18925045fe67a2f4e557510429ecf5d54d26db8cb5068d5427",
+    "assets/servo.html": "5c7c6893eae4eb7cca4f37d7703c692186577ecd5c1394e86314242baf0e6eb2",
+    "assets/servo.js": "5f9e5071a173ae8d27263173361bbf7bbf564490a49dc33f6603c00470873104",
+    "assets/style.css": "45cace22f84a3e0b2465a81dd3e4e9fac0da2cb9f3869ae50bad1810d0652f98",
+    "python/controller.py": "168b77d2c7d708368c9ebf4423941df104b760386e95c8b86f347cdc0ae35272",
+    "python/duck_thing.py": "d092e952ea029799dc8a35bdd918b9af9fd75e1f0101cdc12067b508c509e839",
+    "python/gamepad.py": "232f679043d8cf76d5844db40e866b9962e224ecad58b1fcfaba40ad1227c525",
+    "python/main.py": "e50968a9199c05e68f90b5c5a7ce4b7ea2ba81e3372e31bb7a13864f89b6c36b",
+    "python/motion_access.py": "a34cc6d26e9a88dd3ae108d5e142e1fb06535925194eb0fc6f02b7f3dd60a190",
+    "python/motion_calibration.py": "9253d9caf0b84fdc2f65839545a26abd2f73116146b6c355b2f2408a966226b8",
+    "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
+    "python/proc.py": "54a89a001dc2c66030a3741978779f0095921812ea3f47e3be9fcdf4edc115ba",
+    "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
+    "python/rl_core.py": "6710b0a7fd791cf5c4879f20f47df3771629dd0093158f2200a9964990aafa6c",
+    "python/speech_mouth.py": "48b84890281956e0f4d0626ca327ddffba4f10040c3c0c693de602d024f7b4ee",
+    "python/wire.py": "1fd8663f7c95b61c9a76133b949459aa5bfdb86d5299388e89468de13082d722",
+    "python/xgoduck_ballkick_left.onnx": "a64d35e9eef18a8b4851c0ae64323c0aabf9f26c8e64100b9a5100e01417f8c9",
+    "python/xgoduck_ballkick_right.onnx": "c173b2f076552a9a1d6672cdcc627e5a153804ff3aca1a07b23b481f83b319b1",
+    "python/xgoduck_getup.onnx": "c414f2bd84b0a79b89f0ba6997135eb45e4ecd9df9271ea989c237864027b2a3",
+    "python/xgoduck_pick.onnx": "f34e990dda785e9a8c53890bdcd0f7f1d457592691fd3703f3776b48fb2d14b8",
+    "python/xgoduck_roller.onnx": "126d75bf206f26e57e0d173b42fb5ef021820e1a06dde7ae9f8c2269361e06e6",
+    "python/xgoduck_roulade.onnx": "8adb1e6bc3f5eef751ce4edbf940f6d5a25fdec3ec4a798e1d9ca135c8248e97",
+    "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
+    "python/xgoduck_walk.onnx": "5eaae52c92df20139a779b4656e49ab824bb501fdd219e1241bcda91386fd75a",
+    "sketch/duck_config.h": "0c16f9d6dcf5eb3b1e6789a77233d377edf2b53a4d670d9dd4cf22a5c54f93f7",
+    "sketch/protocol.h": "97d639b6712dcc88a9c0de10ee3e40d487aecad7f13f89920a588258dbb31d68",
+    "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
+    "sketch/scs_bus.h": "2073a0fb100e545011a34752d6f83115bd523d8eea03f41f489a481da866a8b1",
+    "sketch/sketch.ino": "d1b448c0d6e4613ce6ee79972258d7ae48c963e45214a7710daa70f3eb48e804",
+    "sketch/sketch.yaml": "46f0c79abfd9e04755661d3a878d9688cbd51fa35bb958ddf62c92209bf6d2ef",
+    "sketch/tof_sensor.h": "72f4463bdfd8da5d307281fa988cd4a6f0d8e6b90f7bda8643ff947ace106303",
+    "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
+    "tools/bridge_patch.py": "a07d6e63ea15d3de21351e342b4f46d3af678ca90dc9f1723ee2cf853dbddde0",
+    "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2",
+    "python/imu_calibration.py": "ee1d7c8fb0eab143ff81d6f264ea7930ca1ff06a339faaa80b3c78d4a64b2312",
+    "tools/calibrate-imu.py": "c9db505ca916a8fd3e8e7f6a4cbe2797e086b1324295c54bc1c56cb1f30b36db",
+    "python/runtime_gains.py": "9df29218402f7beb5175c0568da412fe2a98f829dedba4abe1ed197bae99bcad",
+    "python/forward_avoidance.py": "56fd66d9b0a1005226ccdcc132fd5d5d5e251002f54d9df3bcf6d5a56d989a95"
+  },
+  "stable_exact_files": [
+    "assets/app.js",
+    "assets/calibrate.html",
+    "assets/calibrate.js",
+    "assets/index.html",
+    "assets/servo.css",
+    "assets/servo.html",
+    "assets/servo.js",
+    "assets/style.css",
+    "python/policy.py",
+    "python/proc.py",
+    "python/recovery.py",
+    "python/rl_core.py",
+    "python/xgoduck_ballkick_left.onnx",
+    "python/xgoduck_ballkick_right.onnx",
+    "python/xgoduck_getup.onnx",
+    "python/xgoduck_pick.onnx",
+    "python/xgoduck_roller.onnx",
+    "python/xgoduck_roulade.onnx",
+    "python/xgoduck_sitstand.onnx",
+    "python/xgoduck_walk.onnx",
+    "sketch/qmi8658.h",
+    "sketch/sketch.yaml",
+    "sketch/uart_fifo.h",
+    "tools/bridge_patch.py",
+    "tools/prepare-bridge.py"
+  ],
+  "stable_controller_methods": {
+    "receive_boot_pd": "840b81ddf3eb689dcc99cd5b46b32cfb7a48af16f87fb16482f0adf70fa0a027",
+    "receive_raw": "ecd75849d27c0b6c5703fc0f2836eebd7a7348370b8764defa068161a93c4845",
+    "receive_cal_reply": "a6db3b0414e68c50f056f675fa804b152c78441370fa533efc6de8a4a6049c99",
+    "receive_servo_reply": "6c8609b9d42a899406105e8e59b49145dd18aaab0bfdaa9ea034d247013a6caa",
+    "receive_diagnostics": "144dc8caad7662b48a5870e2e6d2546f986bcf8166b7a0b2dcf3f63d573cb7eb",
+    "receive": "bdf7bb841cd5b2e36cd6f9f901ee2b33800cf3723326acccb9132f2244e4f294",
+    "_require_feedback": "955cbde1afe477c319a8c232bc30c951a6dabf194acbc8c889d70f23ca990934",
+    "_disarm_now": "7661a978f0e0473291b665001b09b55896fa27429c49839c30a9d7f803baefac",
+    "set_mode": "94eae349dcff7432e3d10384415c7d16a33b34589f3698b05b2ff7b76bc063fd",
+    "set_roller_mode": "407f5e6df17216828bc69fcdb16552fbc951b0a85930830d988f7446ee36721c",
+    "_models": "2ed0147f74f6779ddd2a56db41a9731e97f4cd8a34131843d769c17990cdf503",
+    "_standard_models": "ecee73819a3fc1c9d55a3f887f74c4f4f8f280a286f71588559fb73853333111",
+    "_apply_alphas_locked": "64aecf266dcd4f6ccc4a2cc3e854a1fb49722230f42a7c3ae1bde2a20042c43c",
+    "set_action_alphas": "2644a211d4cf38a05817655cce4b6dfd3bca5ce41a561189bc60a7735cf66920",
+    "set_imu_filters": "0aec02a1aa5b1b3bf7a9c700c17a29daa5149de441a83da1d312192ff4254fa6",
+    "set_action_scale": "c562212377ba786accccf5bc6a07ad34ebd8dd99695454f65b198ad2a9ecbbf0",
+    "_stop_pick_locked": "be6e88e8f0ea8efc1c347703037e459c7a933579c03de5a8b4ca024edc8f6ff1",
+    "_stop_roulade_locked": "14a324831eee403a9e56f76d8ddc0e7a8831d6412d2067937da64499d3b74fa7",
+    "_roulade_on": "07c92dabb46aa73d114e178411c28911fdaa9524db4805c41d9387fa31f5ff61",
+    "_stop_sitstand_locked": "4bcad0997d232b036f7593df1bb204b7701a06523734dfffadc11de656512f84",
+    "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c",
+    "_stop_kick_locked": "448808d5f3e99514faef41469dc6a2ac598b4e0d783f7e1ba89915840de95c8b",
+    "_kick_status_locked": "07e434e3527a25a79e0088b29fa665223c6914263823f3b4a95265dbb698be5a",
+    "start_kick": "711fcb324a7440e250515674ea2473b334c4ae2ba59b04cc42a52e89dae8fadd",
+    "set_sitstand": "5bb6e0f50558372ca96c3cdaa9226bfdc5204abd031ce7ec97316ffdf651e159",
+    "start_pick": "8e8515e4f11f6120d5dce075b133941dce5127bbbe48f89461887af99dbbe603",
+    "start_roulade": "0381453effe1195dd4635a8d38d5af8611439641df7f178f2028c7789d8c7e9b",
+    "cal_heartbeat": "a1acb51cf8cf2f833c9b22d90813b79e0b79648735b9824a8705e3d924f604fc",
+    "cal_center": "e23bb51b22a7c28026ca2e39cbecc66b4d5f72adc7987d32e6127e427e389182",
+    "_require_servo_debug": "507f1f355b9da3f778869c3284e029850184f0c9985c1155ee7bb287cf993e36",
+    "servo_op": "5439aa02274209578e698c299195250591115815f8a10b29ee8372b0411dd3c4",
+    "_servo_op": "19aecf412173efcebd3edbd282c4068339d6d64a91697d8a63967dd46bc220bc",
+    "_wait_servo_reply": "3cbb49c83288eedfa3f2a3657fdcd5b5ee6c6f91a1df808f828f7d60c71fa561",
+    "step": "dd7050dbc2caf5fa334353fb1d4c950fb25c5ff78847e334b5fadb50b3bad298",
+    "_keep_warm_idle": "0436c3a3854e0f5883cfc3234b90ad61b33c1b7a765c5a4716ed9ebe57d64e67",
+    "run": "00799b8d5cdc12172dd7764ff46a6b8c9e42aabda962b4dd2331bf8db56281d8",
+    "stop": "908e7841341d2bc7fcea661855ffe73bece1d99bed532f2b26cb460375510117"
+  },
+  "controller_adaptations": {
+    "__init__": "Retain the app input-source owner.",
+    "command": "Reject inactive web/voice/gamepad input without changing upstream command limits.",
+    "status": "Expose the app input-source owner."
+  },
+  "preserved_sha256": {
+    "assets/mobile-i18n.js": "b1af0bd57ff7a4f3c7f0a800050a91c0b8e33d9a22b06932ef8915e8473dbc6a",
+    "assets/mobile-tof.css": "63f141b35f703e52e502f470540b70f1e12057c9867943ec8a0ce373d5640104",
+    "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
+    "python/tof_status.py": "9adabb825be2808538ebd720c1dec4e585505bc44639362def27bf7f524f084a",
+    "assets/audio.html": "fdad8d6cd2309b9daaf807fbcc386ba2230220678e4101fdd6eefafe7bc9a278",
+    "assets/camera.js": "55178712a1d151347873f45802a75276b6913d7a079a05cf26f1cb837b30d5e9",
+    "assets/gamepad.css": "7747776e0867a91f1ea8c7ceaae6df1f2ba22363e8051b8947343d972dbb319f",
+    "assets/gamepad.html": "c9276ae743edae26acc4c6ff78b3f5131d95728cf26d9c4ff6fb0e4d27dc61ce",
+    "assets/gamepad.js": "9a6d163ed9a7c98ac4c7ff73bace57126fdbc6374d55ecbda72559c70d8e4ed9",
+    "assets/media-audio.js": "bb4cb14b4a14da30b9c944f4ffbf2e38532353c3d653ffabbeb51f349e0ea57a",
+    "assets/media-camera.js": "4ac86f9095fc1f69a61e9ea2dcf0c3b3dc8a1a14736329de04b868b1758ce9b4",
+    "assets/media.css": "744d80290bf3d404520fc865d4b8f0bd318b0a730e2dc3f3c4b0202900076198",
+    "assets/mobile-audio.js": "ac7dd88237acc35c2c7868516c5ee278d83b9b8df5b2c08957ccab7569e11bb6",
+    "assets/mobile-fullscreen.js": "ffdef3bf57edd8b814a8a4b18563a9cf77eeaa90ca63384da580e58cd950ce92",
+    "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
+    "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
+    "assets/mobile.css": "8a59deb2564a4c040605057d1afbed597bb0c9ce73d93c6502b4fec667b8af3f",
+    "assets/mobile.html": "ae74c32419cd3edc3b1759da355181cff6e64cfb1f28a10082314ff1e0320a01",
+    "assets/mobile.js": "22f5cb7fceb083942fc487e841d1c9297d3dbcf65dbaf90bb2c141332fbbce52",
+    "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
+    "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
+    "python/app_paths.py": "9f854ee38ff303c435b337585a951f68bc811b393744fc1924cdf4ba121c763b",
+    "python/assets/wake-duck.wav": "b6df2d5b7e8122d3da87f104102f4e2a6c922ed86ed4311b68ff64975bf59a3e",
+    "python/audio_devices.py": "ededf6a420318d90a49f511a09becfd16ec3842d5f5c2b550e99c0a5e7c7cb0a",
+    "python/camera.py": "09c1d12252cf4c8ee3a61590b01c9c586704856839fb743344a1c5cd036953ee",
+    "python/camera_capture.py": "fc92fe9968ff28736c81386d3a2904941b5c7f0665f2824a7eb5fad792e9e2e4",
+    "python/capture_channels.py": "60da662b07159e4cb56686f5a9430439f5c49498db171f5bf4bcb68775f0cd9a",
+    "python/connection_sounds.py": "669952e4d7fe958cf23306d82994dccc1c96dfe222e8565aa16978eca00ce75e",
+    "python/duck_sound.py": "1e4e3ed47fe9958a187a72639ae8b72bc67fdc7967730f690540397be3200253",
+    "python/local_ipc.py": "f258dda240f282f07ca4c6b82465b630cec2ab719c275626cd25209cde52e8e9",
+    "python/media_proxy.py": "f09760e035a775c0c58a479f80feba5aa46166bbe2c71441639325b7dc2f08c4",
+    "python/models/xiaoya.onnx": "8747846722a5ed2981ddb3b8c42e056f30618e369f8b5b357d2ac548d4102728",
+    "python/motion_feedback.py": "a4309e0e6538592c982e799d508f75b177aa85d842e9651f9fe994ece2f86209",
+    "python/mouth_ipc.py": "4d3f19518f569f194ff5b2f0f488d7494e2b343e0151c601e27768ebe11da523",
+    "python/no_audio.py": "bb074d2338d0011bb31dd134902c2e9c5f0130096e3a7bc28d36c32849e7713a",
+    "python/onboarding.py": "3b2fd60448c6bf9a4b71584687604b351858e0f27525783dd89f51f13785fd94",
+    "python/requirements.txt": "0b5fab222e1e112128382c8d1a4f9f5b0092999de504ee16b9bf56578e26babd",
+    "python/usb_startup.py": "98d653e45d66d3af8670d65b79427c2585ef3feea802111efa80cb4c908162f7",
+    "python/vendor/luwu_os/LICENSE": "ceb6e06c708f6ce983ea2be4adbb1b852ff29d807bd8980bc4bffc69b8a38186",
+    "python/vendor/luwu_os/apps/ai/wakeword_manager.py": "bbc7c511abb3f21acb0f0585b8c6e00e7aa847bb6891af1e0d2e32b29f3c67cc",
+    "python/vendor/luwu_os/apps/voice_chat/ambient_sound.py": "e5c896a93ff6fb91766531963125dc59ef5bc29a7c1011d691806a82cfe469c6",
+    "python/vendor/luwu_os/apps/voice_chat/application.py": "00155aadefde6a23613e87e7f6124a9ce11c70cf38bfe3bf8207c69f5ac627ec",
+    "python/vendor/luwu_os/apps/voice_chat/audio_codec.py": "aa8f240c92758cfa26fc5ea1b631ac6ef99616dd48dd2c9d2c2bd40d0166c290",
+    "python/vendor/luwu_os/apps/voice_chat/iot/__init__.py": "2742573ca565f9ee2f3c87ac354bc71fbf5574ea3aa329508dd68a0e9cccc4e4",
+    "python/vendor/luwu_os/apps/voice_chat/iot/robot_dog.py": "35580e390bef935a6f0b7b96a5f0a2515577cb9ebb3f43da22f119ca7dd7e1ed",
+    "python/vendor/luwu_os/apps/voice_chat/iot/thing.py": "f2e8ab73d97ef8286b2bf0385495788bc05db5776b069f7bb45f68ecd0d66bc0",
+    "python/vendor/luwu_os/apps/voice_chat/mcp_server.py": "5dc1648910fd3fa5e5ca767c1e84deb3f029b6fd5c089faa4dabbe3dc76f6158",
+    "python/vendor/luwu_os/apps/voice_chat/mqtt_udp_protocol.py": "c913ee4d972fa199e6e35e41ecbdcc0f728018a1a78a8046e22c86294bec2e2d",
+    "python/vendor/luwu_os/apps/voice_chat/ota.py": "042d3f9be170d10e61648472a01bb5d87ca0c835efd1fd32ce2558d77c5ea21b",
+    "python/vendor/luwu_os/apps/voice_chat/sound_labels.csv": "7adeee160d8231e254d122cdb4948c3d89de4daeb6a99e1cdc0c7f2d56fbd116",
+    "python/vendor/luwu_os/apps/voice_chat/vision.py": "a008ba08da4f4faf4b5719ddab3deee205ed5df4a88bab9c8b1ce3324ce3d5ae",
+    "python/vendor/luwu_os/assets/music/ding.wav": "20109348a0ebd35d33d16608750cfb42ca8efb7c7db0da9c839f634507de9db7",
+    "python/vendor/luwu_os/assets/music/send.wav": "675ff354d4723d7e9cccbef416295e5a806ecc747323f1bc2d6d336811718cf1",
+    "python/vendor/luwu_os/libs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "python/vendor/luwu_os/libs/i18n.py": "cf429f4dd0f9efa43d0787028fcc4c8e44c41ee17a9ff1b7ed2143df9b848c54",
+    "python/vendor/luwu_os/libs/webrtc_apm/__init__.py": "f9f32f8b73a943a0e67014513f81186e14b5fb9735dff014bc4394ef899e10ea",
+    "python/vendor/luwu_os/libs/webrtc_apm/linux/arm64/libwebrtc_apm.so": "bb6a7281e00a7517cb1175e569555ced67b09483742257d3a7d9568e11a2df97",
+    "python/vendor/luwu_os/model/embedding_model.onnx": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f",
+    "python/vendor/luwu_os/model/hi_luka_qwen.onnx": "62d697ef2699be8541e499c74894853f65b7d38f815b4beeb4931e5cb3ee8d40",
+    "python/vendor/luwu_os/model/melspectrogram.onnx": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
+    "python/vendor/luwu_os/model/xiaolu_classmate.onnx": "948b05e7a0015479cba88b951e3bb6abe576be7470f743cd13fd716403702b58",
+    "python/vendor/microduck_voice/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "python/vendor/microduck_voice/NOTICE.md": "8b600d72ccaca4acf005e07394aff20e736f44f3eea55299b93bb6f766163f96",
+    "python/vendor/microduck_voice/__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
+    "python/voice_application.py": "3ff5fa03e1bc7a1a063fad694ad69882614f33a57e94908ab7df31d0849c3002",
+    "python/voice_config.py": "22d82bd499bb6840cb7add69071564954e47db53f6f03d0582c7670ad9887874",
+    "python/voice_media.py": "b458e4f54c2beef1f67b6b951fe5a45d0dc1c2b4a10863282560a4280a092378",
+    "python/voice_process.py": "0cac8b6f518587c455e6cf7c2e50685c15b330243c43fd7a690954184f375b99",
+    "python/voice_supervisor.py": "fe38af4572b30e11af3ce0fc0e1189cf6937b8422b96a338c6a6207761dc368c",
+    "sketch/src/vl53l5cx/LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
+    "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.cpp": "9c7668b87766eac634d1b008e46e4528726144ffa26923838799ad3af17b43f0",
+    "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.h": "c3b6111d6922bba301c80a4426db47b7ee71ff1a1db110283201062c6427ec70",
+    "sketch/src/vl53l5cx/SparkFun_VL53L5CX_Library.cpp": "4e3ae7ebea07a0685f2334564962680e1a4190ff5cd179bdbbd3ba7490255f18",
+    "sketch/src/vl53l5cx/SparkFun_VL53L5CX_Library.h": "5bb3441399c35e7b08086b82ba66b11c81898dfefd498a7f40a24f2e6d75dd4e",
+    "sketch/src/vl53l5cx/SparkFun_VL53L5CX_Library_Constants.h": "e2c2fbec9aa35fe96fdc89350ecda76dd33bb0049b4faef977561e66e79c019e",
+    "sketch/src/vl53l5cx/platform.cpp": "dbc25c1ba97365da752bf04aad552deea4e85cb2087d1abc382c9379d701d43b",
+    "sketch/src/vl53l5cx/platform.h": "c061451cdd498746659cbb8e5519a930b5ab77a00298295d4e83f0ac63ce09d9",
+    "sketch/src/vl53l5cx/vl53l5cx_api.cpp": "b35d49835a6953f1ed99819c0ae8d16c1c2292fc68288d7fa84e0adf4f66f3f8",
+    "sketch/src/vl53l5cx/vl53l5cx_api.h": "eea4c04f95d7688ccda53045ce886491d839db7fd4e20f70ebb78c7327821b57",
+    "sketch/src/vl53l5cx/vl53l5cx_buffers.h": "05a61b0e14cf55d43aed7c02a819e542b03452b6bd713e71216cdd5844b8b4bf",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_detection_thresholds.cpp": "a842e0e372679000e6ccfea8b8c943e610f6d33350c56f613de1272550f9b3c8",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_detection_thresholds.h": "30f8753650c247ced52cacb08e96ec4d385b0e67e60eee4370c9c1568cb61b18",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.cpp": "dbcee07fc4da31c2fb88866c34610cf39bdf5183cff26edd9186922be6a3fdd6",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
+    "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1"
+  },
+  "preserved_snapshot": {
+    "kind": "working-tree-before-motion-sync",
+    "manifest_sha256": "e15775f45a865210ab5443786dba97dae6c559c9b935486500c876de35734a43"
+  },
+  "sketch": {
+    "source_sha256": "4d73814035bafa9828cf11e9f0e652ba2da6d9c05823fc69349eb3d461e557cc",
+    "optional_overlay": [
+      "#include \"tof_sensor.h\"",
+      "  startTof();"
+    ],
+    "bridge_overlay": {
+      "upstream": "Bridge.provide(\"duck_servo\", receiveServo);",
+      "integrated": "Bridge.provide(\"duck_servo\", receiveServo) &&\n              Bridge.provide(\"duck_tof\", readTof);"
+    },
+    "transport_overlays": [
+      {
+        "reason": "Repair Router method registry after serial reconnect even when $/version still responds. Same-owner registration verified idempotent on Router 0.11.0.",
+        "upstream": "",
+        "integrated": "      // A serial reconnect drops Router registrations while version still works.\n      // Re-registering the same owner is idempotent; local handlers stay bound.\n      if (!(Bridge.provide(\"duck_command\", receiveCommand) &&\n            Bridge.provide(\"duck_cal\", receiveCal) &&\n            Bridge.provide(\"duck_servo\", receiveServo) &&\n            Bridge.provide(\"duck_tof\", readTof))) break;\n"
+      }
+    ],
+    "runtime_gains_overlays": [
+      {
+        "integrated": "static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {\n  ServoPacket pkt;\n  bool valid = bytes.size() == sizeof(pkt);\n  if (valid) {\n    memcpy(&pkt, bytes.data(), sizeof(pkt));\n    valid = memcmp(pkt.magic, \"DQV2\", 4) == 0 && pkt.op <= SERVO_READ_RUN_GAINS &&\n            pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;\n    if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {\n      valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;\n      if (pkt.op == SERVO_SET_PROTECTION) {\n        valid = valid && !pkt.protectionCurrent &&\n                (pkt.protectionFlags == PROTECTION_ENABLED || pkt.protectionFlags == PROTECTION_DISABLED);\n      } else {\n        valid = valid && !pkt.protectionFlags;\n      }\n    } else {\n      valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;\n    }\n    if (pkt.op == SERVO_SET_ID) valid = valid && pkt.newId <= 253;\n    if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;\n  }\n  k_mutex_lock(&hostMu, K_FOREVER);\n  if (valid) { pendingServo = pkt; servoPending = true; atomic_set(&lastHostRxUs, micros()); }\n  else {\n    k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);\n  }\n  k_mutex_unlock(&hostMu);\n}\n",
+        "upstream": "static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {\n  ServoPacket pkt;\n  bool valid = bytes.size() == sizeof(pkt);\n  if (valid) {\n    memcpy(&pkt, bytes.data(), sizeof(pkt));\n    valid = memcmp(pkt.magic, \"DQV2\", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_CURRENT && pkt.op != 4;\n    if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {\n      valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;\n      if (pkt.op == SERVO_SET_PROTECTION) {\n        valid = valid && !pkt.protectionCurrent &&\n                (pkt.protectionFlags == PROTECTION_ENABLED || pkt.protectionFlags == PROTECTION_DISABLED);\n      } else {\n        valid = valid && !pkt.protectionFlags;\n      }\n    } else {\n      valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;\n    }\n    if (pkt.op == SERVO_SET_ID) valid = valid && pkt.newId <= 253;\n    if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;\n  }\n  k_mutex_lock(&hostMu, K_FOREVER);\n  if (valid) { pendingServo = pkt; servoPending = true; atomic_set(&lastHostRxUs, micros()); }\n  else {\n    k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);\n  }\n  k_mutex_unlock(&hostMu);\n}\n"
+      },
+      {
+        "integrated": "static void applyServoOp(const ServoPacket &pkt) {\n  ServoReplyPacket reply = {};\n  memcpy(reply.magic, \"DQS3\", 4);\n  reply.op = pkt.op;\n  reply.targetId = pkt.targetId;\n  reply.centerPos = SERVO_CENTER_POS;\n  reply.ok = 1;\n  if (servoMidId != 0xFF && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {\n    reply.ok = 0;\n    publishServoReply(reply);\n    return;\n  }\n  switch (pkt.op) {\n    case SERVO_ENTER:\n      hostMode = HOST_SERVO_DEBUG;\n      rawNotifyEveryTick = true;\n      servoMidId = 0xFF;\n      setTorqueEnable(false);\n      break;\n    case SERVO_EXIT:\n      if (hostMode != HOST_SERVO_DEBUG) break;\n      hostMode = HOST_NORMAL;\n      rawNotifyEveryTick = false;\n      servoMidId = 0xFF;\n      setTorqueEnable(false);\n      break;\n    case SERVO_UNLOCK:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoUnlock(pkt.targetId);\n      break;\n    case SERVO_SET_ID:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      setTorqueEnable(false);\n      servoSetId(pkt.targetId, pkt.newId);\n      break;\n    case SERVO_RESET_MID:\n      if (hostMode != HOST_SERVO_DEBUG || !pingServo(pkt.targetId)) { reply.ok = 0; break; }\n      scsWriteByte(pkt.targetId, ADDR_TORQUE, 0);\n      Serial1.flush();\n      servoMidId = pkt.targetId;\n      servoMidCount = 0;\n      servoMidNextUs = micros();\n      return; // Reply only after all three mid commands have been sent.\n    case SERVO_SET_PERM_KP_KD:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetPermKpKd(pkt.targetId, pkt.kp, pkt.kd);\n      break;\n    case SERVO_SET_PROTECTION:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtection(pkt.protectionFlags);\n      reply.protectionFlags = pkt.protectionFlags;\n      break;\n    case SERVO_SET_PROTECTION_CURRENT:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtectionCurrent(pkt.protectionCurrent);\n      reply.protectionCurrent = pkt.protectionCurrent;\n      break;\n    case SERVO_PING:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      reply.ok = pingServo(pkt.targetId) ? 1 : 0;\n      break;\n    case SERVO_READ: {\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      uint16_t pos = 0;\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoPresent(pkt.targetId, pos) && readServoGains(pkt.targetId, kp, kd);\n      reply.rawPos = pos;\n      reply.kp = kp; reply.kd = kd;\n      break;\n    }\n    case SERVO_READ_RUN_GAINS: {\n      if (hostMode == HOST_CAL) { reply.ok = 0; break; }\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoGains(pkt.targetId, kp, kd, ADDR_TEMP_KP);\n      reply.kp = kp; reply.kd = kd;\n      break;\n    }\n    default:\n      reply.ok = 0;\n      break;\n  }\n  publishServoReply(reply);\n}\n",
+        "upstream": "static void applyServoOp(const ServoPacket &pkt) {\n  ServoReplyPacket reply = {};\n  memcpy(reply.magic, \"DQS3\", 4);\n  reply.op = pkt.op;\n  reply.targetId = pkt.targetId;\n  reply.centerPos = SERVO_CENTER_POS;\n  reply.ok = 1;\n  if (servoMidId != 0xFF && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {\n    reply.ok = 0;\n    publishServoReply(reply);\n    return;\n  }\n  switch (pkt.op) {\n    case SERVO_ENTER:\n      hostMode = HOST_SERVO_DEBUG;\n      rawNotifyEveryTick = true;\n      servoMidId = 0xFF;\n      setTorqueEnable(false);\n      setMouthKpKd();\n      break;\n    case SERVO_EXIT:\n      if (hostMode != HOST_SERVO_DEBUG) break;\n      hostMode = HOST_NORMAL;\n      rawNotifyEveryTick = false;\n      servoMidId = 0xFF;\n      setTorqueEnable(false);\n      setMouthKpKd();\n      break;\n    case SERVO_UNLOCK:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoUnlock(pkt.targetId);\n      break;\n    case SERVO_SET_ID:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      setTorqueEnable(false);\n      servoSetId(pkt.targetId, pkt.newId);\n      break;\n    case SERVO_RESET_MID:\n      if (hostMode != HOST_SERVO_DEBUG || !pingServo(pkt.targetId)) { reply.ok = 0; break; }\n      scsWriteByte(pkt.targetId, ADDR_TORQUE, 0);\n      Serial1.flush();\n      servoMidId = pkt.targetId;\n      servoMidCount = 0;\n      servoMidNextUs = micros();\n      return; // Reply only after all three mid commands have been sent.\n    case SERVO_SET_PERM_KP_KD:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetPermKpKd(pkt.targetId, pkt.kp, pkt.kd);\n      break;\n    case SERVO_SET_PROTECTION:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtection(pkt.protectionFlags);\n      reply.protectionFlags = pkt.protectionFlags;\n      break;\n    case SERVO_SET_PROTECTION_CURRENT:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtectionCurrent(pkt.protectionCurrent);\n      reply.protectionCurrent = pkt.protectionCurrent;\n      break;\n    case SERVO_PING:\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      reply.ok = pingServo(pkt.targetId) ? 1 : 0;\n      break;\n    case SERVO_READ: {\n      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      uint16_t pos = 0;\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoPresent(pkt.targetId, pos) && readServoGains(pkt.targetId, kp, kd);\n      reply.rawPos = pos;\n      reply.kp = kp; reply.kd = kd;\n      break;\n    }\n    default:\n      reply.ok = 0;\n      break;\n  }\n  publishServoReply(reply);\n}\n"
+      },
+      {
+        "integrated": "      setTorqueEnable(false);\n      break;\n    case CAL_CENTER_ONE:",
+        "upstream": "      setTorqueEnable(false);\n      setMouthKpKd();\n      break;\n    case CAL_CENTER_ONE:",
+        "count": 1
+      },
+      {
+        "integrated": "  // Preserve each servo's existing KP/KD, including the mouth.\n",
+        "upstream": "  setMouthKpKd();\n",
+        "count": 1
+      },
+      {
+        "integrated": "      setTorqueEnable(false);\n    }\n    const bool busTaken",
+        "upstream": "      setTorqueEnable(false);\n      setMouthKpKd();\n    }\n    const bool busTaken",
+        "count": 1
+      },
+      {
+        "integrated": "          enabled = true; timedOut = false;\n        }",
+        "upstream": "          enabled = true; timedOut = false;\n          setMouthKpKd();\n        }",
+        "count": 1
+      }
+    ]
+  },
+  "mcu_compatibility": {
+    "normal_control_task_sha256": "0804f90e2ecd2ad0fa5ed0a76758850cef445517b3dd25a767a272bf98a83d30",
+    "state_format": "<4sBBH10I6h45f",
+    "command_format": "<4sIIIBBH15f",
+    "diagnostic_format": "<4s16I",
+    "calibration": "Upstream hardware-center DQL2/DQA1/DQR2 and DQV2/DQS3 packets; legacy software centers are not applied.",
+    "gain_call_overlays": [
+      {
+        "integrated": "  // Preserve each servo's existing KP/KD, including the mouth.\n",
+        "upstream": "  setMouthKpKd();\n",
+        "count": 1
+      },
+      {
+        "integrated": "      setTorqueEnable(false);\n    }\n    const bool busTaken",
+        "upstream": "      setTorqueEnable(false);\n      setMouthKpKd();\n    }\n    const bool busTaken",
+        "count": 1
+      },
+      {
+        "integrated": "          enabled = true; timedOut = false;\n        }",
+        "upstream": "          enabled = true; timedOut = false;\n          setMouthKpKd();\n        }",
+        "count": 1
+      }
+    ]
+  },
+  "integration": "Pinned master motion math, eight ONNX policies, motion web pages, STM32 protocol and nonblocking Bridge patch. Preserve AI, gamepad and voice ownership, calibration migration, speech-mouth exclusion and independent ToF registration on each Bridge connection. Voice Stand enters sit-to-stand through the existing model/history, preserves an active stand transition, and cancels kick before requesting walk mode. Repair method registration every 2 s on the Bridge supervisor; normal 100 Hz control, motion models and wire ABI remain pinned to master. Servo gains are user-controlled: no automatic writes during App/voice startup, restart, MCU boot, arming or exclusive-mode transitions. Manual saved settings and read-only runtime diagnostics remain available. Saved settings, zero positions, normal motion math and all web assets remain unchanged.",
+  "calibration": "Keep old data/zero_pos.json unchanged as a backup only. Hardware centers live in each servo. Per-robot data/hardware-centers.json records acknowledged migration against the legacy file digest; failed/partial calibration cannot enable motion.",
+  "audio_cue_overlay": {
+    "manifest": "provenance/audio-cues.json",
+    "replaced_preserved_assets": {
+      "python/vendor/luwu_os/assets/music/send.wav": "f6bbde0dc3ddb603d09a43e7f748500bc2efeff437195daf33afca53717098f3",
+      "python/vendor/luwu_os/assets/music/ding.wav": "b2187454c169624e7198ad58eba1ec509fd4702cd1963864d7e89fdda52419ca"
+    },
+    "reason": "0.2.34 user-requested shorter and quieter send/reply-complete cues. All stable motion/web/MCU files remain unchanged."
+  },
+  "local_aec_overlay": {
+    "manifest": "provenance/local-aec.json",
+    "replaced_preserved_assets": {
+      "python/vendor/luwu_os/apps/voice_chat/application.py": "aa541b15d4d82c580d2a2c5819680e8b4415df4565acc7592321cfe51af2722e",
+      "python/vendor/luwu_os/apps/voice_chat/audio_codec.py": "67a52cbffdb4d0c7f879bacfb65467e41a69a7a68ac9de71ddae9acca9cab3c2",
+      "python/audio_devices.py": "fa786891254c37c919eecef6acace0375ae7eb7aef6dd952c09f699bacbe4e5b",
+      "python/voice_config.py": "7f0f57b88d954e71a1af516b6bba276cb32227d19eb45a8bf69912d9b42bf36b",
+      "python/voice_process.py": "ab083268a7757df90769ecf8dc49534b386409b54e0d35f06cdb5ada16de60a7",
+      "python/voice_application.py": "58844fdaab4e4a7f1824578deb3d6ff093787c93ceacb79a694935818e26adc0"
+    },
+    "reason": "Continuous local reference, compatible cloud abort, reply-generation isolation and optional AEC playback headroom; stable motion/web/MCU unchanged."
+  },
+  "static_imu_calibration": {
+    "file": "data/imu-calibration.json",
+    "previous_adapter_sha256": "eba526b1e80ea4804fac5561c9ddd901ba2ecbd6c53c8aedd54ee019bd2686ea",
+    "guide": "docs/imu-calibration.md",
+    "integration": "Per-device cached body-frame rotation and static gyro zero before the unchanged upstream SignalFilter. Load once at process start; no automatic recalibration or file I/O in feedback. Raw diagnostics preserved; missing file retains baseline, invalid file blocks arming. No MCU, policy math or original web changes."
+  },
+  "runtime_gains_overlay": {
+    "auto_apply": false,
+    "scope": "User-controlled per-servo gains, including the mouth. No gain writes on App/voice startup, respawn, MCU boot, arming, exclusive-mode transitions or timeout. Manual saved settings and on-demand runtime readback remain.",
+    "opcodes": {
+      "retired_fixed_profile": 11,
+      "read_runtime": 12
+    },
+    "previous_profile": {
+      "kp": 5,
+      "kd": 10,
+      "status": "removed"
+    }
+  },
+  "forward_avoidance_overlay": {
+    "previous_sha256": {
+      "python/duck_thing.py": "b60f40afa12988908d6742b98b53d56f4ddd22f0680a575e5c3611797fe17522",
+      "python/main.py": "93b7efd55bad9b49fb37ec6f6b1d0f104c23736f0d2c61ce183eac9b3e35fd04",
+      "python/motion_access.py": "9b0fd9b193522d5baf13c9e4d48ac782533c1fceb9a269df854cf4a626e60407",
+      "python/motion_calibration.py": "af4cec3e2d9df48fee42a3d650d406721444790d76cdd9b9d7d70b42ff63b2de",
+      "python/vendor/luwu_os/apps/voice_chat/mcp_server.py": "62595a7cd0cb8842d5c5b7fda1f1623bd8356b2d262ca6a32c3e541a273cde84"
+    },
+    "guide": "docs/forward-avoidance.md",
+    "mcp_models": [
+      "sitstand",
+      "ballkick_left",
+      "ballkick_right",
+      "roller"
+    ],
+    "integration": "Existing MCP stand/move/pick/roulade plus Sit, LeftKick, RightKick and SetWalkingMode. Cached forward-only walking/roller input limit; front ToF slows/stops travel, missing/stale/invalid measurements stop forward only. Cancel blocked MCP jobs/queue and require new command after recovery; held controls must release. Preserve torque, core controller math, special-model inputs, MCU, all model files and original web assets. Background monitor renews its private read-only lease; no hardware RPC or file I/O in the control loop. MCP comment and wire-size test use verified CN packet budget 16000 bytes, 60 tools, including JSON escaping/envelope."
+  },
+  "tof_mcp_outcome_overlay": {
+    "previous_sha256": {
+      "python/main.py": "9a6b288ea34623978aa5ce7e383463eff046246be255ae0857e149ef6bc5a84d",
+      "python/duck_thing.py": "2d8b9d97e6683f920a277e606ca82822ba499ade19d15236c425357ccc17a49e",
+      "python/motion_access.py": "286f7c029850e9824ab61c8602a006a491f51146cafcbbc31913c9d2cfe2c3f7"
+    },
+    "guide": "docs/forward-avoidance.md",
+    "integration": "Read-only Duck.GetToF via authenticated local IPC returns the 5 Hz sensor grid and cached forward status, each with frame sequence/age. Expected obstacle/sensor pauses return successful MCP calls with blocked execution; retain actual parameter, permission and motion feedback/transport errors. Preflight, queued and racing forward blocks do not set a false motion error. No changes to controller math, guard thresholds, web assets, ONNX, audio or MCU."
+  },
+  "forward_distance_defaults": {
+    "stop_mm": 100,
+    "slow_mm": 150,
+    "clear_margin_mm": 50,
+    "previous_sha256": "ffe9d830b0932c9b4774ce615c785544ef05434c2fc008fcf121702123c20b26",
+    "scope": "User-selected normal walking distances. Retain faster Roller distance margin, invalid/stale sensor stop, torque retention, three-frame release and new-command requirement."
+  },
+  "normal_forward_defaults": {
+    "tool": "Duck.Forward",
+    "normal_m_s": 0.1,
+    "fast_m_s": 0.15,
+    "max_mcp_linear_m_s": 0.15,
+    "seconds_default": 3,
+    "previous_sha256": "131c7f0db35100820716663eab0a0a6287391da9d4cddacd30831e614f8d3617",
+    "previous_profile": {
+      "tool": "Duck.Forward",
+      "speed_m_s": 0.2,
+      "seconds_default": 3,
+      "previous_sha256": "c2ee7a77c11f40f04395a4276084db99e976b2a6f6a74505f97f9a866fa0241a",
+      "scope": "Fixed-speed ordinary forward entry without speed argument. Explicit slow/numeric Move keeps the supplied speed; omitted Move speed uses directional defaults. Phone RemoteMove, motion core, ToF rules, models and MCU unchanged. Restart the voice child to refresh the tool catalog."
+    },
+    "scope": "All MCP Move directions default to 0.1 m/s and reject speeds above 0.15, including Roller. Forward normal/fast profiles select 0.1/0.15. Explicit values within the cap are preserved. Web/core limits, angular rates, RemoteMove percentage mapping, ToF, models and MCU unchanged."
+  }
+}

@@ -13,12 +13,23 @@ Motor motors[NUM_MOTORS];
 struct k_mutex motorsMu;
 // App sketches are Zephyr loadable extensions: initialize kernel objects at runtime.
 // Avoid iterable kernel-object sections in the loadable sketch.
-static struct k_mutex commandMu, stateMu, hostMu;
+static struct k_mutex commandMu, stateMu, hostMu, imuMu;
 static struct k_sem reportReady;
 K_THREAD_STACK_DEFINE(controlStack, 4096);
 K_THREAD_STACK_DEFINE(reportStack, 4096);
-static struct k_thread controlThread, reportThread;
+K_THREAD_STACK_DEFINE(imuStack, 4096);
+K_THREAD_STACK_DEFINE(bridgeStack, 4096);
+static struct k_thread controlThread, reportThread, imuThread, bridgeThread;
 static StatePacket snapshot = {};
+static RawPacket rawSnapshot = {};
+static bool rawSnapshotEveryTick = false;
+static DiagnosticPacket diagnosticSnapshot = {};
+static atomic_t bridgeReady = ATOMIC_INIT(0), bridgeStage = ATOMIC_INIT(0);
+static atomic_t bridgeAttempts = ATOMIC_INIT(0), bridgeFailures = ATOMIC_INIT(0);
+static atomic_t notifyDrops = ATOMIC_INIT(0), bridgeReconnects = ATOMIC_INIT(0);
+static atomic_t bridgeReadyUs = ATOMIC_INIT(0);
+static atomic_t lastHostRxUs = ATOMIC_INIT(0);
+static ImuSnapshot imuSnapshot = {};
 static CommandPacket latest = {};
 static bool pending = false;
 static uint32_t invalidCommands = 0, reportDrops = 0;
@@ -42,19 +53,76 @@ static uint8_t servoMidId = 0xFF, servoMidCount = 0;
 static uint32_t servoMidNextUs = 0;
 static bool rawNotifyEveryTick = false;
 
+static ImuSnapshot readImuSnapshot() {
+  ImuSnapshot out;
+  k_mutex_lock(&imuMu, K_FOREVER);
+  out = imuSnapshot;
+  k_mutex_unlock(&imuMu);
+  return out;
+}
+
+static void imuTask(void*, void*, void*) {
+  ImuSnapshot out = {};
+  uint32_t deadline = micros(), previousSampleUs = 0, nextInitUs = 0;
+  unsigned failedReads = 0;
+  bool configured = false;
+  for (;;) {
+    if (!configured && (int32_t)(micros() - nextInitUs) >= 0) {
+      ++out.initAttempts;
+      configured = initImu();
+      failedReads = 0;
+      deadline = micros();
+      previousSampleUs = 0;
+      if (!configured) { ++out.errors; nextInitUs = micros() + 1000000u; }
+    }
+    const uint32_t start = micros();
+    if (configured && updateImu()) {
+      out.sample = imu;
+      out.sampleUs = micros();
+      out.periodUs = previousSampleUs ? out.sampleUs - previousSampleUs : TICK_US;
+      previousSampleUs = out.sampleUs;
+      ++out.seq;
+      failedReads = 0;
+    } else {
+      out.sample.ok = 0;
+      if (configured) {
+        ++out.errors;
+        if (++failedReads >= 3) {
+          configured = false;
+          qmiAddr = 0;
+          nextInitUs = micros() + 1000000u;
+        }
+      }
+    }
+    out.workUs = micros() - start;
+    k_mutex_lock(&imuMu, K_FOREVER);
+    imuSnapshot = out;
+    k_mutex_unlock(&imuMu);
+    deadline += TICK_US;
+    const uint32_t now = micros();
+    if ((int32_t)(deadline - now) <= 0) {
+      const uint32_t missed = (now - deadline) / TICK_US + 1;
+      out.overruns += missed;
+      deadline += missed * TICK_US;
+    }
+    const int32_t remaining = (int32_t)(deadline - micros());
+    if (remaining > 0) k_sleep(K_USEC(remaining));
+  }
+}
+
 static void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {
   CommandPacket cmd;
   bool valid = bytes.size() == sizeof(cmd);
   if (valid) {
     memcpy(&cmd, bytes.data(), sizeof(cmd));
     valid = memcmp(cmd.magic, "DQC1", 4) == 0 && cmd.mode <= HOLD &&
-            !cmd.reserved && !cmd.reserved2 &&
-            cmd.ttlUs > 0 && cmd.ttlUs <= COMMAND_TTL_US;
+            !cmd.reserved && !cmd.reserved2;
     for (unsigned i = 0; i < NUM_MOTORS; ++i)
       valid = valid && isfinite(cmd.target[i]);
   }
   k_mutex_lock(&commandMu, K_FOREVER);
-  if (valid) { latest = cmd; pending = true; }
+  if (valid && cmd.mode != DISARM && !atomic_get(&bridgeReady)) valid = false;
+  if (valid) { latest = cmd; pending = true; atomic_set(&lastHostRxUs, micros()); }
   else ++invalidCommands;
   k_mutex_unlock(&commandMu);
 }
@@ -66,9 +134,10 @@ static void receiveCal(MsgPack::bin_t<uint8_t> bytes) {
     memcpy(&pkt, bytes.data(), sizeof(pkt));
     valid = memcmp(pkt.magic, "DQL2", 4) == 0 && pkt.op <= CAL_CENTER_ONE;
     if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;
+    if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingCal = pkt; calPending = true; }
+  if (valid) { pendingCal = pkt; calPending = true; atomic_set(&lastHostRxUs, micros()); }
   else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
@@ -80,7 +149,8 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
   bool valid = bytes.size() == sizeof(pkt);
   if (valid) {
     memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_CURRENT && pkt.op != 4;
+    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_READ_RUN_GAINS &&
+            pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;
     if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
       valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;
       if (pkt.op == SERVO_SET_PROTECTION) {
@@ -93,9 +163,10 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
       valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;
     }
     if (pkt.op == SERVO_SET_ID) valid = valid && pkt.newId <= 253;
+    if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingServo = pkt; servoPending = true; }
+  if (valid) { pendingServo = pkt; servoPending = true; atomic_set(&lastHostRxUs, micros()); }
   else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
@@ -143,7 +214,6 @@ static void applyCalOp(const CalPacket &pkt) {
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       setTorqueEnable(false);
-      setRunKpKd();
       break;
     case CAL_CENTER_ONE:
       if (hostMode != HOST_CAL || calIndex != 0xFF ||
@@ -176,8 +246,7 @@ static void advanceCalibration() {
     return;
   }
   // Only this servo is loaded. No goals are written for other joints.
-  scsWriteByte(id, ADDR_TEMP_KP, TEMP_KP_CAL);
-  scsWriteByte(id, ADDR_TEMP_KD, TEMP_KD_CAL);
+  // Keep the servo's existing gains while holding its calibrated center.
   scsWriteByte(id, ADDR_TORQUE, 1);
   writeSingleGoalRaw(id, CAL_HOLD_POS);
   Serial1.flush();
@@ -231,7 +300,6 @@ static void applyServoOp(const ServoPacket &pkt) {
       rawNotifyEveryTick = true;
       servoMidId = 0xFF;
       setTorqueEnable(false);
-      setRunKpKd();
       break;
     case SERVO_EXIT:
       if (hostMode != HOST_SERVO_DEBUG) break;
@@ -239,7 +307,6 @@ static void applyServoOp(const ServoPacket &pkt) {
       rawNotifyEveryTick = false;
       servoMidId = 0xFF;
       setTorqueEnable(false);
-      setRunKpKd();
       break;
     case SERVO_UNLOCK:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
@@ -285,6 +352,13 @@ static void applyServoOp(const ServoPacket &pkt) {
       reply.kp = kp; reply.kd = kd;
       break;
     }
+    case SERVO_READ_RUN_GAINS: {
+      if (hostMode == HOST_CAL) { reply.ok = 0; break; }
+      uint8_t kp = 0, kd = 0;
+      reply.ok = readServoGains(pkt.targetId, kp, kd, ADDR_TEMP_KP);
+      reply.kp = kp; reply.kd = kd;
+      break;
+    }
     default:
       reply.ok = 0;
       break;
@@ -296,19 +370,21 @@ static void controlTask(void*, void*, void*) {
   Serial1.begin(SERVO_BAUD);
   enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(DT_PHANDLE_BY_IDX(DT_PATH(zephyr_user), serials, 0))));
   for (unsigned i=0; i<3; ++i) { setTorqueEnable(false); k_msleep(5); }
-  setRunKpKd();
+  // Preserve each servo's existing KP/KD, including the mouth.
   // Read temporary KP/KD once at boot (address 50, 2 bytes). Missing IDs stay unset.
   readAllRegisters(ADDR_TEMP_KP, 2); Serial1.flush();
   const uint32_t pdStart=micros();
   while ((uint32_t)(micros()-pdStart)<20000) { parseServoRx(); k_sleep(K_USEC(100)); }
-  initImu();
   uint32_t deadline = micros(), previous = deadline, seq = 0, lastCommandUs = 0;
-  uint32_t acceptedSeq = 0, ttl = COMMAND_TTL_US, overruns = 0, lastImuUs = 0;
-  uint32_t lastHealthyUs = 0;
+  uint32_t acceptedSeq = 0, overruns = 0;
+  uint32_t servoWrites = 0, servoReads = 0;
   bool enabled = false, timedOut = false, haveCommand = false;
   for (;;) {
     const uint32_t start = micros(), period = start - previous;
     previous = start;
+    ImuSnapshot sampledImu = readImuSnapshot();
+    const bool imuFresh = sampledImu.sample.ok && sampledImu.seq &&
+                         (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;
 
     CalPacket calPkt;
     ServoPacket servoPkt;
@@ -329,18 +405,33 @@ static void controlTask(void*, void*, void*) {
     const uint32_t bad = invalidCommands;
     k_mutex_unlock(&commandMu);
 
+    // Servo operations above can sleep while Bridge receives a newer heartbeat.
+    // Read its timestamp before sampling "now" to avoid unsigned underflow.
+    const uint32_t hostRxUs = (uint32_t)atomic_get(&lastHostRxUs);
+    const uint32_t hostCheckUs = micros();
+    if (hostMode != HOST_NORMAL &&
+        (!atomic_get(&bridgeReady) ||
+         (uint32_t)(hostCheckUs - hostRxUs) > HOST_HEARTBEAT_US)) {
+      // Exclusive modes retain their separate loss-of-host protection.
+      hostMode = HOST_NORMAL;
+      rawNotifyEveryTick = false;
+      calIndex = servoMidId = 0xFF;
+      k_mutex_lock(&motorsMu, K_FOREVER);
+      calHeldMask = 0;
+      k_mutex_unlock(&motorsMu);
+      enabled = false; timedOut = true;
+      setTorqueEnable(false);
+    }
     const bool busTaken = hostMode != HOST_NORMAL;
     if (got && !busTaken) {
       const bool fresh = cmd.mode == DISARM || (uint32_t)(start - cmd.sourceUs) <= MAX_SOURCE_AGE_US;
       const bool ordered = !haveCommand || cmd.mode == DISARM || (int32_t)(cmd.seq - acceptedSeq) > 0;
       if (fresh && ordered) {
-        acceptedSeq = cmd.seq; haveCommand = true; lastCommandUs = start; ttl = cmd.ttlUs;
+        acceptedSeq = cmd.seq; haveCommand = true; lastCommandUs = start;
         if (cmd.mode == DISARM) { enabled = false; timedOut = false; }
-        if (cmd.mode == ARM && !enabled && imu.ok &&
-            (uint32_t)(start-lastImuUs) < 50000) {
+        if (cmd.mode == ARM && !enabled && atomic_get(&bridgeReady) && imuFresh &&
+            (uint32_t)(start-sampledImu.sampleUs) < 50000) {
           enabled = true; timedOut = false;
-          lastHealthyUs = start;
-          setRunKpKd();
         }
         k_mutex_lock(&motorsMu, K_FOREVER);
         for (unsigned i = 0; i < NUM_MOTORS; ++i) motors[i].desAngleDeg = cmd.target[i];
@@ -352,14 +443,14 @@ static void controlTask(void*, void*, void*) {
     if (busTaken) {
       enabled = false;
       timedOut = false;
-    } else if (enabled && ((uint32_t)(start-lastCommandUs) > ttl ||
-                           (uint32_t)(start-lastHealthyUs) > 100000)) {
+    } else if (enabled && (!imuFresh || !atomic_get(&bridgeReady))) {
       enabled = false; timedOut = true;
     }
     static bool previousEnabled = false;
     if (enabled) {
       k_mutex_lock(&motorsMu, K_FOREVER); sendMotorDesPos(); k_mutex_unlock(&motorsMu);
       Serial1.flush();
+      ++servoWrites;
     }
     if (!busTaken) {
       if (enabled != previousEnabled || !enabled) setTorqueEnable(enabled);
@@ -370,21 +461,28 @@ static void controlTask(void*, void*, void*) {
     drainServoRx();
     servoRxMask = 0;
     readAllState(); Serial1.flush();
+    ++servoReads;
     const uint32_t readStart = micros();
-    if (updateImu()) lastImuUs = micros();
     while ((uint32_t)(micros()-readStart) < SERVO_REPLY_US) {
-      parseServoRx(); k_sleep(K_USEC(100));
+      parseServoRx();
+      if (servoRxMask == 0x7FFFu) break;
+      k_sleep(K_USEC(100));
     }
     parseServoRx();
-    if (imu.ok) lastHealthyUs = micros();
+    const uint32_t servoWaitUs = micros() - readStart;
+    sampledImu = readImuSnapshot();
+    const uint32_t sampleUs = micros();
+    const bool publishImuOk = sampledImu.sample.ok && sampledImu.seq &&
+                             (uint32_t)(sampleUs - sampledImu.sampleUs) <= IMU_STALE_US;
     StatePacket s = {};
     memcpy(s.magic, "DQS1", 4); s.version = 1;
-    s.flags = (imu.ok ? 1 : 0) | (enabled ? 2 : 0) | (timedOut ? 4 : 0) |
+    s.flags = (publishImuOk ? 1 : 0) | (enabled ? 2 : 0) | (timedOut ? 4 : 0) |
               ((hostMode == HOST_CAL) ? 8 : 0) | ((hostMode == HOST_SERVO_DEBUG) ? 16 : 0);
-    s.servoMask = servoRxMask; s.seq = ++seq; s.sampleUs = start; s.imuUs = lastImuUs;
+    s.servoMask = servoRxMask; s.seq = ++seq; s.sampleUs = sampleUs; s.imuUs = sampledImu.sampleUs;
     s.commandSeq = acceptedSeq; s.commandAgeUs = haveCommand ? start-lastCommandUs : UINT32_MAX;
     s.periodUs = period; s.overruns = overruns; s.invalidCommands = bad;
-    memcpy(s.acc, imu.accRaw, sizeof(s.acc)); memcpy(s.gyro, imu.gyroRaw, sizeof(s.gyro));
+    memcpy(s.acc, sampledImu.sample.accRaw, sizeof(s.acc));
+    memcpy(s.gyro, sampledImu.sample.gyroRaw, sizeof(s.gyro));
     k_mutex_lock(&motorsMu, K_FOREVER);
     for (unsigned i = 0; i < NUM_MOTORS; ++i) {
       s.angle[i] = motors[i].fbAngleDeg; s.velocity[i] = motors[i].fbVelDeg;
@@ -392,9 +490,27 @@ static void controlTask(void*, void*, void*) {
     }
     k_mutex_unlock(&motorsMu);
     s.workUs = micros()-start;
+    RawPacket raw;
+    fillRawPacket(raw);
+    DiagnosticPacket diagnostic = {};
+    memcpy(diagnostic.magic, "DQD1", 4);
+    diagnostic.bridgeState = atomic_get(&bridgeStage);
+    diagnostic.bridgeAttempts = atomic_get(&bridgeAttempts);
+    diagnostic.bridgeFailures = atomic_get(&bridgeFailures);
+    diagnostic.notifyDrops = atomic_get(&notifyDrops);
+    diagnostic.imuSeq = sampledImu.seq; diagnostic.imuUs = sampledImu.sampleUs;
+    diagnostic.imuPeriodUs = sampledImu.periodUs; diagnostic.imuWorkUs = sampledImu.workUs;
+    diagnostic.imuOverruns = sampledImu.overruns; diagnostic.imuErrors = sampledImu.errors;
+    diagnostic.imuInitAttempts = sampledImu.initAttempts;
+    diagnostic.servoWrites = servoWrites; diagnostic.servoReads = servoReads;
+    diagnostic.servoWaitUs = servoWaitUs;
+    diagnostic.reconnects = atomic_get(&bridgeReconnects);
+    diagnostic.bridgeReadyUs = (uint32_t)atomic_get(&bridgeReadyUs);
     k_mutex_lock(&stateMu, K_FOREVER);
     if (k_sem_count_get(&reportReady)) ++reportDrops;
     s.reportDrops = reportDrops; snapshot = s;
+    rawSnapshot = raw; rawSnapshotEveryTick = rawNotifyEveryTick;
+    diagnosticSnapshot = diagnostic;
     k_mutex_unlock(&stateMu);
     k_sem_give(&reportReady);
     deadline += TICK_US;
@@ -414,18 +530,22 @@ static void reportTask(void*, void*, void*) {
   bytes.resize(sizeof(StatePacket));
   for (;;) {
     k_sem_take(&reportReady, K_FOREVER);
+    RawPacket raw;
+    DiagnosticPacket diagnostic;
+    bool rawEveryTick;
     k_mutex_lock(&stateMu, K_FOREVER);
     memcpy(bytes.data(), &snapshot, sizeof(snapshot));
+    raw = rawSnapshot; diagnostic = diagnosticSnapshot;
+    rawEveryTick = rawSnapshotEveryTick;
     k_mutex_unlock(&stateMu);
-    Bridge.notify("duck_state", bytes);
-    const bool wantRaw = rawNotifyEveryTick || ((reports % 20) == 0);
+    if (!atomic_get(&bridgeReady)) continue;
+    if (!Bridge.tryNotify("duck_state", bytes)) { atomic_inc(&notifyDrops); continue; }
+    const bool wantRaw = rawEveryTick || ((reports % 20) == 0);
     if (wantRaw) {
-      RawPacket raw = {};
-      fillRawPacket(raw);
       MsgPack::bin_t<uint8_t> rawBytes;
       rawBytes.resize(sizeof(raw));
       memcpy(rawBytes.data(), &raw, sizeof(raw));
-      Bridge.notify("duck_raw", rawBytes);
+      if (!Bridge.tryNotify("duck_raw", rawBytes)) atomic_inc(&notifyDrops);
     }
     bool replyReady = false;
     ServoReplyPacket reply = {};
@@ -436,7 +556,12 @@ static void reportTask(void*, void*, void*) {
       MsgPack::bin_t<uint8_t> rb;
       rb.resize(sizeof(reply));
       memcpy(rb.data(), &reply, sizeof(reply));
-      Bridge.notify("duck_servo_reply", rb);
+      if (!Bridge.tryNotify("duck_servo_reply", rb)) {
+        atomic_inc(&notifyDrops);
+        k_mutex_lock(&hostMu, K_FOREVER);
+        if (!servoReplyReady) { servoReply = reply; servoReplyReady = true; }
+        k_mutex_unlock(&hostMu);
+      }
     }
     CalReplyPacket cr = {};
     bool calReady = false;
@@ -447,15 +572,76 @@ static void reportTask(void*, void*, void*) {
       MsgPack::bin_t<uint8_t> rb;
       rb.resize(sizeof(cr));
       memcpy(rb.data(), &cr, sizeof(cr));
-      Bridge.notify("duck_cal_reply", rb);
+      if (!Bridge.tryNotify("duck_cal_reply", rb)) {
+        atomic_inc(&notifyDrops);
+        k_mutex_lock(&hostMu, K_FOREVER);
+        if (!calReplyReady) { calReply = cr; calReplyReady = true; }
+        k_mutex_unlock(&hostMu);
+      }
+    }
+    if ((reports % 10) == 0) {
+      MsgPack::bin_t<uint8_t> db;
+      db.resize(sizeof(diagnostic));
+      memcpy(db.data(), &diagnostic, sizeof(diagnostic));
+      if (!Bridge.tryNotify("duck_diagnostics", db)) atomic_inc(&notifyDrops);
     }
     if ((++reports % 100) == 0) {
       MsgPack::bin_t<uint8_t> pd;
       pd.resize(32);
       pd[0]=servoPdMask & 255; pd[1]=servoPdMask >> 8;
       memcpy(pd.data()+2, servoBootP, 15); memcpy(pd.data()+17, servoBootD, 15);
-      Bridge.notify("duck_boot_pd", pd);
+      if (!Bridge.tryNotify("duck_boot_pd", pd)) atomic_inc(&notifyDrops);
     }
+  }
+}
+
+static void bridgeTask(void*, void*, void*) {
+  uint32_t backoffMs = 250;
+  for (;;) {
+    atomic_clear(&bridgeReady);
+    atomic_set(&bridgeStage, 1);
+    atomic_inc(&bridgeAttempts);
+    // setup() already initialized this UART and enabled its hardware FIFO.
+    bool ready = Bridge.begin(BRIDGE_BAUD, true);
+    if (ready) {
+      atomic_set(&bridgeStage, 2);
+      ready = Bridge.provide("duck_command", receiveCommand) &&
+              Bridge.provide("duck_cal", receiveCal) &&
+              Bridge.provide("duck_servo", receiveServo) &&
+              Bridge.provide("duck_tof", readTof);
+    }
+    if (!ready) {
+      atomic_inc(&bridgeFailures);
+      atomic_set(&bridgeStage, 4);
+      Bridge.invalidate();
+      k_msleep(backoffMs);
+      backoffMs = backoffMs < 2000 ? backoffMs * 2 : 2000;
+      continue;
+    }
+    atomic_set(&bridgeReadyUs, micros());
+    atomic_set(&bridgeStage, 3);
+    atomic_set(&bridgeReady, 1);
+    backoffMs = 250;
+    for (;;) {
+      k_msleep(2000);
+      MsgPack::str_t version;
+      if (!Bridge.getRouterVersion(version)) break;
+      // A serial reconnect drops Router registrations while version still works.
+      // Re-registering the same owner is idempotent; local handlers stay bound.
+      if (!(Bridge.provide("duck_command", receiveCommand) &&
+            Bridge.provide("duck_cal", receiveCal) &&
+            Bridge.provide("duck_servo", receiveServo) &&
+            Bridge.provide("duck_tof", readTof))) break;
+    }
+    atomic_clear(&bridgeReady);
+    atomic_inc(&bridgeFailures);
+    atomic_inc(&bridgeReconnects);
+    atomic_set(&bridgeStage, 4);
+    k_mutex_lock(&commandMu, K_FOREVER);
+    pending = false;
+    k_mutex_unlock(&commandMu);
+    Bridge.invalidate();
+    k_msleep(backoffMs);
   }
 }
 
@@ -464,7 +650,9 @@ void setup() {
   k_mutex_init(&commandMu);
   k_mutex_init(&stateMu);
   k_mutex_init(&hostMu);
+  k_mutex_init(&imuMu);
   k_sem_init(&reportReady, 0, 1);
+  startTof();
   for (unsigned i = 0; i < NUM_MOTORS; ++i) {
     motors[i] = {}; motors[i].id = MOTOR_IDS[i];
     motors[i].fbPos = SERVO_CENTER_POS;
@@ -473,18 +661,19 @@ void setup() {
   }
   // Start the watchdog/hardware loop even if Linux Bridge startup stalls.
   k_thread_create(&controlThread, controlStack, K_THREAD_STACK_SIZEOF(controlStack),
-                  controlTask, nullptr, nullptr, nullptr, 4, 0, K_NO_WAIT);
+                  controlTask, nullptr, nullptr, nullptr, 3, 0, K_NO_WAIT);
   k_thread_name_set(&controlThread, "duck_control100");
+  k_thread_create(&imuThread, imuStack, K_THREAD_STACK_SIZEOF(imuStack),
+                  imuTask, nullptr, nullptr, nullptr, 4, 0, K_NO_WAIT);
+  k_thread_name_set(&imuThread, "duck_imu100");
   ARDUINO_ROUTER_SERIAL.begin(BRIDGE_BAUD);
   enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(ARDUINO_ROUTER_PHANDLE)));
-  Bridge.begin(BRIDGE_BAUD);
-  Bridge.provide("duck_command", receiveCommand);
-  Bridge.provide("duck_cal", receiveCal);
-  Bridge.provide("duck_servo", receiveServo);
+  k_thread_create(&bridgeThread, bridgeStack, K_THREAD_STACK_SIZEOF(bridgeStack),
+                  bridgeTask, nullptr, nullptr, nullptr, 6, 0, K_NO_WAIT);
+  k_thread_name_set(&bridgeThread, "duck_bridge_init");
   k_thread_create(&reportThread, reportStack, K_THREAD_STACK_SIZEOF(reportStack),
-                  reportTask, nullptr, nullptr, nullptr, 6, 0, K_NO_WAIT);
+                  reportTask, nullptr, nullptr, nullptr, 7, 0, K_NO_WAIT);
   k_thread_name_set(&reportThread, "duck_report100");
-  startTof();
   // GCC 14 otherwise emits a tail B.W to a flash syscall from RAM, outside
   // Thumb JUMP24 range; the Uno Q extension loader rejects it with ENOEXEC.
   asm volatile("nop" ::: "memory");

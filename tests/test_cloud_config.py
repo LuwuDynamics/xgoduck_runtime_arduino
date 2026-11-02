@@ -16,6 +16,40 @@ class LocalCloudConfigTest(unittest.TestCase):
         return subprocess.run([sys.executable, str(ROOT / 'tools/configure-ai.py'),
             '--data-dir', str(folder), *args], capture_output=True, text=True, timeout=5)
 
+    def test_headroom_cli_preserves_cloud_url_language_volume_and_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            config = VoiceConfig(folder / 'voice_config.json')
+            config.update({'cloud_region':'cn', 'ota_url':'https://fixture.invalid/ota/',
+                           'language':'en', 'volume':100, 'output_gain_db':6})
+            state = folder / 'voice-state'
+            state.mkdir()
+            (state/'device-id').write_text('02:12:34:56:AB:CD')
+            result = self.run_cli(folder, '--aec-output-headroom-db', '12')
+            self.assertEqual(result.returncode,0,result.stderr)
+            saved = config.get()
+            self.assertEqual(saved['aec_output_headroom_db'],12)
+            for name,value in [('cloud_region','cn'),('ota_url','https://fixture.invalid/ota/'),
+                               ('language','en'),('volume',100),('output_gain_db',6)]:
+                self.assertEqual(saved[name],value)
+            self.assertEqual((state/'device-id').read_text(),'02:12:34:56:AB:CD')
+            before = config.path.read_bytes()
+            self.assertEqual(self.run_cli(folder,'--show').returncode,0)
+            self.assertEqual(config.path.read_bytes(),before)
+            self.assertEqual(self.run_cli(folder,'--show','--aec-output-headroom-db','6').returncode,2)
+            self.assertEqual(config.path.read_bytes(),before)
+
+    def test_invalid_headroom_cli_leaves_saved_settings_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            folder = Path(directory)
+            config = VoiceConfig(folder/'voice_config.json')
+            config.update({'cloud_region':'global','aec_output_headroom_db':6})
+            before = config.path.read_bytes()
+            for value in ('-1','18.1','nan','inf','bad'):
+                result = self.run_cli(folder,'--aec-output-headroom-db',value)
+                self.assertEqual(result.returncode,2,result.stderr)
+                self.assertEqual(config.path.read_bytes(),before)
+
     def test_cli_persists_manual_choice_without_touching_identity_calibration_or_permissions(self):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)

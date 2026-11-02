@@ -1,6 +1,6 @@
 # XGO Duck runtime: technical reference
 
-This page preserves the protocol, timing, control and troubleshooting details from the original README. For the first build and calibration sequence, start with [README.md](../README.md) or [README_CN.md](../README_CN.md).
+This page describes motion pinned to upstream master [`b401d85`](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/b401d85d20bb5bfd0237242a8a5ab6847fc962a2) (2026-10-31), with the existing AI/gamepad/calibration/ToF adapters. Historical PAUSE and software-center behavior does not apply. For first build and calibration, start with [README.md](../README.md) or [README_CN.md](../README_CN.md).
 
 This project runs walking, get-up, and pick policies on an XGODuck built around the Arduino Uno Q.
 
@@ -45,30 +45,38 @@ IDs follow Microduck. The bus always addresses all 15, in this order:
 | 30–33 | Neck and head. Policy order inside the 14-D action is 10–14, 30–33, 20–24. |
 | 34 | Mouth. It is not part of the policy action. The web UI commands it from 0° to 30°. |
 
-The home pose in `sketch/duck_config.h` and `python/rl_core.py` is hip/ankle ±24°, knee 0°, hip roll ±5°, neck and head pitch 20°, mouth 0°. `action_scale` is 1. Home is this table, not an ONNX metadata field.
+The ordinary walking home pose in `python/rl_core.py` is hip/ankle ±22°, knee 0°, hip roll ±5°, neck and head pitch 20°, mouth 0°. Its `action_scale` is 1. Roller reads its own home from ONNX metadata and uses scale 0.7; it is off at startup and selectable using the stable page's Roller switch. Use it only with the corresponding roller-equipped robot. MCU angles use each servo's hardware center at encoder position 2047.
 
-Factory encoder zeros are `ZERO_POS` in `sketch/duck_config.h`. A calibration overwrites them in `data/zero_pos.json` and the host copies that file into MCU RAM at startup. `data/zero_pos.json` is local to the robot and is gitignored.
+Hardware centers are stored in the servos. Legacy `data/zero_pos.json` files are preserved as backups and no longer applied. Nondefault legacy software zeros require the hardware-centering workflow before arming; `data/hardware-centers.json` records acknowledged progress for this robot.
 
 ## First-time servo setup
+
+**Scan all IDs** checks every address from **0 through 253** at the configured servo bus rate (1 Mbps). **Stop scan** cancels the scan and keeps the IDs already found. Click a result, or type any valid address into **Current / target ID**. **Read** also accepts any address in this range. Addresses 254 (broadcast) and 255 are not assignable servo IDs.
+
+To rename a servo, enter its current ID and the desired **Change ID to** value, then click **Change ID**. The app checks that the source responds and the destination is free, writes the ID, and verifies replies at the new and old addresses. A Bridge timeout aborts scanning; it is not reported as a missing servo. The normal Control page still monitors the robot's configured 15 joint IDs.
+
+Deploy `assets/`, `python/`, and `sketch/` together for this feature; updating only the page or Python is insufficient. Restart the app through App Lab / App CLI so the updated sketch is compiled and uploaded.
 
 Do this before the servos are installed in the frame. Connect **one servo at a time**. Two servos with the same ID on the bus will both accept a write.
 
 1. Open **Servo setup** (`/servo.html`) and enter setup.
 2. Assign IDs **10–14** and **20–24** for the legs. Assign **30–34** for the neck, head, and mouth. The ID write unlocks register `0x37` and then writes `0x05`.
-3. Center that servo. **Move to** raw position **2047** and write it. Temporary run gains for this move are KP = 6 and KD = 20. ID 34 uses temporary KP = 10.
-4. Write stored KP/KD. The page defaults are **KP = 5** and **KD = 20**. The write unlocks `0x37` and stores both bytes at `0x15`.
+3. With torque off, turn the joint by hand to its mechanical center and click **Reset Mid**. It remains unloaded.
+4. Write stored KP/KD. The page defaults are **KP = 5** and **KD = 10**. The write unlocks `0x37` and stores both bytes at `0x15`.
 5. Disconnect that servo and repeat until every ID exists exactly once.
 6. Install the servos in the frame and finish the wiring: servo bus on D0/D1 (`Serial1`, 1 Mbps), QMI8658 on D20/D21 (`Wire`, 400 kHz, address `0x6A` then `0x6B`).
 
-After power-up the controller also writes the temporary torque register (address 40) and temporary KP/KD (addresses 50 and 51): KP = 6, KD = 20, and KP = 10 on ID 34. Torque off clears torque and does not write a goal position. Writing a goal after torque-off still drags a connected servo, so position writes are suppressed while disarmed.
+Startup, arming and calibration preserve the leg/head servos’ existing KP/KD. Only mouth ID 34 receives temporary KP = 10 and KD = 20 (addresses 50 and 51). Explicit Set KpKd still writes the selected servo. Previously applied temporary gains are not restored automatically; a servo power cycle reloads its saved values. Torque off clears torque (address 40), and goal-position writes are suppressed while disarmed.
 
 ## Calibration
 
-Do this after the harness is wired and every ID answers.
+Do this after wiring and confirming every servo ID answers.
 
-1. Open **Calibration** (`/calibrate.html`) and start it. Policy and pose control stop. Temporary gains become KP = 3 and KD = 0, and every servo is commanded to 2047.
-2. For each joint, set the slider so the link sits at its mechanical zero, then press **Finish**. The current encoder reading becomes that joint's zero and is saved to `data/zero_pos.json`.
-3. Exit calibration. The highlight on a finished row is only for this visit; the saved zero is the encoder value.
+1. Open **Calibration** (`/calibrate.html`). All servos unload.
+2. Turn each joint by hand to its mechanical center, then click **Set center & hold**. Only that joint is centered and held at 2048; uncalibrated joints remain unloaded.
+3. Complete all 15 joints, then exit to unload them all. Check Default pose with the robot supported before Walk / get up.
+
+Legacy software-center migration is described above and in the AI guide. Do not replace old zeros with 2047 to skip calibration. The page also offers Roller walking, independent model amplitude/action filters, IMU filtering, and separate all-servo protection-switch/current broadcasts; protection settings are changed only when explicitly requested from the page.
 
 ## Running
 
@@ -84,7 +92,7 @@ arduino-app-cli app start "$PWD"
 
 `prepare-bridge.py` patches the resolved library cache and keeps the original headers as `.h.original`:
 
-- RouterBridge 0.4.3: RPC thread stack 500 → 4096 bytes.
+- RouterBridge 0.4.3: RPC thread stack 500 → 4096 bytes, bounded RPC waits, nonblocking notifications and retry-safe initialization/reconnection (implemented in `tools/bridge_patch.py`).
 - RPClite 0.3.1: a bounded MessagePack scanner accepts a complete frame before `Unpacker::feed()`, and rejects a frame larger than the RPC buffer.
 
 Re-run the script after a library-cache wipe or on a new board. If it cannot find the libraries, let the App CLI resolve `sketch.yaml` once, then run it again.
@@ -105,11 +113,13 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | Default pose | Holds the home pose. Requires a fresh MCU and IMU sample. |
 | Walk / get up | Enables position control and the recovery state machine. |
 | Pick | While upright in walk, runs `xgoduck_pick.onnx` for 4 s, then returns to walk. |
+| Sit / Stand | Holds sit; Stand runs for 1 s, then returns to the selected walking policy. |
+| left_kick / right_kick | Runs the selected kick for 0.4 s, then returns to the selected walking policy. |
 | Torque off | Disables position control. |
 
-Web heartbeat loss/backgrounding and chat failures do not release torque. Sensor/command timeouts latch a static position hold, with no automatic gait replay. Stand or Policy/Hold explicitly resumes; Torque off/Off explicitly releases motors. Calibration and servo-setup timeout retains the last diagnostic position until explicit control or exit. App restart adopts an enabled MCU in paused hold and continues its command sequence.
+Closing/backgrounding the page sends zero travel. One second without input clears travel while keeping balance; valid voice actions renew input only within their original deadline. Normal MCU commands do not expire. The MCU disarms if Bridge is unavailable or its IMU sample is older than 500 ms; Linux disarms on feedback older than 150 ms, invalid IMU, or total IMU age above 500 ms. App exit, gamepad disconnect and explicit Off unload. Calibration/servo setup has a separate 250 ms MCU host-heartbeat guard and a two-second host UI-heartbeat guard. Reconnection requires explicit arming and does not resume expired motion.
 
-Walk commands are vx ±0.4, vy ±0.3, ωz ±1.0, with a joystick dead zone of 0.1. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
+The web joystick uses vx -0.18 to +0.2, vy ±0.3 and yaw ±1.0 for ordinary walking; Roller uses vx ±0.4, vy 0 and yaw ±0.25. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
 
 ## Policies
 
@@ -118,8 +128,13 @@ Models in `python/`:
 - `xgoduck_walk.onnx`
 - `xgoduck_getup.onnx`
 - `xgoduck_pick.onnx`
+- `xgoduck_roulade.onnx`
+- `xgoduck_roller.onnx` (bundled; ordinary walking remains selected by default)
+- `xgoduck_sitstand.onnx`
+- `xgoduck_ballkick_left.onnx`
+- `xgoduck_ballkick_right.onnx`
 
-Each expects observation `[1, 61]` and emits action `[1, 14]`. All three are loaded and warmed at startup. Spare time in the 50 Hz loop runs one dummy pass on an idle session so a switch does not pay a cold start.
+Each expects observation `[1, 61]` and emits action `[1, 14]`. All eight are loaded and warmed at startup. Spare time in the 50 Hz loop runs one dummy pass on an idle session so a switch does not pay a cold start.
 
 Observation layout: gyro (rad/s), gravity, 14 joint positions relative to home, 14 joint velocities, previous action, twist (3), head (4), and six zeros.
 
@@ -127,11 +142,13 @@ Recovery, evaluated on the 50 Hz clock:
 
 - Tilt above 55° for 0.15 s → get-up model, action forced to 0 for 1 s, then the get-up action. Twist and head are zero.
 - Tilt below 15° for 1 s → walk, and the web twist/head/mouth commands apply again.
+- Sit/stand uses scale 1.1, with command `[1, 0, 0]` for sit and `[0, 0, 0]` for stand. Stand lasts 1 s.
+- Left/right kick uses scale 0.8 and α = 0 for 0.4 s; velocity/head/body commands stay zero. A fall cancels sit/stand or kick and enters recovery.
 - Pick, only from upright walk: command `[cos(2πφ), sin(2πφ), 0]` plus ten zeros, `φ` advances by `dt/4` (a 4 s cycle). The mouth opens to 30° and closes when φ ≥ 0.4.
 
-Action smoothing uses α = 0.45 on slices `[0:5]`, `[5:10]`, and `[10:14]`. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly and does not keep a filtered walk action. Gyro smoothing α = 0.5, joint-velocity α = 0.4, gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%. There is no gyro bias subtraction. The QMI axes are mapped once, in firmware; the host undoes the reference device mapping so the filter matches the Microduck math without applying that mapping twice.
+Ordinary action smoothing uses leg α = 0.35 on `[0:5]` and `[9:14]`, and head α = 0.45 on `[5:9]`. Roller uses leg/head α = 0.4/0.5; kicks use 0/0. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly. IMU fusion uses source timestamps from the independent MCU IMU task. Gyro smoothing α = 0.5, joint-velocity α = 0.4, and gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%; there is no gyro bias subtraction. QMI axes are mapped once in firmware and the host undoes the reference device mapping before fusion.
 
-Commands absent for 250 ms or IMU health absent for 100 ms latch a measured-position hold with torque retained. Host feedback older than 150 ms also requests this hold. Stale source data still cannot update targets; ordinary POLICY/HOLD packets cannot resume after a timeout. A fresh explicit ARM from Stand/Policy/Hold resumes. The new sketch advertises capability flag 32 and PAUSE command 4; matching firmware is required before enabling motors. Power loss or an MCU reset necessarily interrupts torque and never auto-arms afterwards.
+The matching master protocol includes MCU-timestamped IMU data and separate loop/Bridge diagnostics. Normal command TTL is retained in the packet ABI but disabled. Bridge loss or a stale IMU disarms the MCU; Linux also returns to inference-only on stale/invalid feedback. Explicit Stand/Policy/Hold with fresh feedback can arm again. The protocol uses DISARM/ARM/POLICY/HOLD; calibration and servo setup retain their independent heartbeat guards described above.
 
 ## Layout
 
@@ -140,7 +157,7 @@ app.yaml                 App Lab manifest
 assets/                  Web UI
 python/                  Host policy, Bridge client, ONNX models
 sketch/                  STM32 firmware
-data/zero_pos.json       Created on the robot by calibration (not in git)
+data/hardware-centers.json  Per-robot calibration migration record (not in git)
 tools/                   Bridge patch, router rate, ELF check, read-only capture
 ```
 

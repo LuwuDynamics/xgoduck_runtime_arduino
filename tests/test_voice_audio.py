@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'python'), str(ROOT / 'python/vendor/luwu_os/apps/voice_chat')]
 from voice_config import VoiceConfig
-from audio_devices import CaptureGain, Volume, prepare_capture, select_audio, usb_audio_cards
+from audio_devices import CaptureGain, Volume, prepare_capture, select_audio, usb_audio_cards, aec_playback_transform
 from voice_application import application_type
 from voice_media import AudioGate, MediaBench
 from mcp_server import McpServer
@@ -30,6 +30,48 @@ class AudioSettingsTest(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.config = VoiceConfig(Path(temp.name) / 'settings.json')
+
+    def test_aec_output_headroom_is_opt_in_bounded_and_preserves_other_gains(self):
+        self.assertEqual(self.config.get()['aec_output_headroom_db'], 0)
+        self.config.update({'volume':100, 'output_gain_db':6, 'input_gain_db':3})
+        for value in (0, 6, 12, 18, 3.5):
+            self.config.update({'aec_output_headroom_db':value})
+            saved = VoiceConfig(self.config.path).get()
+            self.assertEqual(saved['aec_output_headroom_db'], value)
+            self.assertEqual((saved['volume'], saved['output_gain_db'], saved['input_gain_db']), (100,6,3))
+        for value in (True, None, -1, 18.1, '6', float('nan'), float('inf'), [], {}):
+            with self.assertRaises(ValueError):
+                self.config.update({'aec_output_headroom_db':value})
+            with self.assertRaises(ValueError):
+                aec_playback_transform(Mock(), value, lambda:True)
+        self.assertEqual(self.config.get()['aec_output_headroom_db'], 3.5)
+
+    def test_aec_headroom_combines_with_boost_before_clipping_and_leaves_other_audio_alone(self):
+        self.config.update({'volume':100, 'output_gain_db':6.020599913279624})
+        volume = Volume(self.config, cards=lambda:CARDS, run=Mock())
+        volume.apply(100)
+        state = dict(active=True)
+        transform = aec_playback_transform(volume, 12.041199826559248, lambda:state['active'])
+        raw = array.array('h', [-30000,-1000,0,1000,30000]).tobytes()
+        self.assertEqual(list(array.array('h', transform(raw))), [-15000,-500,0,500,15000])
+        self.assertEqual(list(array.array('h', volume.pcm(raw))), [-32768,-2000,0,2000,32767])
+        state['active'] = False
+        self.assertEqual(transform(raw), volume.pcm(raw))
+        state['active'] = True
+        self.assertEqual(aec_playback_transform(volume,0,lambda:True)(raw), volume.pcm(raw))
+        self.assertEqual(self.config.get()['volume'], 100)
+        self.assertEqual(self.config.get()['output_gain_db'], 6.020599913279624)
+        self.assertEqual(list(array.array('h',raw)), [-30000,-1000,0,1000,30000])
+
+    def test_aec_headroom_respects_live_mute_and_software_mixer_fallback(self):
+        self.config.update({'output_gain_db':6.020599913279624})
+        volume = Volume(self.config, cards=lambda:CARDS, run=Mock(side_effect=FileNotFoundError('amixer')))
+        transform = aec_playback_transform(volume,12.041199826559248,lambda:True)
+        raw = array.array('h',[-20000,0,20000]).tobytes()
+        volume.apply(25)
+        self.assertEqual(list(array.array('h',transform(raw))),[-2500,0,2500])
+        volume.apply(0)
+        self.assertEqual(transform(raw), bytes(len(raw)))
 
     def test_capture_auto_gain_opt_in_and_unsupported_control(self):
         run = Mock()

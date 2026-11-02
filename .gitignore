@@ -11,3 +11,5 @@ dist/
 tools/offline/
 uv.toml
 .uv.toml.before-xgoduck
+.idea/
+.DS_Store

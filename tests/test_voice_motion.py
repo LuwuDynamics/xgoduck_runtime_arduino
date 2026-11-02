@@ -1,10 +1,12 @@
 import importlib.util
+import asyncio
 import collections
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
@@ -30,6 +32,8 @@ class VoiceMotionTest(unittest.TestCase):
         self.c = setup.c
         self.c.input_source = 'web'
         self.c.mode = 'policy'
+        for policy in self.c._models():
+            policy.action_scale, policy.action_alpha, policy.action_alpha_head = .8, .5, .5
         self.c.recovery.angle_deg = 0.
         self.c.feedback.mask = 0x7fff
         self.motion_status = dict(full_robot_ready=True, mcu_watchdog=False, mcu_command_age_us=10000)
@@ -37,7 +41,10 @@ class VoiceMotionTest(unittest.TestCase):
             enabled=self.c.feedback.enabled, recovery=self.c.recovery.status(),
             fault_hold=self.c.fault_hold, fault_hold_supported=bool(self.c.feedback.flags & 32),
             arming=self.c.arm_pending or self.c._arm_ack_seq is not None,
-            pick={'active': self.c.pick_active}, roulade={'active': bool(self.c.roulade_until)}))
+            pick={'active': self.c.pick_active}, roulade={'active': bool(self.c.roulade_until)},
+            sitstand={'active': self.c.sitstand_phase != 'idle'},
+            left_kick={'active': bool(self.c.kick_until) and self.c.kick_side == 'left'},
+            right_kick={'active': bool(self.c.kick_until) and self.c.kick_side == 'right'}))
         self.now, self.allowed = 99., True
         self.access = MotionAccess(self.c, allowed=lambda: self.allowed, clock=lambda: self.now)
         self.access.heartbeat(101)
@@ -72,6 +79,8 @@ class VoiceMotionTest(unittest.TestCase):
                 return self.access.start_action(**body)
             if path == '/state':
                 return {'motion': self.c.status(), 'control': self.access.state()}
+            if path == '/tof':
+                return self.tof_readback
             raise ValueError('Unknown path')
         server = JsonServer(0, 'test-token', dispatch)
         server.start()
@@ -116,6 +125,85 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.head, [0] * 4)
         self.assertEqual(self.c.mouth, 0)
 
+    def test_mcp_stand_from_sitting_preserves_transition_then_runs_queued_move(self):
+        # Exercise the real Controller methods and model selection with a
+        # simulated MCU clock; no Bridge writes leave the in-memory mock.
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            self.c.rx_time = self.now
+            self.c.recovery.phase = 'walk'
+            self.access.web_sitstand('sit')
+            self.c.step()  # The sitting model has already accumulated history.
+            self.c.sitstand_policy.reset_action_filter.reset_mock()
+            self.c.sitstand_policy.warm.reset_mock()
+            mcp = self.mcp()
+            reply = mcp.handle_message({'id': 1, 'method': 'tools/call',
+                                       'params': {'name': 'Duck.Stand'}})['result']
+            self.assertFalse(reply['isError'], reply)
+            self.assertEqual(self.c.sitstand_phase, 'stand')
+            self.assertEqual(self.c.sitstand_until, self.now + fixture.ns['SITSTAND_STAND_S'])
+            self.assertFalse(self.c.policy_needs_reset)
+            self.c.step()
+            self.assertEqual(self.c.sitstand_policy.infer.call_args.args[4], [0, 0, 0])
+            self.c.sitstand_policy.reset_action_filter.assert_not_called()
+            self.c.sitstand_policy.warm.assert_not_called()
+
+            self.assertEqual(self.move()['status'], 'queued')
+            self.advance(.5)
+            self.assertEqual(self.access.action['kind'], 'stand')
+            self.assertEqual(self.access.action['state'], 'running')
+            self.assertEqual(self.c.twist, [0, 0, 0])
+
+            # Keep real controller feedback fresh through model transition and
+            # the subsequent one-second confirmation of upright balance.
+            end = self.now + 2
+            while self.now < end:
+                self.now = round(self.now + .05, 6)
+                self.c.rx_time = self.now
+                self.c.feedback.sample_us += 50000
+                self.c.feedback.imu_us = self.c.feedback.sample_us
+                self.c.step()
+                self.access.heartbeat(101)
+                self.access.tick()
+            self.assertEqual(self.c.sitstand_phase, 'idle')
+            self.assertTrue(any(job['kind'] == 'stand' and job['state'] == 'completed'
+                                for job in self.access.recent_actions))
+            self.assertEqual(self.access.action['kind'], 'move')
+            self.assertEqual(self.access.action['state'], 'running')
+            self.assertEqual(self.c.twist, [.08, 0, 0])
+            self.assertFalse(self.access.pending)
+
+    def test_stand_during_existing_sitstand_transition_keeps_its_deadline(self):
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            self.c.rx_time = self.now
+            self.c.recovery.phase = 'walk'
+            self.access.web_sitstand('sit')
+            self.c.step()
+            self.access.web_sitstand('stand')
+            deadline = self.c.sitstand_until
+            self.now += .4
+            self.c.rx_time = self.now
+            result = self.access.start_action(kind='stand', session=101)
+            self.assertEqual(result['status'], 'accepted')
+            self.assertEqual(self.c.sitstand_phase, 'stand')
+            self.assertEqual(self.c.sitstand_until, deadline)
+            self.assertFalse(self.c.policy_needs_reset)
+
+    def test_stand_cancels_kick_before_switching_to_walk_without_disarming(self):
+        self.c.recovery.phase = 'walk'
+        self.access.web_action('kick', 'left')
+        self.assertTrue(self.c.kick_until)
+        result = self.access.start_action(kind='stand', session=101)
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(self.c.kick_until, 0)
+        self.assertIsNone(self.c.kick_side)
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.c.step()
+        self.assertEqual(fixture.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4],
+                         fixture.wire.POLICY)
+
     def test_fresh_sensor_feedback_with_stale_command_link_rejects_motion(self):
         for fault in ({'mcu_command_age_us': 150001}, {'mcu_watchdog': True},
                       {'mcu_command_age_us': 2**32 - 1}):
@@ -153,7 +241,7 @@ class VoiceMotionTest(unittest.TestCase):
         stand = next(t for t in tools if t['name'] == 'Duck.Stand')
         self.assertEqual(stand['inputSchema']['required'], [])
         self.assertEqual(stand['inputSchema']['properties'], {})
-        self.assertLess(len(json.dumps(tools, ensure_ascii=False).encode()), 8192)
+        self.assertLess(len(json.dumps(tools, ensure_ascii=False).encode()), 16000)
         self.allowed = False
         reply = mcp.handle_message({'id': 2, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
         self.assertTrue(reply['isError'])
@@ -169,14 +257,22 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.access.action['kind'], 'stand')
         self.assertEqual(self.c.twist, [0, 0, 0])
 
-    def test_full_mcp_tools_list_with_camera_stays_within_gateway_limit(self):
+    def test_full_mcp_tools_list_with_camera_fits_deployed_gateway_packet_budget(self):
         mcp = self.mcp()
         # Production also exposes the two permission tools when settings exist.
         mcp.thing_manager.add_thing(DuckThing(0, 'unused', settings=Mock(), sound_player=Mock()))
         mcp.self_provider = Mock()
         mcp.self_provider.mcp_camera_available.return_value = True
         reply = mcp.handle_message({'id': 1, 'method': 'tools/list', 'params': {'withUserTools': True}})
-        self.assertLess(len(json.dumps(reply, ensure_ascii=False).encode()), 8192)
+        # CN gateway container verified 2026-11-02: 16000 bytes per entire
+        # MQTT packet, max 60 tools. Use the actual sender, which JSON-escapes
+        # Chinese text; the old 8192-byte assertion came from stale docs.
+        from mqtt_udp_protocol import MqttUdpProtocol
+        sender = SimpleNamespace(session_id='a'*32, send_text=AsyncMock(return_value=True))
+        asyncio.run(MqttUdpProtocol.send_mcp_message(sender, reply))
+        payload = sender.send_text.call_args.args[0].encode('utf-8')
+        self.assertLess(len(payload) + 512, 16000)  # Reserve topic, QoS and header.
+        self.assertLessEqual(len(reply['result']['tools']), 60)
         self.assertIn('Duck.Stand', {t['name'] for t in reply['result']['tools']})
         self.assertIn('Duck.Quack', {t['name'] for t in reply['result']['tools']})
 
@@ -337,11 +433,11 @@ class VoiceMotionTest(unittest.TestCase):
         self.advance(1.1)
         self.move(remote=True, duration=.7, controller_id='phone_session_B', sequence=2)
 
-    def test_mcp_voice_speeds_match_existing_web_inputs_and_keep_bounds(self):
+    def test_mcp_voice_linear_speeds_have_their_own_cap_and_keep_turn_bounds(self):
         mcp = self.mcp()
-        commands = [('Duck.Move', {'direction': 'forward', 'speed': .2, 'seconds': 2}, [.2, 0, 0]),
-                    ('Duck.Move', {'direction': 'backward', 'speed': .4, 'seconds': 2}, [-.4, 0, 0]),
-                    ('Duck.Move', {'direction': 'left', 'speed': .3, 'seconds': 2}, [0, .3, 0]),
+        commands = [('Duck.Move', {'direction': 'forward', 'speed': .15, 'seconds': 2}, [.15, 0, 0]),
+                    ('Duck.Move', {'direction': 'backward', 'speed': .15, 'seconds': 2}, [-.15, 0, 0]),
+                    ('Duck.Move', {'direction': 'left', 'speed': .15, 'seconds': 2}, [0, .15, 0]),
                     ('Duck.Move', {'direction': 'right', 'speed': .15, 'seconds': 2}, [0, -.15, 0]),
                     ('Duck.Turn', {'yaw_rate': 1., 'seconds': 2}, [0, 0, 1.])]
         for name, arguments, twist in commands:
@@ -352,8 +448,9 @@ class VoiceMotionTest(unittest.TestCase):
                 self.assertEqual(self.c.twist, twist)
                 self.assertFalse(self.c.arm_pending)
                 self.access.cancel('test')
-        for direction, speed in [('forward', .401), ('backward', .401), ('left', .301),
-                                 ('right', .301), ('forward', float('nan')), ('forward', True)]:
+        for direction, speed in [('forward', .150001), ('backward', .150001), ('left', .150001),
+                                 ('right', .150001), ('forward', .2), ('forward', .4),
+                                 ('forward', float('nan')), ('forward', True)]:
             with self.subTest(direction=direction, speed=speed):
                 reply = mcp.handle_message({'id': 2, 'method': 'tools/call',
                     'params': {'name': 'Duck.Move', 'arguments':
@@ -364,6 +461,114 @@ class VoiceMotionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'bounds'):
             self.move(twist=[.2, 0, 0], remote=True, duration=.7,
                       controller_id='phone_session_A', sequence=1)
+
+    def test_normal_forward_schema_has_no_model_selected_speed_and_defaults_to_three_seconds(self):
+        mcp = self.mcp()
+        tools = mcp.handle_message({'id': 1, 'method': 'tools/list'})['result']['tools']
+        forward = next(t for t in tools if t['name'] == 'Duck.Forward')
+        move = next(t for t in tools if t['name'] == 'Duck.Move')
+        self.assertEqual(set(forward['inputSchema']['properties']), {'seconds', 'pace'})
+        self.assertEqual(forward['inputSchema']['required'], [])
+        self.assertNotIn('speed', move['inputSchema']['required'])
+        reply, data = self.call_mcp(mcp, 'Duck.Forward')
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(self.c.twist, [.1, 0, 0])
+        self.assertEqual(data['execution']['duration_s'], 3.)
+        self.assertFalse(self.c.arm_pending)
+
+    def test_normal_forward_defaults_to_point_one_even_with_an_undeclared_speed(self):
+        mcp = self.mcp()
+        for speed in (.15, .4):
+            reply, data = self.call_mcp(mcp, 'Duck.Forward', {'seconds': 2, 'speed': speed})
+            self.assertFalse(reply['isError'], reply)
+            self.assertEqual(self.c.twist, [.1, 0, 0])
+            self.assertEqual(data['execution']['duration_s'], 2.)
+            self.access.cancel('test')
+
+    def test_move_without_speed_uses_direction_default_and_explicit_slow_values_remain_exact(self):
+        mcp = self.mcp()
+        for direction, expected in [('forward', [.1, 0, 0]), ('backward', [-.1, 0, 0]),
+                                    ('left', [0, .1, 0]), ('right', [0, -.1, 0])]:
+            reply, _ = self.call_mcp(mcp, 'Duck.Move', {'direction': direction, 'seconds': 2})
+            self.assertFalse(reply['isError'], reply)
+            self.assertEqual(self.c.twist, expected)
+            self.access.cancel('test')
+        for speed in (0, .05, .1, .15):
+            reply, _ = self.call_mcp(mcp, 'Duck.Move', {'direction': 'forward', 'speed': speed, 'seconds': 2})
+            self.assertFalse(reply['isError'], reply)
+            self.assertEqual(self.c.twist, [speed, 0, 0])
+            self.access.cancel('test')
+
+    def test_normal_forward_retains_duration_bounds_permission_and_standing_checks(self):
+        mcp = self.mcp()
+        for seconds in (False, 0, 11, float('nan')):
+            reply, _ = self.call_mcp(mcp, 'Duck.Forward', {'seconds': seconds})
+            self.assertTrue(reply['isError'])
+            self.assertEqual(self.c.twist, [0, 0, 0])
+        self.allowed = False
+        reply, _ = self.call_mcp(mcp, 'Duck.Forward')
+        self.assertTrue(reply['isError'])
+        self.allowed = True
+        self.c.mode, self.c.feedback.enabled = 'shadow', False
+        reply, _ = self.call_mcp(mcp, 'Duck.Forward')
+        self.assertTrue(reply['isError'])
+        self.assertFalse(self.c.arm_pending)
+        self.assertEqual(self.c.mode, 'shadow')
+
+    def test_forward_fast_profile_is_point_fifteen_and_unknown_profiles_cannot_increase_speed(self):
+        mcp = self.mcp()
+        for pace, expected in [('normal', .1), ('fast', .15)]:
+            reply, data = self.call_mcp(mcp, 'Duck.Forward', {'seconds': 2, 'pace': pace, 'speed': .4})
+            self.assertFalse(reply['isError'], reply)
+            self.assertEqual(self.c.twist, [expected, 0, 0])
+            self.access.cancel('test')
+        for pace in ('fastest', 'FAST', .2, True, ['fast']):
+            reply, _ = self.call_mcp(mcp, 'Duck.Forward', {'pace': pace})
+            self.assertTrue(reply['isError'])
+            self.assertEqual(self.c.twist, [0, 0, 0])
+
+    def test_mcp_linear_cap_applies_to_roller_and_does_not_raise_the_requested_speed(self):
+        self.access.start_action(kind='walking_mode', walking_mode='roller', session=101)
+        mcp = self.mcp()
+        for speed in (.150001, .2, .4):
+            reply, _ = self.call_mcp(mcp, 'Duck.Move', {'direction': 'forward', 'speed': speed, 'seconds': 2})
+            self.assertTrue(reply['isError'])
+            self.assertEqual(self.c.twist, [0, 0, 0])
+        reply, _ = self.call_mcp(mcp, 'Duck.Move', {'direction': 'forward', 'speed': .05, 'seconds': 2})
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(self.c.twist, [.05, 0, 0])
+
+    def test_normal_forward_uses_existing_tof_block_without_starting_or_claiming_completion(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=True,
+            forward_ready=False, front_distance_mm=80, blocking_reason='前方8厘米，暂停前进。')
+        before = self.c.bridge.notify.call_count
+        reply, data = self.call_mcp(self.mcp(), 'Duck.Forward', {'seconds': 10})
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(data['execution']['status'], 'blocked')
+        self.assertFalse(data['execution']['started'])
+        self.assertIn('8厘米', data['message'])
+        self.assertEqual(self.c.bridge.notify.call_count, before)
+        self.assertTrue(self.c.feedback.enabled)
+
+    def test_normal_forward_and_explicit_slow_move_keep_queue_and_timer_behavior(self):
+        mcp = self.mcp()
+        reply, _ = self.call_mcp(mcp, 'Duck.Forward', {'seconds': .2})
+        self.assertFalse(reply['isError'])
+        reply, data = self.call_mcp(mcp, 'Duck.Move', {'direction': 'forward', 'speed': .05, 'seconds': .2})
+        self.assertEqual(data['execution']['status'], 'queued')
+        self.advance(.25)
+        self.assertEqual(self.c.twist, [.05, 0, 0])
+        self.advance(.25)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.access.action['state'], 'completed')
+        self.assertTrue(self.c.feedback.enabled)
+
+    def test_normal_forward_defaults_do_not_change_phone_percentage_remote(self):
+        self.access.remote_allowed = lambda: True
+        reply, data = self.call_mcp(self.mcp(), 'Duck.RemoteMove',
+            {'direction': 'forward', 'speed': 50, 'seconds': .7, 'controller_id': 'phone-1234', 'sequence': 1})
+        self.assertFalse(reply['isError'])
+        self.assertEqual(self.c.twist, [.05, 0, 0])
 
     def test_command_link_loss_during_remote_lease_cancels_velocity(self):
         self.access.remote_allowed = lambda: True
@@ -497,12 +702,12 @@ class VoiceMotionTest(unittest.TestCase):
 
     def test_mcp_ten_second_move_is_one_bounded_action(self):
         reply = self.mcp().handle_message({'id': 1, 'method': 'tools/call', 'params':
-            {'name': 'Duck.Move', 'arguments': {'direction': 'forward', 'speed': .2, 'seconds': 10}}})['result']
+            {'name': 'Duck.Move', 'arguments': {'direction': 'forward', 'speed': .15, 'seconds': 10}}})['result']
         self.assertFalse(reply['isError'])
         self.assertEqual(self.access.action['duration_s'], 10)
         self.advance(9.9)
         self.assertEqual(self.access.action['state'], 'running')
-        self.assertEqual(self.c.twist, [.2, 0, 0])
+        self.assertEqual(self.c.twist, [.15, 0, 0])
         self.advance(.2)
         self.assertEqual(self.access.action['state'], 'completed')
         self.assertAlmostEqual(self.access.action['elapsed_s'], 10, delta=.051)
@@ -833,7 +1038,7 @@ class VoiceMotionTest(unittest.TestCase):
     def test_parallel_mcp_commands_are_accepted_in_one_serial_queue(self):
         from concurrent.futures import ThreadPoolExecutor
         mcp = self.mcp()
-        calls = [('Duck.Move', {'direction': 'forward', 'speed': .2, 'seconds': 2}),
+        calls = [('Duck.Move', {'direction': 'forward', 'speed': .15, 'seconds': 2}),
                  ('Duck.Turn', {'yaw_rate': .5, 'seconds': 2})]
         def call(item):
             name, arguments = item
@@ -925,7 +1130,7 @@ class VoiceMotionTest(unittest.TestCase):
         self.move(duration=10)
         for _ in range(4): self.move(duration=2)
         reply = self.mcp().handle_message({'id': 1, 'method': 'tools/call', 'params': {'name': 'Duck.GetStatus'}})
-        self.assertLess(len(json.dumps(reply, ensure_ascii=False).encode()), 8192)
+        self.assertLess(len(json.dumps(reply, ensure_ascii=False).encode()), 16000)
         data = json.loads(reply['result']['content'][0]['text'])
         self.assertNotIn('action', data)
         self.assertEqual(len(data['queued_actions']), 4)
@@ -1190,6 +1395,349 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertTrue(mcp._is_blocking_tool('Duck.Move'))
         status = mcp.handle_message({'id': 2, 'method': 'tools/call', 'params': {'name': 'Duck.GetStatus'}})
         self.assertFalse(status['result']['isError'])
+
+    def test_all_eight_model_behaviors_are_advertised_over_mcp(self):
+        mcp = self.mcp()
+        names = {t['name'] for t in mcp.handle_message({'id': 1, 'method': 'tools/list'})['result']['tools']}
+        self.assertTrue({'Duck.Stand', 'Duck.Move', 'Duck.SetWalkingMode', 'Duck.Pick',
+                         'Duck.Roulade', 'Duck.Sit', 'Duck.LeftKick', 'Duck.RightKick'} <= names)
+
+    def test_mcp_sit_keeps_seated_model_and_stand_transitions_before_queued_move(self):
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            self.c.rx_time = self.now
+            mcp = self.mcp()
+            result = mcp.handle_message({'id': 1, 'method': 'tools/call', 'params': {'name': 'Duck.Sit'}})['result']
+            self.assertFalse(result['isError'], result)
+            self.c.step()
+            self.assertEqual(self.c.sitstand_policy.infer.call_args.args[4], [1., 0., 0.])
+            self.advance(1.1)
+            self.assertEqual(self.access.action['state'], 'completed')
+            self.assertEqual(self.c.sitstand_phase, 'sit')
+            self.assertEqual(self.c.mode, 'policy')
+            self.assertTrue(self.c.feedback.enabled)
+            self.c.rx_time = self.now
+            result = mcp.handle_message({'id': 2, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
+            self.assertFalse(result['isError'], result)
+            self.assertEqual(self.c.sitstand_phase, 'stand')
+            self.assertEqual(self.move()['status'], 'queued')
+            end = self.now + 2.5
+            while self.now < end:
+                self.now += .05
+                self.c.rx_time = self.now
+                self.c.feedback.sample_us += 50000
+                self.c.feedback.imu_us = self.c.feedback.sample_us
+                self.c.step(); self.access.heartbeat(101); self.access.tick()
+            self.assertEqual(self.access.action['kind'], 'move')
+            self.assertEqual(self.access.action['state'], 'running')
+
+    def test_mcp_left_right_kicks_run_matching_model_and_return_to_balance(self):
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            mcp = self.mcp()
+            for side in ('left', 'right'):
+                self.c.rx_time = self.now
+                result = mcp.handle_message({'id': 1, 'method': 'tools/call',
+                    'params': {'name': f'Duck.{side.title()}Kick'}})['result']
+                self.assertFalse(result['isError'], result)
+                self.assertEqual(self.access.action['duration_s'], .4)
+                self.c.step()
+                self.assertEqual(self.c.kick_side, side)
+                self.c.kick_policies[side].infer.assert_called()
+                self.advance(.45)
+                self.assertEqual(self.access.action['state'], 'completed')
+                self.assertEqual(self.c.kick_until, 0)
+                self.assertEqual(self.c.mode, 'policy')
+                self.assertTrue(self.c.feedback.enabled)
+                self.advance(1.1)
+
+    def test_stop_during_kick_clears_model_and_queue_without_releasing_torque(self):
+        self.access.start_action(kind='left_kick', session=101)
+        self.move()
+        self.access.start_action(kind='stop', session=101)
+        self.assertEqual(self.c.kick_until, 0)
+        self.assertFalse(self.access.pending)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertTrue(self.c.feedback.enabled)
+        self.assertEqual(self.c.mode, 'policy')
+
+    def test_new_actions_require_enabled_upright_body_and_only_the_joints_they_use(self):
+        for kind in ('sit', 'left_kick', 'right_kick'):
+            for fault in ('enable', 'tilt', 'joint'):
+                self.setUp()
+                if fault == 'enable': self.c.feedback.enabled = False
+                elif fault == 'tilt': self.c.recovery.angle_deg = 100
+                else:
+                    self.motion_status.update(full_robot_ready=False, feedback_age_ms=10, imu_ok=True,
+                                              imu_age_ms=10, missing_joint_ids=[32], joint_mask=0x6fff)
+                with self.assertRaises(ValueError, msg=(kind, fault)):
+                    self.access.start_action(kind=kind, session=101)
+                self.assertEqual(self.c.kick_until, 0)
+                self.assertEqual(self.c.sitstand_phase, 'idle')
+
+    def test_walking_model_switch_cancels_old_move_and_queue_without_arming(self):
+        self.move(); self.move()
+        result = self.access.start_action(kind='walking_mode', walking_mode='roller', session=101)
+        self.assertEqual(result['status'], 'completed')
+        self.assertTrue(self.c.roller_mode)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertFalse(self.access.pending)
+        self.assertEqual(self.access.action['state'], 'cancelled')
+        self.c.mode, self.c.feedback.enabled = 'shadow', False
+        mcp = self.mcp()
+        result = mcp.handle_message({'id': 1, 'method': 'tools/call',
+            'params': {'name': 'Duck.SetWalkingMode', 'arguments': {'mode': 'walk'}}})['result']
+        self.assertFalse(result['isError'], result)
+        self.assertFalse(self.c.roller_mode)
+        self.assertFalse(self.c.feedback.enabled)
+        self.assertFalse(self.c.arm_pending)
+        self.assertEqual(self.c.mode, 'shadow')
+
+    def test_model_switch_refuses_incomplete_stand_sit_kick_and_bad_mode(self):
+        for kind in ('stand', 'sit', 'right_kick'):
+            self.setUp()
+            self.access.start_action(kind=kind, session=101)
+            with self.assertRaises(ValueError):
+                self.access.start_action(kind='walking_mode', walking_mode='roller', session=101)
+            self.assertFalse(self.c.roller_mode)
+        with self.assertRaises(ValueError):
+            self.access.start_action(kind='walking_mode', walking_mode='unknown', session=101)
+
+    def test_roller_rejects_sideways_and_excess_yaw_but_remote_yaw_uses_model_limit(self):
+        self.access.start_action(kind='walking_mode', walking_mode='roller', session=101)
+        for twist in ([0, .1, 0], [0, 0, 1]):
+            with self.assertRaisesRegex(ValueError, 'Roller'):
+                self.move(twist=twist)
+        self.access.remote_allowed = lambda: True
+        self.move(twist=[0, 0, .5], remote=True, controller_id='phone-1234', sequence=1, duration=.7)
+        self.assertEqual(self.c.twist, [0, 0, .25])
+
+    def test_missing_tof_blocks_only_forward_not_reverse_turn_or_head(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, forward_ready=False,
+            blocking_reason='ToF 测距已过期，暂停前进。', stop_count=0)
+        blocked = self.move()
+        self.assertEqual(blocked['status'], 'blocked')
+        self.assertIn('ToF 测距已过期', blocked['reason'])
+        for kind, values in [('move', dict(twist=[-.1, 0, 0])), ('turn', dict(twist=[0, 0, 1])),
+                             ('head', dict(head=[None, None, .1, None]))]:
+            self.assertEqual(self.access.start_action(kind=kind, session=101, **values)['status'], 'accepted')
+            self.access.start_action(kind='stop', session=101)
+
+    def test_tof_loss_during_forward_cancels_queue_preserves_balance_and_never_resumes_itself(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.move(duration=10); self.move()
+        obstacle.update(forward_ready=False, stop_count=1,
+                        last_stop=dict(reason='前方 25 厘米有障碍。'))
+        self.access.tick()
+        self.assertEqual(self.access.action['state'], 'blocked')
+        self.assertIn('25 厘米', self.access.action['reason'])
+        self.assertEqual(self.access.state()['queued_actions'], [])
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertTrue(self.c.feedback.enabled)
+        self.assertEqual(self.c.mode, 'policy')
+        obstacle['forward_ready'] = True
+        self.advance(1.5)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.access.action['state'], 'blocked')
+        self.assertEqual(self.move()['status'], 'accepted')
+
+    def test_brief_tof_outage_is_not_lost_if_fresh_data_returns_before_lease_tick(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.access.remote_allowed = lambda: True
+        request = dict(remote=True, controller_id='phone-1234', sequence=1, duration=.7)
+        self.move(**request)
+        obstacle.update(stop_count=1, last_stop=dict(reason='ToF 测距中断。'))
+        blocked = self.move(**dict(request, sequence=2))
+        self.assertEqual(blocked['status'], 'blocked')
+        self.assertIn('松开方向键', blocked['reason'])
+        self.assertEqual(self.access.action['state'], 'blocked')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.move(**dict(request, sequence=3, twist=[-.1, 0, 0]))['status'], 'accepted')
+        self.assertEqual(self.move(**dict(request, sequence=4))['status'], 'accepted')
+
+    def test_queued_forward_checks_tof_again_before_starting(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.access.start_action(kind='turn', twist=[0, 0, 1], duration=.2, session=101)
+        self.move()
+        obstacle.update(forward_ready=False, blocking_reason='ToF 前方有效测距不足。')
+        self.advance(.3)
+        self.assertEqual(self.access.action['state'], 'blocked')
+        self.assertIn('有效测距不足', self.access.action['reason'])
+        self.assertEqual(self.c.twist, [0, 0, 0])
+
+    def test_remote_release_clears_forward_latch_and_old_inflight_request_cannot_resume(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.access.remote_allowed = lambda: True
+        request = dict(remote=True, controller_id='phone-1234', sequence=1, duration=.7)
+        self.move(**request)
+        old_time = self.now
+        self.now += .1
+        obstacle.update(stop_count=1, last_stop=dict(reason='ToF 测距中断。'))
+        self.access.tick()
+        with self.assertRaisesRegex(ValueError, 'expired|predates'):
+            self.move(**dict(request, sequence=2, issued_at=old_time))
+        self.access.start_action(kind='stop', session=101, remote=True,
+                                 controller_id='phone-1234', sequence=3)
+        self.assertEqual(self.move(**dict(request, sequence=4))['status'], 'accepted')
+
+    def test_mcp_status_explains_obstacle_and_new_model_states(self):
+        obstacle = dict(enabled=True, forward_ready=False, front_distance_mm=250, blocking_reason='前方有障碍')
+        self.motion_status.update(obstacle_avoidance=obstacle, active_model='xgoduck_sitstand.onnx',
+                                  roller={'enabled': False})
+        mcp = self.mcp()
+        result = mcp.handle_message({'id': 1, 'method': 'tools/call', 'params': {'name': 'Duck.GetStatus'}})['result']
+        data = json.loads(result['content'][0]['text'])
+        self.assertEqual(data['obstacle_avoidance'], obstacle)
+        self.assertEqual(data['active_model'], 'xgoduck_sitstand.onnx')
+        self.assertIn('sit', data['action_feedback_ready'])
+
+    def call_mcp(self, mcp, name, arguments=None):
+        result = mcp.handle_message({'id': 1, 'method': 'tools/call',
+            'params': {'name': name, 'arguments': arguments or {}}})['result']
+        return result, json.loads(result['content'][0]['text'])
+
+    def test_tof_tool_reads_real_ipc_without_any_motor_write_and_preserves_frame_metadata(self):
+        self.tof_readback = dict(sensor=dict(state='ranging', fresh=True, seq=12, age_ms=90,
+            valid_zones=64, center_mm=230, min_mm=200, max_mm=800, resolution=[8, 8],
+            frequency_hz=5, grid_mm=[[230]*8 for _ in range(8)]),
+            front=dict(available=True, front_distance_mm=224, state='blocked', frame_seq=11,
+                       age_ms=110, valid_front_zones=8, forward_ready=False,
+                       blocking_reason='前方约22厘米，已暂停前进。'))
+        mcp = self.mcp()
+        tools = mcp.handle_message({'id': 2, 'method': 'tools/list'})['result']['tools']
+        schema = next(t for t in tools if t['name'] == 'Duck.GetToF')['inputSchema']
+        self.assertEqual(schema['properties'], {})
+        self.assertEqual(schema['required'], [])
+        before = self.c.bridge.notify.call_count
+        reply, data = self.call_mcp(mcp, 'Duck.GetToF')
+        self.assertFalse(reply['isError'])
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(data['front_distance_cm'], 22.4)
+        self.assertEqual(data['unit'], 'mm')
+        self.assertEqual(data['sensor']['seq'], 12)
+        self.assertEqual(data['front']['frame_seq'], 11)
+        self.assertEqual(data['sensor']['grid_mm'], [[230]*8 for _ in range(8)])
+        self.assertEqual(self.c.bridge.notify.call_count, before)
+        self.assertIsNone(self.access.action)
+
+    def test_tof_unavailable_is_a_normal_read_result_with_no_invented_distance(self):
+        self.tof_readback = dict(sensor=dict(state='offline', fresh=False, seq=7,
+            age_ms=9000, grid_mm=[[None]*8 for _ in range(8)], error_message='Sensor disconnected'),
+            front=dict(available=False, front_distance_mm=250, state='unavailable',
+                       blocking_reason='ToF 数据已过期，不能判断前方距离。'))
+        reply, data = self.call_mcp(self.mcp(), 'Duck.GetToF')
+        self.assertFalse(reply['isError'])
+        self.assertFalse(data['available'])
+        self.assertIsNone(data['front_distance_mm'])
+        self.assertIsNone(data['front_distance_cm'])
+        self.assertIn('过期', data['message'])
+        self.assertNotIn('error', reply)
+
+    def test_tof_ipc_authentication_failure_still_reports_real_tool_error(self):
+        mcp = self.mcp()
+        mcp.thing_manager.things['Duck'].token = 'invalid-token'
+        reply, data = self.call_mcp(mcp, 'Duck.GetToF')
+        self.assertTrue(reply['isError'])
+        self.assertIn('IPC authentication failed', reply['error'])
+
+    def test_mcp_obstacle_is_successful_call_with_blocked_execution_and_actual_distance(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=True,
+            forward_ready=False, front_distance_mm=80, blocking_reason='前方约8厘米有障碍，已暂停前进。')
+        before = self.c.bridge.notify.call_count
+        reply, data = self.call_mcp(self.mcp(), 'Duck.Move', dict(direction='forward', speed=.15, seconds=2))
+        self.assertFalse(reply['isError'], reply)
+        self.assertNotIn('error', reply)
+        self.assertEqual(data['status'], 'success')
+        self.assertEqual(data['execution']['status'], 'blocked')
+        self.assertFalse(data['execution']['started'])
+        self.assertEqual(data['execution']['front_distance_mm'], 80)
+        self.assertIn('8厘米', data['message'])
+        self.assertNotIn('accepted', data['message'])
+        self.assertEqual(self.c.bridge.notify.call_count, before)
+        self.assertTrue(self.c.feedback.enabled)
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.last_error, '')
+
+    def test_mcp_sensor_not_ready_is_successful_pause_not_a_claim_of_an_obstacle(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=False,
+            forward_ready=False, front_distance_mm=None, blocking_reason='ToF 测距已过期，已暂停前进。')
+        reply, data = self.call_mcp(self.mcp(), 'Duck.Move', dict(direction='forward', speed=.15, seconds=2))
+        self.assertFalse(reply['isError'])
+        self.assertIsNone(data['execution']['front_distance_mm'])
+        self.assertFalse(data['execution']['tof_available'])
+        self.assertIn('过期', data['message'])
+
+    def test_bad_parameters_permissions_and_broken_feedback_still_return_actual_mcp_errors(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=True,
+            forward_ready=False, front_distance_mm=80, blocking_reason='前方8厘米有障碍。')
+        mcp = self.mcp()
+        args = dict(direction='forward', speed=.15, seconds=2)
+        reply, data = self.call_mcp(mcp, 'Duck.Move', dict(args, speed=10))
+        self.assertTrue(reply['isError'])
+        self.assertIn('speed', reply['error'])
+        self.allowed = False
+        reply, data = self.call_mcp(mcp, 'Duck.Move', args)
+        self.assertTrue(reply['isError'])
+        self.assertIn('语音运动', reply['error'])
+        self.allowed = True
+        self.c.feedback.enabled = False
+        reply, data = self.call_mcp(mcp, 'Duck.Move', args)
+        self.assertTrue(reply['isError'])
+        self.assertIn('尚未启动', reply['error'])
+        self.c.feedback.enabled = True
+        self.motion_status['mcu_watchdog'] = True
+        reply, data = self.call_mcp(mcp, 'Duck.Move', args)
+        self.assertTrue(reply['isError'])
+        self.assertIn('Bridge', reply['error'])
+
+    def test_sensor_changes_between_preflight_and_command_remain_a_normal_block(self):
+        self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=True,
+            forward_ready=True, front_distance_mm=800)
+        def command(**kwargs):
+            self.c.twist = [0, 0, 0]
+            self.motion_status['obstacle_avoidance'].update(forward_ready=False, front_distance_mm=100)
+            return dict(ok=True, forward_blocked=True, reason='前方约10厘米有障碍。')
+        self.c.command = Mock(side_effect=command)
+        result = self.move()
+        self.assertEqual(result['status'], 'blocked')
+        self.assertEqual(result['front_distance_mm'], 100)
+        self.assertEqual(self.c.last_error, '')
+        self.assertTrue(self.c.feedback.enabled)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+
+    def test_tof_stop_observed_during_ipc_request_is_not_reported_as_an_expired_request(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.move()
+        mcp = self.mcp()
+        mcp.thing_manager.things['Duck'].clock = lambda: self.now - .01
+        self.now += .05
+        obstacle.update(stop_count=1, front_distance_mm=220,
+                        last_stop=dict(reason='前方约22厘米，前进已暂停。'))
+        reply, data = self.call_mcp(mcp, 'Duck.Move', dict(direction='forward', speed=.15, seconds=2))
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(data['execution']['status'], 'blocked')
+        self.assertIn('22厘米', data['message'])
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertNotIn(None, self.access.remote_sequences)
+
+    def test_blocked_queued_forward_is_not_a_failure_and_clears_remaining_actions(self):
+        obstacle = dict(enabled=True, forward_ready=True, stop_count=0)
+        self.motion_status['obstacle_avoidance'] = obstacle
+        self.access.start_action(kind='turn', twist=[0, 0, 1], duration=.2, session=101)
+        self.move()
+        self.access.start_action(kind='head', head=[None, None, .1, None], session=101)
+        obstacle.update(forward_ready=False, front_distance_mm=240, blocking_reason='前方24厘米有障碍。')
+        self.advance(.3)
+        self.assertEqual(self.access.action['state'], 'blocked')
+        self.assertFalse(self.access.pending)
+        self.assertEqual(self.c.last_error, '')
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertTrue(self.c.feedback.enabled)
 
     def test_revoked_session_cannot_move_or_reactivate_via_delayed_heartbeat(self):
         self.move()

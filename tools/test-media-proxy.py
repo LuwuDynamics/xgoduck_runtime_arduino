@@ -82,6 +82,20 @@ class ProxyTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.requests[-1].url.path, '/api/audio/volume')
         self.assertEqual(self.requests[-1].content, b'{"volume":75}')
 
+    async def test_camera_light_uses_protected_write_route(self):
+        response = await self.client.post('/api/media/camera/light', json={'enabled': False})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.requests)
+        response = await self.client.get('/api/media/camera/light')
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(self.requests)
+        response = await self.client.post('/api/media/camera/light', json={'enabled': False},
+                                         headers={'X-Device-Test': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.requests[-1].url.path, '/api/camera/light')
+        self.assertEqual(self.requests[-1].content, b'{"enabled":false}')
+        self.assertEqual(self.requests[-1].headers['x-device-test'], '1')
+
     async def test_request_limit(self):
         response = await self.client.post('/api/media/tts/speak', content=b'x' * 8193,
                                          headers={'X-Device-Test': '1'})

@@ -2,10 +2,13 @@
 import threading
 import tempfile
 from pathlib import Path
+import sys
 import unittest
 from unittest.mock import Mock, patch
 import httpx
 from fastapi import FastAPI
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python'))
 from gamepad import register_gamepad
 
 

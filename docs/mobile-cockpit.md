@@ -1,25 +1,24 @@
 # Mobile cockpit
 
-Open `http://<duck-host>:9527/mobile.html` in Android Chrome. The mobile view shares the existing firmware and media APIs; it does not change servo/Bridge/policy rates. It stays on local HTTP for testing, as requested. No certificates or new network services are installed.
+Open `http://<duck-host>/` in Android Chrome: port 80 opens the mobile cockpit directly, without a page suffix or redirect. The existing `http://<duck-host>:9527/mobile.html` address remains available. The mobile view shares the existing firmware and media APIs; it does not change servo/Bridge/policy rates.
 
-- Start camera, then enter fullscreen and rotate to landscape. The full camera frame is visible by default; Fill crops the edges. Photo saves a JPEG. Hide controls leaves a restore button.
-- Hold **Talk to Duck**, speak, and release. The phone captures at most 30 seconds of mono PCM, uploads a 16-bit WAV, then plays it through the Duck USB speaker. Chrome needs microphone permission and a secure-context test override, described below.
+The host setup installs and enables the nginx port-80 entrance. To add it to an existing installation, run `sudo bash tools/install-mobile-web.sh` on the UNO Q host. This does not restart the Duck App or flash STM32 firmware. The entrance preserves same-origin API checks and streams camera/microphone data without proxy buffering. It automatically starts on subsequent boots. The desktop-control links continue to open the original control page on port 9527.
+
+- The main view and General settings follow the browser's Chinese/English language. The header language button switches immediately and remembers the selection in this browser. It does not change the Duck's conversation language, cloud region or account.
+- **Start camera** and **Stop camera** are separate, labelled buttons that stay visible over the preview. Enter fullscreen and rotate to landscape for handheld use. The full camera frame is visible by default; Fill crops the edges. Photo saves a JPEG. Hide controls leaves a restore button.
+- **Turn light on** and **Turn light off** control the supported camera's illumination independently of preview and audio. The displayed state comes from the device readback. The current selection is reapplied after preview startup; this does not eliminate the camera firmware's brief light flash when capture starts. The camera-specific `gain=0/1` mapping is enabled only for the verified `0c45:636b` USB camera.
+- **ToF live depth** displays the VL53L5CX's actual 8×8 grid, centre distance and nearest valid distance. Warm colours indicate nearer surfaces; cyan indicates farther surfaces on a fixed 0–2 m colour scale. Numeric distances are not capped at 2 m. The four outlined middle cells determine the centre median; hover over a cell to see its distance in millimetres. Collapse keeps a compact centre-distance readout. Hide controls also hides this panel. Both controls preserve camera and live audio.
 - Tap **Listen live** to continuously hear the Duck USB microphone on the phone. Tap **Stop listening** to stop immediately. This streams mono 24 kHz S16_LE PCM over HTTP, without a recording file or 30-second limit, and requires no phone microphone permission. The browser bounds its playback queue to catch up after a network stall.
-- Backgrounding or closing the page stops live listening and cancels phone capture. A disconnected stream releases the USB microphone. Audio operations are serialized: stop listening before sending a phone voice clip or testing the speaker. This is not full-duplex audio.
+- Backgrounding or closing the page stops live listening. A disconnected stream releases the USB microphone. Audio operations are serialized: stop listening before sending an audio file or testing the speaker.
 - Settings include volume, speaker test, audio-file upload, and embedded Gamepad, Servo setup and Calibration pages. Opening/closing an inactive servo/calibration page does not change robot mode. Entering either setup remains explicit; their original safety guards apply.
 - **Torque off** stays accessible in the camera view. Physical gamepad control and saved bindings remain in the existing app. No touchscreen driving commands are sent by the cockpit.
 
-## Android Chrome HTTP test setup
-
-The user must set this on their phone; the page cannot change browser security settings:
-
-1. Open `chrome://flags/#unsafely-treat-insecure-origin-as-secure`.
-2. In **Insecure origins treated as secure**, add the exact origin, e.g. `http://192.168.31.216:9527` (no page path). Set Enabled and Relaunch.
-3. Reopen the same origin and allow microphone access when requested. If using `xgo-duck.local`, it is a separate origin and needs its own entry.
-4. Remove the exception after testing. It enables APIs for that origin but does not encrypt LAN traffic. If the flag is unavailable in the installed Chrome build, direct HTTP microphone capture cannot be enabled by the page; use Send an audio file or a trusted HTTPS deployment.
-
-Reference: https://www.chromium.org/Home/chromium-security/deprecating-powerful-features-on-insecure-origins/
-
-The Web Audio AudioWorklet capture avoids Android/browser codec differences and needs no ffmpeg conversion on the board. Live playback starts from the Listen live tap to unlock audio. Closing or hiding the page releases the microphone and screen wake lock. Fullscreen/wake lock availability depends on the browser; failure is shown without blocking the rest of the view.
+The **Talk to Duck** phone-recording entry and its microphone-permission setup have been removed. Live listening captures the Duck's microphone and plays it in the browser, so no phone microphone permission or Chrome secure-origin override is needed. Audio-file upload remains available in General settings. Live playback starts from the Listen live tap to unlock audio. Closing or hiding the page releases the Duck's microphone and screen wake lock. Fullscreen/wake lock availability depends on the browser; failure is shown without blocking the rest of the view.
 
 Live audio uses `/api/media/audio/stream` through the existing firmware proxy. It requires the same-origin `X-Device-Test: 1` header, shares the media stream limit, and exclusively owns the USB microphone until the connection closes. Playback/recording requests while listening return busy. No servo or policy timing changes are involved.
+
+Light control uses the same protected proxy, `POST /api/media/camera/light`, with a boolean `enabled`. Deploying this new proxy allowlist requires restarting the Linux App; it does not require an STM32 reflash.
+
+ToF uses read-only `GET /api/tof/status` on port 80 or 9527. A single on-demand worker reads the MCU's cached `duck_tof` snapshot at 5 Hz through its own Router client. HTTP requests read only the Linux cache; multiple viewers do not create additional RPC streams. Closing/backgrounding the last page expires a 15-second sampling lease. The public Router client is required; the worker never closes the motion loop's shared Bridge client. Loading the new Linux route requires restarting the App container, without changing the STM32 sketch.
+
+Missing targets appear as dark cells, never zero-distance obstacles. Frames older than one second are cleared in both the API and browser, including during a stalled request. Missing hardware, sensor errors, missing MCU RPC and network failures are shown separately; they do not stop motion, camera or audio. The scan animation pauses without live data and is disabled for reduced-motion preferences. The sensor's physical mounting determines the grid's direction; this display does not implement automatic obstacle avoidance. See [ToF diagnostics](tof.md) for sensor connection, validity and missing-RPC recovery notes.

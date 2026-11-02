@@ -13,6 +13,281 @@ VENDOR = ROOT / 'python/vendor/luwu_os'
 @unittest.skipUnless(platform.system() == 'Linux' and platform.machine() == 'aarch64',
                      'Target Linux ARM64 audio SDK check')
 class AudioPlaybackTest(unittest.TestCase):
+    def test_aec_headroom_reaches_speaker_and_reference_with_one_saturation(self):
+        self.check('''
+import array
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+from audio_codec import AudioCodec
+from audio_devices import Volume, aec_playback_transform
+with patch('audio_codec.LocalAEC'):
+    audio = AudioCodec()
+cfg = SimpleNamespace(get=lambda:{'volume':100,'output_gain_db':6.020599913279624})
+volume = Volume(cfg)
+audio._running = audio._capture_enabled = audio.aec_enabled = True
+audio.aec._destroyed = False
+audio.input_stream = Mock()
+audio.output_transform = aec_playback_transform(volume,12.041199826559248,
+    lambda:audio.aec_enabled and audio._capture_enabled and audio.input_stream is not None)
+raw = array.array('h',[-30000,0,30000]*320).tobytes()
+try:
+    audio._play_pcm_buf = raw
+    out = bytearray(len(raw))
+    audio._output_callback(out,960,None,None)
+    assert list(array.array('h',out))[:3] == [-15000,0,15000]
+    audio._drain_far()
+    audio.aec.push_reference.assert_called_once_with(bytes(out))
+    audio._capture_enabled = False
+    audio._play_pcm_buf = raw
+    audio._output_callback(out,960,None,None)
+    assert list(array.array('h',out))[:3] == [-32768,0,32767]
+finally:
+    audio.close()
+''')
+
+    def test_cloud_interrupt_flushes_alsa_without_resetting_server_preroll(self):
+        self.check('''
+import asyncio, time
+from types import SimpleNamespace
+from unittest.mock import Mock, AsyncMock, patch
+from audio_codec import AudioCodec
+from application import Application
+
+async def check():
+    with patch('audio_codec.LocalAEC'):
+        audio = AudioCodec()
+    app = Application({'enable_robot':False, 'enable_camera':False})
+    app.audio, app.loop, app.state = audio, asyncio.get_running_loop(), 'speaking'
+    app.protocol = SimpleNamespace(session_id='6654ac0b-0000-4000-8000-000000000000',
+        is_audio_channel_opened=lambda:True, send_start_listening=AsyncMock(),
+        send_abort_speaking=AsyncMock())
+    audio._running = audio._capture_enabled = audio.aec_enabled = True
+    audio.input_stream = Mock(latency=.36)
+    audio.output_stream = Mock(active=True)
+    audio._play_pcm_buf = b'\\x10\\x01' * 960
+    audio._audible_until = time.monotonic()+.5
+    audio.play_queue.put((audio._opus_generation, b'old opus'))
+    try:
+        app._handle_tts({'state':'stop', 'session_id':'794ae3f9af8b4948a260fd96951d171e'})
+        assert app.state == 'listening' and app.aborted
+        assert not audio._play_pcm_buf and audio.play_queue.empty()
+        audio.output_stream.abort.assert_called_once()
+        audio.aec.clear.assert_called_once()
+        assert audio._capture_enabled and audio.input_stream is not None
+        app.protocol.send_abort_speaking.assert_not_awaited()
+        app.protocol.send_start_listening.assert_not_awaited()
+        app._on_incoming_audio(b'late old packet', 60)
+        assert audio.play_queue.empty(), 'late old UDP audio was allowed after abort'
+    finally:
+        app.protocol = None
+        await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_normal_and_unknown_stop_drain_full_reply_before_listening(self):
+        self.check('''
+import asyncio, time
+from types import SimpleNamespace
+from unittest.mock import Mock, AsyncMock, patch
+from audio_codec import AudioCodec
+from application import Application
+
+async def check():
+    channel = '6654ac0b-0000-4000-8000-000000000000'
+    for sid in (channel, None, 'another-channel-uuid-0000-000000000000', 'invalid', 123):
+        with patch('audio_codec.LocalAEC'):
+            audio = AudioCodec()
+        app = Application({'enable_robot':False, 'enable_camera':False})
+        app.audio, app.loop, app.state = audio, asyncio.get_running_loop(), 'speaking'
+        app.protocol = SimpleNamespace(session_id=channel,
+            is_audio_channel_opened=lambda:True, send_start_listening=AsyncMock())
+        audio._running = audio._capture_enabled = audio.aec_enabled = True
+        audio.input_stream = Mock(latency=.36)
+        audio.output_stream = Mock(active=True)
+        audio._play_pcm_buf = b'\\x10\\x01' * 960
+        audio._audible_until = time.monotonic()+.5
+        try:
+            app._handle_tts({'state':'stop', 'session_id':sid})
+            waiter = next(t for t in app._tasks if t.get_coro().__name__ == '_wait_tts_playback_done')
+            await asyncio.sleep(.02)
+            assert app.state == 'speaking' and audio._play_pcm_buf
+            audio.output_stream.abort.assert_not_called()
+            # Simulate the real output callback and the hardware tail finishing.
+            audio._play_pcm_buf, audio._audible_until = b'', 0.
+            await asyncio.wait_for(waiter, 1.)
+            assert app.state == 'listening'
+            audio.aec.clear.assert_not_called()
+            app.protocol.send_start_listening.assert_awaited_once()
+        finally:
+            app.protocol = None
+            await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_old_reply_waiter_cannot_clear_a_new_reply(self):
+        self.check('''
+import asyncio, threading
+from types import SimpleNamespace
+from unittest.mock import Mock, AsyncMock, patch
+from audio_codec import AudioCodec
+from application import Application
+
+async def check():
+    with patch('audio_codec.LocalAEC'):
+        audio = AudioCodec()
+    app = Application({'enable_robot':False, 'enable_camera':False})
+    app.audio, app.loop, app.state = audio, asyncio.get_running_loop(), 'speaking'
+    app.protocol = SimpleNamespace(session_id='6654ac0b-0000-4000-8000-000000000000',
+        is_audio_channel_opened=lambda:True, send_start_listening=AsyncMock())
+    audio._running = audio._capture_enabled = audio.aec_enabled = True
+    audio.input_stream = Mock(latency=.36)
+    entered, release = threading.Event(), threading.Event()
+    def old_wait(_):
+        entered.set()
+        return release.wait(2.)
+    audio.wait_playback_done = old_wait
+    try:
+        app._handle_tts({'state':'stop', 'session_id':app.protocol.session_id})
+        waiter = next(t for t in app._tasks if t.get_coro().__name__ == '_wait_tts_playback_done')
+        for _ in range(200):
+            if entered.is_set(): break
+            await asyncio.sleep(.005)
+        assert entered.is_set()
+        app._handle_tts({'state':'start', 'session_id':app.protocol.session_id})
+        audio._play_pcm_buf = b'new answer PCM'
+        release.set()
+        await asyncio.wait_for(waiter, 1.)
+        assert app.state == 'speaking' and audio._play_pcm_buf == b'new answer PCM'
+        app.protocol.send_start_listening.assert_not_awaited()
+    finally:
+        release.set()
+        app.protocol = None
+        await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_cloud_interrupt_cancels_local_duck_and_discards_deferred_old_reply(self):
+        self.check('''
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import Mock, AsyncMock, patch
+from application import Application
+from audio_codec import AudioCodec
+from voice_application import application_type
+
+async def check():
+    with patch('audio_codec.LocalAEC'):
+        audio = AudioCodec(prebuffer_ms=60)
+    audio._running = audio._capture_enabled = audio.aec_enabled = True
+    audio.input_stream, audio.output_stream = Mock(latency=.36), Mock(active=True, latency=.5)
+    runtime = SimpleNamespace(config=SimpleNamespace(get=lambda:{'output_gain_db':0}), mouth=None)
+    app = application_type(Application, runtime)({'enable_robot':False, 'enable_camera':False, 'enable_aec':True})
+    app.audio, app.loop, app._duck_session = audio, asyncio.get_running_loop(), 1
+    app.protocol = SimpleNamespace(session_id='6654ac0b-0000-4000-8000-000000000000',
+        is_audio_channel_opened=lambda:True, send_start_listening=AsyncMock())
+    app.duck_sounds.render = lambda *_: b'\\x10\\x01' * 1600
+    task = None
+    try:
+        app._handle_tts({'state':'start'})
+        task = asyncio.create_task(app.duck_sounds.play('chirp'))
+        for _ in range(200):
+            if app.duck_sounds.playing or task.done(): break
+            await asyncio.sleep(.005)
+        assert app.duck_sounds.playing
+        app._on_incoming_audio(b'old deferred opus', 60)
+        assert len(app.duck_sounds.deferred) == 1
+        app._handle_tts({'state':'stop', 'session_id':'794ae3f9af8b4948a260fd96951d171e'})
+        await asyncio.gather(task, return_exceptions=True)
+        assert task.cancelled() and not app.duck_sounds.playing
+        assert not app.duck_sounds.deferred and app.state == 'listening'
+        assert not audio._play_pcm_buf and audio.play_queue.empty()
+    finally:
+        if task is not None and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        app.protocol = None
+        await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_reference_survives_normal_full_duplex_reply_boundaries(self):
+        self.check('''
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import Mock, AsyncMock, patch
+from audio_codec import AudioCodec
+from application import Application
+
+async def check():
+    with patch('audio_codec.LocalAEC'):
+        audio = AudioCodec()
+    app = Application({'enable_robot':False, 'enable_camera':False})
+    app.audio, app.loop = audio, asyncio.get_running_loop()
+    app.protocol = SimpleNamespace(is_audio_channel_opened=lambda:True,
+                                  send_start_listening=AsyncMock())
+    app.keep_listening, app.state = True, 'listening'
+    audio._running = audio._capture_enabled = audio.aec_enabled = True
+    audio.input_stream = Mock(latency=.36)
+    audio._far_pending.append((1, audio._reference_generation, b'render-history'))
+    generation = audio._reference_generation
+    try:
+        app._handle_tts({'state':'start'})
+        assert app.state == 'speaking'
+        assert audio._far_pending, 'TTS start discarded the continuous echo reference'
+        assert audio._reference_generation == generation
+        audio.aec.clear.assert_not_called()
+        await app._wait_tts_playback_done()
+        assert app.state == 'listening'
+        assert audio._capture_enabled and audio.input_stream is not None
+        assert audio._far_pending, 'reply end discarded reference for delayed microphone samples'
+        assert audio._reference_generation == generation
+        audio.aec.clear.assert_not_called()
+        assert audio.capture_status()['aec_reference_resets'] == 0
+        # Explicit interruption still discards output/reference and resets the
+        # time axis; preserving a normal boundary must not weaken stop.
+        audio.clear_play_queue()
+        assert not audio._far_pending
+        audio.aec.clear.assert_called_once()
+        assert audio._reference_generation == generation+1
+        # AEC-off conversations keep the previous reply-boundary behavior.
+        audio.aec_enabled = False
+        app.state = 'speaking'
+        app._set_state('listening')
+        assert audio._reference_generation == generation+2
+    finally:
+        app.protocol = None
+        await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_playback_timeout_does_not_preserve_stale_echo_reference(self):
+        self.check('''
+import asyncio, time
+from unittest.mock import Mock, patch
+from audio_codec import AudioCodec
+from application import Application
+
+async def check():
+    with patch('audio_codec.LocalAEC'):
+        audio = AudioCodec()
+    app = Application({'enable_robot':False, 'enable_camera':False})
+    app.audio, app.loop, app.state = audio, asyncio.get_running_loop(), 'speaking'
+    audio._running = audio._capture_enabled = audio.aec_enabled = True
+    audio.input_stream = Mock(latency=.36)
+    audio.output_stream = Mock(active=True)
+    audio._play_pcm_buf = b'\\x10\\x01' * 960
+    audio._audible_until = time.monotonic()+.5
+    audio._far_pending.append((1, audio._reference_generation, b'stale-render'))
+    try:
+        app._set_state('listening')
+        assert not audio._play_pcm_buf and not audio._far_pending
+        audio.output_stream.abort.assert_called_once()
+        audio.aec.clear.assert_called_once()
+    finally:
+        await app.shutdown()
+asyncio.run(check())
+''')
+
     def test_local_call_requires_idle_output_and_tracks_reset_without_new_stream(self):
         self.check('''
 from unittest.mock import Mock, patch

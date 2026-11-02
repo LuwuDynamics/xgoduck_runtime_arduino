@@ -367,6 +367,8 @@ class AudioCodec:
         self._capture_queue_drops = 0
         self._capture_queue_peak = 0
         self._input_callbacks = 0
+        self._aec_frames = 0
+        self._aec_reference_resets = 0
         self._last_input_at = None
         self._max_input_gap_ms = self._max_input_work_ms = 0.
         self._max_capture_work_ms = self._max_capture_age_ms = 0.
@@ -579,6 +581,7 @@ class AudioCodec:
                     n_sub = self.input_frame_size // self.aec.sub_frame_size
                     far = self.aec.pop_reference(max(1, n_sub))
                     pcm = self.aec.process(pcm, far)
+                    self._aec_frames += 1
                     self._dump("aec_out", pcm)
                 # Product capture gain runs once in this worker, after AEC,
                 # without changing its near/far levels or the real-time callback.
@@ -734,11 +737,11 @@ class AudioCodec:
     def local_pcm_current(self, generation):
         return self._running and generation == self._pcm_generation
 
-    def clear_play_queue(self, clear_pcm=True):
+    def clear_play_queue(self, clear_pcm=True, *, reset_aec=True):
         with self._play_state_lock:
-            self._clear_play_queue_locked(clear_pcm)
+            self._clear_play_queue_locked(clear_pcm, reset_aec=reset_aec)
 
-    def _clear_play_queue_locked(self, clear_pcm):
+    def _clear_play_queue_locked(self, clear_pcm, *, reset_aec=True):
         """清空播放队列; clear_pcm=False 时保留已解码入缓冲的音频
         (用于 TTS 新句开始: 只丢未解码的 opus 残留, 不清掉提示音)"""
         self._opus_generation += 1
@@ -763,14 +766,16 @@ class AudioCodec:
                 self.output_stream.start()
                 self._last_output_at = None
             self._audible_until = 0.
-        self._reference_generation += 1
-        self._far_pending.clear()
+        if reset_aec:
+            self._reference_generation += 1
+            self._far_pending.clear()
+            self.aec.clear()
+            self._aec_reference_resets += 1
         self._opus_fed = False  # 本轮 TTS 结束/被打断, 复位欠载检测
         self._last_opus_time = 0.0
         self._prebuf = None    # jitter buffer 状态一并复位 (打断立即静音)
         self._plc_count = 0
         self._plc_stopped = False
-        self.aec.clear()  # 参考缓冲同步清空 (由下一次 open_input 重新锚定)
         if cleared:
             print(f"[audio] 清空播放队列 ({cleared} 帧)")
 
@@ -819,7 +824,11 @@ class AudioCodec:
             latency_ms = None
         with self._near_q_lock:
             queued = len(self._near_q)
+        backend = getattr(self.aec, 'backend', None)
         return dict(input_latency_ms=latency_ms, input_callbacks=self._input_callbacks,
+                    aec_enabled=bool(self.aec_enabled and self.aec.available),
+                    aec_backend=backend if isinstance(backend, str) else None,
+                    aec_frames=self._aec_frames, aec_reference_resets=self._aec_reference_resets,
                     capture_queue_ms=queued * self.frame_ms,
                     capture_queue_peak_ms=self._capture_queue_peak * self.frame_ms,
                     capture_queue_drops=self._capture_queue_drops, far_queue_drops=self._far_queue_drops,

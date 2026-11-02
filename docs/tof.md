@@ -20,6 +20,13 @@ docker exec <app-container> python /app/tools/read-tof.py --seconds 10
 docker exec <app-container> python /app/tools/read-tof.py --seconds 30 --json
 ```
 
+The reader supports both App SDK generations. On newer SDKs it uses a separate
+public `arduino.router_bridge.Bridge` client and disconnects that client on exit;
+older SDKs retain their original `ClientServer` cleanup. It never registers
+methods, sends motor commands or changes the USB role. A `method duck_tof not
+available` error means the Router currently has no registered sensor-read RPC;
+it is different from an `absent` snapshot returned by the sensor task.
+
 The read-only `duck_tof` Bridge RPC returns a 292-byte versioned snapshot.
 It copies memory and does no I2C operations. The tool displays millimetres,
 each zone's raw status and target count, frame sequence, age and read time.
@@ -31,6 +38,9 @@ distance and target status **5 or 9**, contribute to the valid grid and distance
 summary. Other zones display `-`; their raw values remain in JSON for diagnosis.
 The center value is the median of the valid four middle zones.
 These checks prevent missing/old data from being reported as a close obstacle.
+Fresh data and a reported target status do not establish distance accuracy.
+Verify that near/far targets change the measured distance before using readings
+for navigation, particularly if the optical window has film or a cover plate.
 
 States are `starting`, `absent`, `initializing`, `ranging`, `error` and `offline`.
 The tool exits unsuccessfully if no valid frame arrives, the module is absent,
@@ -86,6 +96,30 @@ overlap. The I2C short-read/NACK test compiles and executes the actual driver
 transport. The STM32 image compiled on the UNO Q and passed ELF relocation
 verification before flashing; the read tool was then checked against the
 installed App's actual `duck_tof` RPC.
+
+## Device check, 2026-10-29
+
+The current App SDK replaced the old `ClientServer` interface. The read tool now
+uses its public router client, retaining legacy support; 10 focused SDK-lifecycle,
+packet-quality and actual C++ sensor/I2C-transport checks passed on Mac.
+
+The first probe returned `method duck_tof not available` despite the compiled
+firmware containing the sensor task. Reinitializing the existing matching sketch
+restored the RPC and live sensor data. This run does not establish the cause or
+permanent cold-boot recovery of lost MCU method registrations. Motor-controller
+sources and this robot's existing calibration/configuration were preserved.
+
+Two one-minute recordings each returned **303 consecutive frames at about 5.05
+Hz**, with sensor errors and frame-sequence gaps both zero. Device/revision were
+`0xF0 / 0x02`, with 8x8 zones. After the window was directed toward the target,
+the first recording's central median varied **288-395.5 mm**. During the second,
+manual-rotation recording it varied **36-1532 mm**. Some directions had no valid
+target; these samples remain null, rather than being treated as zero distance.
+These are measured sensor outputs, not a ruler-based accuracy calibration.
+
+During both recordings the existing motor-feedback stream remained around 100
+Hz and inference around 50 Hz. No feedback sequence gaps or bad frames were
+reported, the MCU watchdog remained clear and motors remained unloaded.
 
 ## 中文说明
 

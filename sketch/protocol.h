@@ -3,7 +3,8 @@
 
 constexpr uint32_t BRIDGE_BAUD = 2000000;
 constexpr uint32_t TICK_US = 10000;
-constexpr uint32_t COMMAND_TTL_US = 250000;
+constexpr uint32_t HOST_HEARTBEAT_US = 250000; // Calibration/debug modes only.
+constexpr uint32_t IMU_STALE_US = 500000; // Mirrored by wire.py IMU_STALE_S.
 constexpr uint32_t MAX_SOURCE_AGE_US = 150000;
 enum CommandMode : uint8_t { DISARM = 0, ARM = 1, POLICY = 2, HOLD = 3 };
 
@@ -26,13 +27,16 @@ enum ServoOp : uint8_t {
   SERVO_PING = 7,
   SERVO_RESET_MID = 8,
   SERVO_SET_PROTECTION = 9,
-  SERVO_SET_PROTECTION_CURRENT = 10
+  SERVO_SET_PROTECTION_CURRENT = 10,
+  SERVO_APPLY_RUN_GAINS = 11, // Retired fixed profile; requests are rejected.
+  SERVO_READ_RUN_GAINS = 12
 };
 
 // Little endian, binary payload inside MessagePack RPC. ABI shared with wire.py.
 struct __attribute__((packed)) CommandPacket {
   char magic[4];
   uint32_t seq, sourceUs, ttlUs;
+  // ttlUs is retained for wire compatibility; normal commands do not expire.
   uint8_t mode, reserved;
   uint16_t reserved2;
   float target[15];
@@ -45,6 +49,12 @@ struct __attribute__((packed)) StatePacket {
   uint32_t periodUs, workUs, overruns, reportDrops, invalidCommands;
   int16_t acc[3], gyro[3];
   float angle[15], velocity[15], target[15];
+};
+struct __attribute__((packed)) DiagnosticPacket {
+  char magic[4];
+  uint32_t bridgeState, bridgeAttempts, bridgeFailures, notifyDrops;
+  uint32_t imuSeq, imuUs, imuPeriodUs, imuWorkUs, imuOverruns, imuErrors, imuInitAttempts;
+  uint32_t servoWrites, servoReads, servoWaitUs, reconnects, bridgeReadyUs;
 };
 struct __attribute__((packed)) CalPacket {
   char magic[4];
@@ -77,6 +87,7 @@ struct __attribute__((packed)) ServoReplyPacket {
 };
 static_assert(sizeof(CommandPacket) == 80, "Command ABI");
 static_assert(sizeof(StatePacket) == 240, "State ABI");
+static_assert(sizeof(DiagnosticPacket) == 68, "Diagnostic ABI");
 static_assert(sizeof(CalPacket) == 10, "Cal ABI");
 static_assert(sizeof(CalReplyPacket) == 10, "Cal reply ABI");
 static_assert(sizeof(ServoPacket) == 12, "Servo ABI");

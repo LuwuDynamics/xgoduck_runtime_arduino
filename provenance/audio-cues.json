@@ -1,0 +1,86 @@
+{
+  "description": "Short, quiet local conversation cues; wake/network/MCP/TTS resources are separate. Local WAV queue retains its existing mouthless path.",
+  "reference": {
+    "repository": "local RIG-Omni checkout",
+    "source_commit": "c49b127ca7f8cb6aee7698c366496593515f46d0",
+    "local_changes": false
+  },
+  "processing": {
+    "gain_db": -6,
+    "sample_rate_hz": 16000,
+    "channels": 1,
+    "sample_format": "signed 16-bit PCM WAV",
+    "fade_in_ms": 5,
+    "fade_out_ms": 8
+  },
+  "cues": {
+    "send": {
+      "asset": "python/vendor/luwu_os/assets/music/send.wav",
+      "source_asset": "RIG-Omni/main/assets/common/message_send.ogg",
+      "source_sha256": "60b2eca82da3522c20898b82e0c577a2833fb505e19e9501ce3e60e97683a49f",
+      "previous": {
+        "rate_hz": 44100,
+        "channels": 2,
+        "sample_width": 2,
+        "frames": 21504,
+        "duration_s": 0.487619,
+        "rms_dbfs": -16.46,
+        "peak_dbfs": -6.022,
+        "edge_samples": [
+          0,
+          0
+        ],
+        "sha256": "f6bbde0dc3ddb603d09a43e7f748500bc2efeff437195daf33afca53717098f3"
+      },
+      "output": {
+        "rate_hz": 16000,
+        "channels": 1,
+        "sample_width": 2,
+        "frames": 4800,
+        "duration_s": 0.3,
+        "rms_dbfs": -24.256,
+        "peak_dbfs": -15.551,
+        "edge_samples": [
+          0,
+          0
+        ],
+        "sha256": "675ff354d4723d7e9cccbef416295e5a806ecc747323f1bc2d6d336811718cf1"
+      },
+      "rms_change_db": -7.796
+    },
+    "reply_complete": {
+      "asset": "python/vendor/luwu_os/assets/music/ding.wav",
+      "source_asset": "RIG-Omni/main/assets/common/over.ogg",
+      "source_sha256": "f1a2e65ca093bb3e076163ec2e3c7627494feb48ccaf1558c24b27cf2e60f724",
+      "previous": {
+        "rate_hz": 48000,
+        "channels": 1,
+        "sample_width": 2,
+        "frames": 47926,
+        "duration_s": 0.998458,
+        "rms_dbfs": -14.687,
+        "peak_dbfs": -6.603,
+        "edge_samples": [
+          78,
+          -1
+        ],
+        "sha256": "b2187454c169624e7198ad58eba1ec509fd4702cd1963864d7e89fdda52419ca"
+      },
+      "output": {
+        "rate_hz": 16000,
+        "channels": 1,
+        "sample_width": 2,
+        "frames": 4800,
+        "duration_s": 0.3,
+        "rms_dbfs": -26.024,
+        "peak_dbfs": -18.652,
+        "edge_samples": [
+          0,
+          0
+        ],
+        "sha256": "20109348a0ebd35d33d16608750cfb42ca8efb7c7db0da9c839f634507de9db7"
+      },
+      "rms_change_db": -11.337
+    }
+  }
+}

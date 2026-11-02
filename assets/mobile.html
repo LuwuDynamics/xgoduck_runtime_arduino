@@ -1,16 +1,84 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes"><title>Duck Cockpit</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261013-fullscreen"></head>
-<body><main id="cockpit">
-<img id="feed" alt="Live view from Duck's camera" hidden>
-<div class="shade"></div><div class="reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
-<header class="hud top"><a class="brand" href="/" aria-label="Open desktop control"><span class="duck-mark">D<span>↗</span></span><span>DUCK<small>COCKPIT</small></span></a><div class="status-row"><span id="link" class="chip"><i></i>Connecting</span><span id="videoStats" class="chip optional">CAM OFF</span><button id="padLink" class="chip" aria-label="Configure gamepad">Gamepad —</button></div><div class="top-actions"><button id="fit" class="icon-button" title="Change camera fit" aria-label="Fill camera view">⤢</button><button id="full" class="fullscreen-button" title="Enter fullscreen" aria-label="Enter fullscreen" aria-pressed="false"><span aria-hidden="true">⛶</span><span id="fullLabel">Fullscreen</span></button><button id="settings" class="icon-button" title="Settings" aria-label="Open settings">⚙</button></div></header>
-<div id="welcome" class="welcome"><span class="eyebrow">YOUR DUCK. YOUR POINT OF VIEW.</span><h1>A little closer<br>to the adventure.</h1><p>Live camera. Push to talk. Ready for your controller.</p><button id="startCamera" class="primary">Start camera <span>↗</span></button><span class="welcome-note">Turn your phone sideways and mount it on your gamepad.</span></div>
-<div class="side-tools"><button id="snapshot" class="icon-button" aria-label="Save camera photo" disabled>◎</button><button id="cameraToggle" class="icon-button" aria-label="Start or stop camera">◉</button><button id="clean" class="icon-button" aria-label="Hide controls">⌁</button></div>
-<button id="restoreHud" hidden>Show controls</button>
-<div class="hud bottom"><div class="flight-state"><span class="eyebrow">ROBOT STATUS</span><strong id="robotMode">Connecting…</strong><span id="telemetry">Waiting for feedback</span><button id="torqueOff" class="stop">■ Torque off</button></div><div class="intercom"><div class="intercom-heading"><span class="eyebrow">VOICE LINK</span><button id="micSetup" class="text-button">Phone mic setup</button></div><div class="talk-row"><button id="talk" class="talk-button"><span class="button-icon">↑</span><span><b>Talk to Duck</b><small>Hold · speak · release</small></span></button><button id="listen" class="talk-button secondary"><span class="button-icon">↓</span><span><b id="listenLabel">Listen live</b><small id="listenHint">Duck mic · tap to start</small></span></button></div><div class="voice-line"><span id="voiceState" role="status">Hold to talk · tap to listen live</span><button id="cancelVoice" class="text-button" hidden>Cancel</button></div></div></div>
-<div id="notice" class="toast" role="status" hidden></div>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
+<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261030-controls">
+<link rel="stylesheet" href="mobile-tof.css?v=20261030-tof1">
+</head>
+<body>
+<main id="cockpit">
+  <img id="feed" alt="小鸭摄像头实时画面" data-i18n-alt="cameraAlt" hidden>
+  <div class="shade"></div>
+  <div class="reticle" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
+  <header class="hud top">
+    <a class="brand" href="/index.html" data-desktop-link aria-label="打开桌面控制页" data-i18n-aria-label="desktopControl"><span class="duck-mark">D<span>↗</span></span><span>DUCK<small data-i18n="cockpit">驾驶舱</small></span></a>
+    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button></div>
+    <div class="top-actions">
+      <button id="language" class="language-button" type="button">EN</button>
+      <button id="fit" class="icon-button" aria-label="填满画面" data-i18n-aria-label="fillView">⤢</button>
+      <button id="full" class="fullscreen-button" aria-label="进入全屏" aria-pressed="false"><span aria-hidden="true">⛶</span><span id="fullLabel">全屏</span></button>
+      <button id="settings" class="icon-button" aria-label="打开设置" data-i18n-aria-label="openSettings">⚙</button>
+    </div>
+    <div class="device-controls">
+      <div class="control-group" role="group" aria-label="摄像头" data-i18n-aria-label="camera">
+        <button id="startCamera" class="camera-on" data-i18n="startCamera" disabled>开启摄像头</button>
+        <button id="stopCamera" data-i18n="stopCamera" disabled>关闭摄像头</button>
+      </div>
+      <div class="control-group light-controls" role="group" aria-label="补光灯" data-i18n-aria-label="light">
+        <button id="lightOn" data-i18n="lightOn" disabled>打开补光灯</button>
+        <button id="lightOff" data-i18n="lightOff" disabled>关闭补光灯</button>
+        <span id="lightState" class="control-state" role="status">补光灯：正在读取</span>
+      </div>
+      <div class="control-group view-tools" role="group" aria-label="画面工具" data-i18n-aria-label="viewControls">
+        <button id="snapshot" data-i18n="savePhoto" data-i18n-aria-label="savePhoto" disabled>保存照片</button>
+        <button id="clean" data-i18n="hideControls" data-i18n-aria-label="hideControls">隐藏控件</button>
+      </div>
+    </div>
+  </header>
+  <div id="welcome" class="welcome">
+    <span class="eyebrow" data-i18n="welcomeEyebrow">从小鸭的视角，看见身边。</span>
+    <h1><span data-i18n="welcomeTitle">小鸭的视角，</span><br><span data-i18n="welcomeTitleSecond">由你开启。</span></h1>
+    <p data-i18n="welcomeDescription">点击上方「开启摄像头」，查看实时画面。</p>
+    <span class="welcome-note" data-i18n="welcomeNote">横放手机，配合手柄使用。</span>
+  </div>
+  <aside class="tof-layer" aria-label="ToF 实时测距" data-i18n-aria-label="tofTitle">
+    <section id="tofPanel" class="tof-panel" data-state="starting">
+      <div class="tof-header">
+        <div class="tof-heading"><span class="tof-eyebrow">DEPTH FIELD <span>8×8</span></span><h2 data-i18n="tofTitle">ToF 实时测距</h2></div>
+        <span id="tofStatus" class="tof-status" role="status">正在连接</span>
+        <button id="tofToggle" type="button" aria-expanded="true" aria-controls="tofBody" data-i18n="tofCollapse">收起</button>
+      </div>
+      <div id="tofSummary" class="tof-summary" hidden><span data-i18n="tofCenter">中心距离</span><strong id="tofCompact">—</strong></div>
+      <div id="tofBody" class="tof-body">
+        <div class="tof-map-wrap"><div id="tofGrid" class="tof-grid" role="img" aria-label="8×8 深度热力图" data-i18n-aria-label="tofGrid"></div><span class="tof-scan" aria-hidden="true"></span><i class="tof-crosshair" aria-hidden="true"></i></div>
+        <div class="tof-metrics">
+          <div class="tof-center"><span data-i18n="tofCenter">中心距离</span><div><strong id="tofCenter">—</strong><small id="tofCenterUnit">cm</small></div></div>
+          <div class="tof-nearest"><span data-i18n="tofNearest">最近距离</span><div><strong id="tofNearest">—</strong><small id="tofNearestUnit">cm</small></div></div>
+          <div id="tofValid" class="tof-valid">0 / 64</div>
+        </div>
+        <div class="tof-legend"><span data-i18n="tofNear">近</span><i aria-hidden="true"></i><span data-i18n="tofFar">远 · 2 m+</span></div>
+        <p id="tofMessage" class="tof-message" role="status"></p>
+        <div class="tof-footer"><span id="tofTiming">—</span><span id="tofFrame"># —</span></div>
+      </div>
+    </section>
+  </aside>
+  <button id="restoreHud" data-i18n="showControls" hidden>显示控件</button>
+  <div class="hud bottom">
+    <div class="flight-state"><span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span><button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button></div>
+    <div class="intercom"><div class="intercom-heading"><span class="eyebrow" data-i18n="liveAudio">实时音频</span></div><button id="listen" class="talk-button secondary listen-only" aria-pressed="false"><span class="button-icon" aria-hidden="true">↓</span><span><b id="listenLabel">实时监听</b><small id="listenHint">点击收听小鸭麦克风</small></span></button><div class="voice-line"><span id="voiceState" role="status">点击实时监听，收听小鸭周围的声音</span></div></div>
+  </div>
+  <div id="notice" class="toast" role="status" hidden></div>
 </main>
-<dialog id="config"><div class="dialog-head"><div><span class="eyebrow">DUCK COCKPIT</span><h2>Settings</h2></div><button id="closeConfig" class="icon-button" aria-label="Close settings">×</button></div><nav class="settings-tabs" aria-label="Settings"><button data-panel="quick" aria-current="page">General</button><button data-panel="gamepad">Gamepad</button><button data-panel="servo">Servos</button><button data-panel="calibrate">Calibration</button></nav>
-<div id="quickPanel" class="quick-panel"><section class="usb-settings"><h3>USB connection</h3><p class="small">Enable Host for a USB camera, audio device or wired controller. Off uses Device mode. Host is off after reboot; starting Duck does not enable it.</p><button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host: Checking…</button><p id="usbStatus" class="small" role="status">Checking USB mode…</p><p class="small">Use Wi-Fi when switching modes; USB connections will be interrupted.</p></section><section><h3>Speaker</h3><div class="setting-row"><label for="volume">Duck volume</label><output id="volumeLabel">—</output></div><input id="volume" type="range" min="0" max="100" value="100"><button id="applyVolume">Apply volume</button><button id="testSpeaker">Test speaker</button><button id="testMic">Listen to Duck microphone</button><button id="stopAudio">Stop audio</button></section><section><h3>Phone microphone</h3><p id="micAvailability">Checking browser support…</p><p>For this local HTTP test, open the following address in Android Chrome:</p><input class="copy-field" id="flagAddress" readonly value="chrome://flags/#unsafely-treat-insecure-origin-as-secure" aria-label="Chrome flag address"><button id="copyFlag">Copy Chrome address</button><p>Add this exact origin, select <b>Enabled</b>, then <b>Relaunch</b> Chrome:</p><input class="copy-field" id="originAddress" readonly aria-label="Duck origin"><button id="copyOrigin">Copy Duck origin</button><p class="muted">This enables microphone access for this HTTP origin; it does not encrypt traffic. Use it on your trusted test Wi-Fi, then remove the exception after testing. If this flag is unavailable, use the audio file option below.</p><button id="prepareMic">Check microphone</button><label class="file-button">Send an audio file<input id="voiceFile" type="file" accept="audio/*"></label></section><section><h3>Handheld view</h3><p>Use landscape orientation for a controller-mounted display. Fullscreen hides the browser controls; tap the view icon to hide the overlay.</p><a href="/" class="desktop-link">Open desktop control ↗</a></section></div>
-<div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="Duck configuration" src="about:blank"></iframe></div></dialog>
-<script src="mobile-fullscreen.js?v=20261013-fullscreen"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile.js?v=20261013-live"></script><script src="usb-role.js?v=20261013"></script></body></html>
+<dialog id="config">
+  <div class="dialog-head"><div><span class="eyebrow" data-i18n="pageTitle">小鸭驾驶舱</span><h2 data-i18n="settings">设置</h2></div><button id="closeConfig" class="icon-button" aria-label="关闭设置" data-i18n-aria-label="closeSettings">×</button></div>
+  <nav class="settings-tabs" aria-label="设置" data-i18n-aria-label="settings"><button data-panel="quick" aria-current="page" data-i18n="general">常规</button><button data-panel="gamepad" data-i18n="gamepad">手柄</button><button data-panel="servo" data-i18n="servos">舵机</button><button data-panel="calibrate" data-i18n="calibration">校准</button></nav>
+  <div id="quickPanel" class="quick-panel">
+    <section class="usb-settings"><h3 data-i18n="usbConnection">USB 连接</h3><p data-i18n="usbDescription">使用 USB 摄像头、音频设备或有线手柄时，请开启 Host 模式。</p><button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host</button><p id="usbStatus" role="status"></p><p data-i18n="usbNotice">请通过 Wi-Fi 操作；切换模式会中断当前 USB 连接。</p></section>
+    <section><h3 data-i18n="speaker">扬声器</h3><div class="setting-row"><label for="volume" data-i18n="duckVolume">小鸭音量</label><output id="volumeLabel">—</output></div><input id="volume" type="range" min="0" max="100" value="100"><button id="applyVolume" data-i18n="applyVolume">应用音量</button><button id="testSpeaker" data-i18n="testSpeaker">测试扬声器</button><button id="testMic" data-i18n="listenMicrophone">监听小鸭麦克风</button><button id="stopAudio" data-i18n="stopAudio">停止音频</button><label class="file-button"><span data-i18n="sendAudioFile">发送音频文件</span><input id="voiceFile" type="file" accept="audio/*"></label><p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p></section>
+    <section><h3 data-i18n="handheldView">手持视图</h3><p data-i18n="handheldDescription">横放手机适合配合手柄使用。全屏可隐藏浏览器栏；点击隐藏控件可获得更完整的画面。</p><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
+  </div>
+  <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
+</dialog>
+<script src="mobile-i18n.js?v=20261030-tof1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261030-tof1"></script>
+</body></html>

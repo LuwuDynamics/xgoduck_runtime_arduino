@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from pathlib import Path
 
 from audio_codec import AudioCodec, AudioConfig
@@ -88,6 +89,7 @@ class Application:
         self._ota_stop = threading.Event()
         self._closing = False
         self._tasks = set()
+        self._tts_generation = 0
 
     def _spawn(self, coroutine):
         if self._closing:
@@ -446,6 +448,7 @@ class Application:
     def _back_to_idle(self):
         if self._closing:
             return
+        self._tts_generation += 1
         self._set_state(DeviceState.IDLE)
         self.audio.set_capture_enabled(False)
         self.audio.close_input()          # 释放麦克风
@@ -459,6 +462,7 @@ class Application:
         if self.aborted:
             return
         self.aborted = True
+        self._tts_generation += 1
         self.audio.clear_play_queue()
         if self.protocol:
             await self.protocol.send_abort_speaking(reason)
@@ -476,13 +480,21 @@ class Application:
             return
         if self.state == state:
             return
+        previous_state = self.state
         self.state = state
         if state != DeviceState.IDLE:
             self._pause_ambient()
         print(f"[app] 状态: {state}")
         self._cancel_listen_timeout()
         if state == DeviceState.LISTENING:
-            self.audio.clear_play_queue()
+            # A full-duplex microphone still holds delayed samples of the last
+            # rendered audio after the DAC drains. Keep their echo reference
+            # across a normal reply boundary. An actual interruption or a
+            # playback timeout still uses the normal reset/flush path.
+            preserve_reference = (previous_state == DeviceState.SPEAKING
+                                  and self.audio.aec_enabled
+                                  and self.audio.is_playback_idle())
+            self.audio.clear_play_queue(reset_aec=not preserve_reference)
             self.audio.open_input()
             self.audio.set_capture_enabled(True)
             self._emit_emotion("listen")          # 同 Omni: LISTENING → listen
@@ -644,12 +656,42 @@ class Application:
                 pass
 
     # ================= TTS =================
+    def _is_server_tts_interrupt(self, data):
+        """Recognize the deployed Xiaozhi cloud's existing abort packet.
+
+        Normal stop carries the hello/channel session ID. Its abort handler
+        instead carries a 32-hex reply ID. Keep unrecognized/legacy stop
+        messages on the normal drain path: truncating every stop cuts replies.
+        The MQTT gateway forwards these fields without rewriting them.
+        """
+        channel = getattr(self.protocol, "session_id", None)
+        reply = data.get("session_id")
+        return (data.get("state") == "stop" and isinstance(channel, str)
+                and bool(channel) and isinstance(reply, str) and reply != channel
+                and len(reply) == 32 and all(c in "0123456789abcdefABCDEF" for c in reply))
+
+    def _stop_tts_from_server(self):
+        started = time.monotonic()
+        self.aborted = True
+        self._tts_generation += 1
+        self.audio.clear_play_queue()  # Also abort the PCM already queued in ALSA.
+        if self.keep_listening and self.protocol.is_audio_channel_opened():
+            # The server is already collecting the interruption. Do not send
+            # another abort/listen:start that resets its VAD/preroll mid-phrase.
+            self._set_state(DeviceState.LISTENING)
+        else:
+            self._back_to_idle()
+        print(f"[app] TTS 打断: 已停止缓存和声卡播放，"
+              f"本地处理={(time.monotonic()-started)*1000:.1f}ms")
+
     def _handle_tts(self, data):
         state = data.get("state", "")
         if state == "start":
+            self._tts_generation += 1
             self.aborted = False
             # 只清未解码的 opus 残留, 保留刚入队的提示音 (send.wav 等)
-            self.audio.clear_play_queue(clear_pcm=False)
+            self.audio.clear_play_queue(clear_pcm=False,
+                                        reset_aec=not self.audio.aec_enabled)
             if self.state in (DeviceState.IDLE, DeviceState.LISTENING):
                 self._set_state(DeviceState.SPEAKING)
             # 部分服务器在 tts start 中携带 emotion (xiaozhi 协议)
@@ -658,21 +700,30 @@ class Application:
                 self._emit_emotion(emotion)
         elif state == "stop":
             if self.state == DeviceState.SPEAKING:
+                interrupted = self._is_server_tts_interrupt(data)
+                print(f"[app] TTS stop: {'interrupt' if interrupted else 'complete'} "
+                      f"generation={self._tts_generation}")
+                if interrupted:
+                    self._stop_tts_from_server()
+                    return
                 # 回合结束禁止 PLC 拖尾, 保证 is_playback_idle 及时判闲
                 # (句间断供仍可垫, 见 audio_codec._maybe_plc_pad)
                 self.audio.stop_plc()
-                self._spawn(self._wait_tts_playback_done())
+                self._spawn(self._wait_tts_playback_done(self._tts_generation))
         elif state == "sentence_start":
             text = data.get("text", "")
             if text:
                 print(f"[app] << 助手: {text}")
                 self._notify_status(DeviceState.SPEAKING, text)
 
-    async def _wait_tts_playback_done(self):
+    async def _wait_tts_playback_done(self, generation=None):
         """等播放队列排空 (executor 内轮询, 不阻塞事件循环)"""
+        if generation is None:
+            generation = self._tts_generation
         await self.loop.run_in_executor(
             None, self.audio.wait_playback_done, 30.0)
-        if self.state != DeviceState.SPEAKING or self.aborted:
+        if (self.state != DeviceState.SPEAKING or self.aborted
+                or generation != self._tts_generation):
             return
         if self.keep_listening and self.protocol.is_audio_channel_opened():
             await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)

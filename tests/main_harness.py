@@ -13,6 +13,7 @@ import socketserver
 import sys
 import threading
 import time
+import struct
 from types import ModuleType
 from http.server import BaseHTTPRequestHandler
 from fastapi import FastAPI
@@ -69,6 +70,9 @@ class HardwareServer(socketserver.ThreadingMixIn, socketserver.UnixStreamServer)
 
 class Bridge:
     callbacks, commands = {}, []
+    servo_ops = []
+    saved_gains = {}
+    held_mask = 0
 
     @classmethod
     def provide(cls, name, callback):
@@ -79,6 +83,25 @@ class Bridge:
     def notify(cls, name, payload):
         if name == 'duck_command':
             cls.commands.append(wire.COMMAND.unpack(payload)[4])
+        elif name == 'duck_cal':
+            magic, seq, op, index = wire.CAL.unpack(payload)
+            assert magic == b'DQL2'
+            if op == wire.CAL_CENTER_ONE:
+                cls.held_mask |= 1 << index
+                cls.callbacks['duck_cal_reply'](wire.CAL_REPLY.pack(b'DQA1', seq, index, 1))
+            else:
+                cls.held_mask = 0
+        elif name == 'duck_servo':
+            magic, op, sid, new, kp, kd, flags, current = wire.SERVO.unpack(payload)
+            assert magic == b'DQV2'
+            cls.servo_ops.append(op)
+            assert op != wire.SERVO_APPLY_RUN_GAINS, 'Automatic gains must remain disabled'
+            if op == wire.SERVO_SET_PERM_KP_KD:
+                cls.saved_gains[sid] = (kp, kd)
+            raw = (current if op == wire.SERVO_SET_PROTECTION_CURRENT else
+                   0 if op in (wire.SERVO_SET_PROTECTION, wire.SERVO_APPLY_RUN_GAINS) else 2047)
+            cls.callbacks['duck_servo_reply'](wire.SERVO_REPLY.pack(
+                b'DQS3', op, sid, 1, flags, raw, 2047, *cls.saved_gains.get(sid, (5, 10))))
 
 
 class WebUI:
@@ -108,6 +131,8 @@ def main():
                 seq, seq * 10000, seq * 10000, 0, 0, 10000, 500, 0, 0, 0,
                 0, 0, -16384, 0, 0, 0, *([0.] * 45))
             Bridge.callbacks['duck_state'](raw)
+            Bridge.callbacks['duck_raw'](wire.RAW.pack(
+                b'DQR2', wire.ALL_MASK, Bridge.held_mask, *([2047] * 15)))
 
     class App:
         @staticmethod
@@ -119,8 +144,19 @@ def main():
                 with TestClient(WebUI.instance.app) as client:
                     wait_for(lambda: state['controller'].inferred > 5)
                     voice = wait_for(lambda: (s if (s := client.get('/api/voice/status').json()).get('state') == 'disabled' else None))
+                    assert Bridge.servo_ops == [], 'Voice startup touched servo parameters'
+                    assert client.get('/api/status').json()['runtime_gains'] == dict(state='manual', auto_apply=False)
                     assert helper.host and helper.switches == 0 and helper.checks == 1
                     assert client.get('/api/status').json()['full_robot_ready']
+                    from local_ipc import request
+                    wait_for(lambda: state['tof'].status()['fresh'])
+                    if state['avoidance'].settings['enabled']:
+                        wait_for(lambda: state['avoidance'].status()['available'])
+                    tof = request(state['motion_port'], state['token'], '/tof')
+                    assert tof['sensor']['fresh'] and tof['sensor']['seq'] > 0
+                    assert tof['sensor']['grid_mm'] == [[1000]*8 for _ in range(8)]
+                    assert tof['front']['front_distance_mm'] == 1000
+                    assert tof['front']['forward_ready']
                     media = client.get('/api/media/status')
                     assert media.status_code == 200 and set(media.json()) == {'camera', 'audio', 'tts'}
                     if mode == 'orphan':
@@ -129,13 +165,46 @@ def main():
                         raise AssertionError('Orphan test failed to kill the simulated motion process')
                     assert client.post('/api/mode', json={'mode': 'off'}).status_code == 200
                     assert client.post('/api/mode', json={'mode': 'shadow'}).status_code == 200
+                    # Exercise the stable ZIP's buttons through the real App
+                    # routes and matching MCU ABI, still with no physical I/O.
+                    roller = client.post('/api/roller', json={'enabled': True})
+                    assert roller.status_code == 200 and roller.json()['enabled']
+                    assert client.post('/api/action-scale', json={'scale': .8}).status_code == 200
+                    assert client.post('/api/filter', json={'leg': .3, 'head': .6}).status_code == 200
+                    assert client.post('/api/imu-filter', json={'gyro_alpha': .2, 'gravity_tau_s': .4}).status_code == 200
+                    status = client.get('/api/status').json()
+                    assert status['active_model'] == 'xgoduck_roller.onnx'
+                    assert status['deployment']['action_scale'] == .8
+                    assert client.post('/api/roller', json={'enabled': False}).status_code == 200
+                    assert client.post('/api/cal/enter', json={}).status_code == 200
+                    assert client.post('/api/cal/heartbeat', json={}).status_code == 200
+                    center = client.post('/api/cal/center', json={'index': 0})
+                    assert center.status_code == 200 and center.json()['hold_pos'] == 2048
+                    assert client.post('/api/cal/center', json={'index': True}).status_code == 400
+                    assert client.post('/api/cal/exit', json={}).status_code == 200
+                    assert client.post('/api/servo/enter', json={}).status_code == 200
+                    read = client.post('/api/servo', json={'action': 'read', 'target_id': 42})
+                    assert read.status_code == 200 and read.json()['kp'] == 5
+                    tuned = client.post('/api/servo', json={'action': 'set_gains', 'target_id': 42, 'kp': 7, 'kd': 19})
+                    assert tuned.status_code == 200
+                    assert Bridge.saved_gains[42] == (7, 19)
+                    switch = client.post('/api/servo', json={'action': 'set_protection', 'protection_enabled': False})
+                    assert switch.status_code == 200 and switch.json()['broadcast'] is True
+                    current = client.post('/api/servo', json={'action': 'set_protection_current', 'current_a': 1.5})
+                    assert current.status_code == 200 and abs(current.json()['current_a'] - 1.5) < .0065
+                    assert client.post('/api/servo/exit', json={}).status_code == 200
                     before = state['controller'].inferred
+                    servo_ops_before = list(Bridge.servo_ops)
                     os.kill(voice['pid'], signal.SIGKILL)
                     wait_for(lambda: state['controller'].inferred > before + 10)
                     after = wait_for(lambda: (s if (s := client.get('/api/voice/status').json()).get('state') == 'disabled'
                                              and s.get('pid') != voice['pid'] else None))
                     assert helper.switches == 0 and helper.checks == 1
                     assert after['restarts'] == 1
+                    assert Bridge.servo_ops == servo_ops_before, 'Voice respawn touched servo parameters'
+                    runtime = client.post('/api/servo', json={'action': 'read_runtime_gains', 'target_id': 42})
+                    assert runtime.status_code == 200
+                    assert (runtime.json()['kp'], runtime.json()['kd']) == (7, 19)
                     assert set(Bridge.commands) == {wire.DISARM}, 'Simulation unexpectedly armed motors'
                     report.write_text(json.dumps(dict(inferred=state['controller'].inferred,
                         restarts=after['restarts'], voice_pid=after['pid'], host_switches=helper.switches,
@@ -148,11 +217,28 @@ def main():
     modules['arduino.app_utils'].App, modules['arduino.app_utils'].Bridge = App, Bridge
     modules['arduino.app_bricks.web_ui'].WebUI = WebUI
     sys.modules.update(modules)
+    # Exercise the real ToF monitor/decoder/guard with a simulated private RPC
+    # connection; tests must never open the board's Router socket.
+    import tof_status
+    monitor = tof_status.ToFMonitor
+    class ToFClient:
+        seq = 0
+        def connect(self, timeout): return True
+        def disconnect(self): pass
+        def call(self, method, timeout):
+            assert method == 'duck_tof'
+            self.seq += 1
+            return struct.pack('<4s8B6I64h64B64B', b'DTF1', 1, 8, 8, 3,
+                0x29, 0xf0, 2, 0, self.seq, 100, 10, 2000, 0, 0,
+                *([1000]*64), *([5]*64), *([1]*64))
+    tof_status.ToFMonitor = lambda **kw: monitor(ToFClient, **kw)
     try:
         result = runpy.run_path(str(ROOT / 'python/main.py'), run_name='__main__')
         assert not result['worker'].is_alive()
         assert not result['access'].thread.is_alive()
         assert not result['voice'].thread.is_alive()
+        assert result['avoidance'].thread is None or not result['avoidance'].thread.is_alive()
+        assert not result['tof']._thread.is_alive()
         assert result['voice'].process.poll() is not None
     finally:
         helper.shutdown()

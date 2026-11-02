@@ -12,7 +12,8 @@ DEFAULTS = dict(enabled=True, language='cn', enable_wakeword=True, enable_aec=Fa
                 input_device=None, output_device=None, voice_motion_enabled=False,
                 volume=60, enable_camera=True, ota_url='', camera_device=None, remote_motion_enabled=False,
                 cloud_region=None, input_auto_gain=None, input_gain_db=0, output_gain_db=0,
-                tts_mouth_enabled=True, input_channel_mode='auto', input_sample_rate=None)
+                tts_mouth_enabled=True, input_channel_mode='auto', input_sample_rate=None,
+                aec_output_headroom_db=0)
 
 
 class VoiceConfig:
@@ -34,6 +35,9 @@ class VoiceConfig:
         if not isinstance(changes, dict) or any(k not in DEFAULTS for k in changes):
             raise ValueError('unknown voice configuration field')
         for key, value in changes.items():
+            if key == 'aec_output_headroom_db' and (isinstance(value, bool)
+                    or not isinstance(value, (int, float)) or not 0 <= value <= 18):
+                raise ValueError('aec_output_headroom_db must be 0–18 dB')
             if key == 'input_channel_mode' and value not in ('auto', 'left', 'right', 'average'):
                 raise ValueError('input_channel_mode must be auto/left/right/average')
             if key == 'input_sample_rate' and value is not None and (

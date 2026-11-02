@@ -206,6 +206,19 @@ class Volume:
                 return 0  # A hardware minimum may still be audible; enforce mute.
             return (100 if self.hardware else self.value) * self.boost
 
-    def pcm(self, pcm):
-        volume = self.software_gain
+    def pcm(self, pcm, *, attenuation=1.):
+        volume = self.software_gain * attenuation
         return pcm if volume == 100 else scale_pcm(pcm, volume)
+
+
+def aec_playback_transform(volume, headroom_db, active):
+    """Reserve speaker headroom only during real full-duplex AEC capture.
+
+    Combine attenuation with the existing volume/boost before PCM saturation.
+    Attenuating already clipped boosted samples would preserve the distortion.
+    Configuration validation and exponentiation stay outside the audio callback.
+    """
+    from voice_config import VoiceConfig
+    VoiceConfig.validate({'aec_output_headroom_db': headroom_db})
+    attenuation = 10 ** (-headroom_db / 20)
+    return lambda pcm: volume.pcm(pcm, attenuation=attenuation if active() else 1.)

@@ -11,7 +11,7 @@ from fastapi import Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 READ_PATHS = {'status', 'camera/frame', 'camera/stream', 'audio/stream', 'recording', 'tts/audio'}
-WRITE_PATHS = {'camera/start', 'camera/stop', 'audio/play', 'audio/stop',
+WRITE_PATHS = {'camera/start', 'camera/stop', 'camera/light', 'audio/play', 'audio/stop',
                'audio/record', 'audio/volume', 'upload', 'tts/speak'}
 MAX_BODY = 12 * 1024 * 1024
 

@@ -25,6 +25,8 @@ class GamepadTest(unittest.TestCase):
     def setUp(self):
         self.c = Mock(lock=threading.RLock(), mode='off', input_source='gamepad')
         self.c.fault_hold = False
+        self.c.roller_mode = False
+        self.c.sitstand_phase, self.c.kick_until = 'idle', 0.
         self.g = GamepadControl.__new__(GamepadControl)
         self.g.controller = self.c
         self.temp = tempfile.TemporaryDirectory()
@@ -57,11 +59,19 @@ class GamepadTest(unittest.TestCase):
         self.assertEqual(normalize(128,0,255),0)
         self.assertEqual(normalize(-999,-100,100),-1)
         self.assertEqual(normalize(999,-100,100),1)
-        self.assertEqual(motion(self.data),[.4,0.,-.5])
+        self.assertEqual(motion(self.data),[.2,0.,-.5])
         self.data['buttons']['lb']=False
-        self.assertEqual(motion(self.data),[.4,0.,-.5])
+        self.assertEqual(motion(self.data),[.2,0.,-.5])
         self.data['axes'] = dict(lx=0,ly=0,rx=0,ry=0)
         self.assertEqual(motion(self.data),[0.,0.,0.])
+
+    def test_walking_and_roller_use_the_matching_master_ranges(self):
+        self.data['axes'] = dict(lx=1, ly=1, rx=1, ry=0)
+        self.assertEqual(motion(self.data), [-.18, -.3, -1.])
+        self.assertEqual(motion(self.data, roller=True), [-.4, 0., -.25])
+        self.data['axes']['ly'] = -1
+        self.assertEqual(motion(self.data)[0], .2)
+        self.assertEqual(motion(self.data, roller=True)[0], .4)
 
     def test_keyboard_and_partial_devices_rejected(self):
         self.assertFalse(is_gamepad({1:[30,31],3:[0,1]}))
@@ -74,21 +84,21 @@ class GamepadTest(unittest.TestCase):
         self.c.set_mode.reset_mock()
         self.g.consume(self.data)
         self.c.set_mode.assert_not_called()
-        self.c.command.assert_called_with(twist=[.4,0.,-.5],source='gamepad')
+        self.c.command.assert_called_with(twist=[.2,0.,-.5],source='gamepad')
 
     def test_stop_wins_over_start(self):
         self.data['buttons'].update(east=True,start=True)
         self.g.consume(self.data)
         self.c.set_mode.assert_called_once_with('off')
 
-    def test_disconnect_and_stale_snapshot_pause_with_torque_retained(self):
+    def test_disconnect_and_stale_snapshot_follow_retained_gamepad_off_behavior(self):
         for patch in ({'connected':False},{'stamp':time.monotonic()-1},{'id':'replacement'}):
             with self.subTest(patch=patch):
                 self.g.enabled=True;self.c.set_mode.reset_mock();self.c.pause_motion.reset_mock()
                 self.g.consume(dict(self.data,**patch))
                 self.assertFalse(self.g.enabled)
-                self.c.set_mode.assert_not_called()
-                self.c.pause_motion.assert_called_once()
+                self.c.set_mode.assert_called_once_with('off')
+                self.c.pause_motion.assert_not_called()
                 self.assertEqual(self.c.input_source,'web')
 
     def test_calibration_releases_source_without_changing_its_mode(self):
@@ -104,8 +114,8 @@ class GamepadTest(unittest.TestCase):
             self.g.enable(True)
         self.data['axes']={k:0 for k in self.data['axes']};self.data['buttons']={}
         self.g.enable(True)
-        self.c.set_mode.assert_not_called()
-        self.c.pause_motion.assert_called_once()
+        self.c.set_mode.assert_called_once_with('off')
+        self.c.pause_motion.assert_not_called()
 
     def learn(self, action='pick'):
         self.g.enabled = False

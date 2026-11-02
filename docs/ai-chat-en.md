@@ -1,11 +1,64 @@
 # XGO Duck AI App: installation and headless operation
 
-> **Control layer note (0.2.29):** motion control, the MCU protocol, rollers, all-servo protection and the walk model now follow upstream `master`. The earlier AI-branch features "torque-preserving pause (0.2.17)", "PAUSE command", "timeout bypass (0.2.22)" and the `fault_hold` / `timeout_*` status fields are not part of the merged firmware/control code; the STM32 disarms on command/IMU timeout per the upstream firmware. AI chat, voice control, gamepad and media are unchanged.
+## AEC playback headroom and interruption stop (0.2.36)
+
+**Live acceptance has not passed:** 12 dB headroom improved the echo-only bench recording, but real cloud replies still reappeared as user speech. The user accepted the hardware-volume audition without digital boost; the current debugging baseline is `output_gain_db: 0` and `aec_output_headroom_db: 0`. The optional headroom control is not a completed AEC fix.
+
+
+`aec_output_headroom_db` adds optional 0–18 dB attenuation, default 0, only while real AEC and an open, enabled capture stream are active. Playback becomes quieter: an existing +6 dB boost with 12 dB headroom yields -6 dB effective digital gain. AEC-off, idle wake feedback and the original web media keep their original gain. The setting cannot restore clipped microphone samples.
+
+Volume, boost and attenuation are combined before a single saturation step; AEC still receives the exact speaker PCM. One dual-mic bench comparison improved echo-only level reduction from about 3 dB to 26 dB. This is specific to the tested placement and speech sample; simultaneous human speech and live interruption need separate acceptance. Lower hardware capture controls read back correctly but did not remove overload, so no capture-gain change is made the default. Configure on the board, then reconnect chat:
+
+```bash
+python3 tools/configure-ai.py --aec-output-headroom-db 12
+```
+
+The verified cloud abort packet now flushes decoder/PCM/DAC audio and mouth targets immediately. Normal completion still drains the entire reply. No duplicate abort/listen:start resets the cloud's incoming interruption. Reply generations keep old drain waiters from ending a new reply. Server VAD/ASR, motion, ONNX, MCU and original web pages are unchanged.
+
+For the first upgrade, stop the old App, install and start the new version, then run the headroom command above. Both processes must load the new schema before new fields are saved: an old process can treat an unknown field as invalid and write defaults. Later changes to this value reconnect chat only.
+
+## Local AEC reference continuity (0.2.35)
+
+Local AEC uses the existing WebRTC backend and the Mini Program's automatic-interruption / `self.set_aec` switch. The setting persists and may reconnect chat when changed. Enabled devices continuously upload echo-cancelled capture during playback; the server keeps its existing VAD/ASR and interruption guards. No local VAD is added.
+
+Normal TTS start and the transition back to listening retain render-reference history for delayed microphone samples. Explicit interruption and playback timeout still flush audio/reference and stop mouth animation. `audio_playback` under `/api/voice/status` adds `aec_enabled`, `aec_backend`, `aec_frames` and `aec_reference_resets`. Volume, buffer durations, microphone selection and web pages remain unchanged. This addresses reference timing; physical echo suppression and USB disconnects require separate acceptance.
+
+## Short conversation cues (0.2.34)
+
+The send and reply-complete cues use the local RIG-Omni `message_send.ogg` / `over.ogg` assets. Both last 0.30 seconds, with an additional 6 dB attenuation and 5/8 ms fade-in/out. Compared with the previous WAVs, RMS levels are about 7.8 dB and 11.3 dB lower, respectively. Outputs are 16 kHz mono 16-bit PCM; sources and processing parameters are recorded in `provenance/audio-cues.json`.
+
+Only these two local WAVs are replaced. They retain the existing local playback queue that excludes cues from mouth animation. Files are read on each playback, allowing updates without reflashing the MCU.
+
+> **Current control layer:** motion is pinned to master [`b401d85`](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/b401d85d20bb5bfd0237242a8a5ab6847fc962a2), including eight policies, matching web/MCU control and Bridge reconnection. Voice permissions, mobile/gamepad ownership, speech-mouth exclusion, hardware-center migration and the independent ToF task remain. Ordinary forward/backward limits are 0.2/0.18 m/s. See [validation](ai-validation.md).
+
+The 0.2.33 section below records the previous archive integration. `provenance/motion.json` identifies the current source; its hardware-center migration workflow still applies.
+
+## Matching web and hardware centers (0.2.33)
+
+- All eight stable web files are copied unchanged. Policy/filter math, all five models, `wire.py` and MCU headers also match. Controller retains AI/gamepad source ownership; its other 30 methods have matching AST fingerprints. Only ToF's include/start lines overlay the stable sketch. Sources are recorded in `provenance/motion.json`.
+- Update the App and compile/upload its matching MCU sketch together using Run, then hard-refresh the browser. Updating pages or Python alone is incompatible. Ordinary Walk is selected by default; Roller starts off and requires the corresponding roller-equipped hardware.
+- Hardware centers live in the servos, with encoder center 2047. Enter Calibration to unload all joints, manually place each at its mechanical center and click **Set center & hold**, then exit. Servo setup includes Reset Mid, KP/KD readback and separate protection-switch/current broadcasts.
+- Preserve old `data/zero_pos.json` as a backup; it is no longer applied. Nondefault or damaged software-zero files block Hold / Policy / voice arming until the 15 hardware centers are acknowledged. Only successful MCU replies are recorded in private `data/hardware-centers.json`; partial/failed acknowledgements, stale replies and failed writes cannot complete migration. The old file is never overwritten.
+- Already hardware-centered robots whose old zeros are all 2047 retain compatibility. New installs without legacy files follow the archive's original calibration workflow. Do not replace legacy zeros with 2047 to skip migration or run the historical software-zero conversion commands below.
+- A web Roller switch retires queued voice/phone actions and returns ownership to the page. Existing voice action deadlines/input renewal, chat and media services are retained; no chat tab is added to the supplied layout.
+
+Version 0.2.33 has been compiled on UNO Q, uploaded to the matching STM32 and started. All eight web files passed HTTP hash verification. Mechanical centering and physical standing/walking remain unverified. USB Hub re-enumeration and a stalled command channel occurred during deployment; successful startup does not establish that either issue is fixed. See the validation record.
+
+## Historical software-zero migration (0.2.31–0.2.32; not for 0.2.33)
+
+Update the Python controller, `wire.py` and STM32 sketch together. Replacing only Python or the models is insufficient. The first Run compiles/uploads the matching MCU sketch. This baseline uses per-robot software zeros in `data/zero_pos.json`.
+
+- Preserve this robot's existing software calibration when already using the baseline workflow.
+- When migrating from 0.2.29/0.2.30 after all 15 servos were hardware-centered, stop the App and run `python3 tools/migrate-hardware-centers.py --from-hardware-centers` from the App root. It creates 15 software zeros at 2047 to keep using those hardware centers. It sends no servo commands and refuses to overwrite existing software calibration; verify any existing file before migrating.
+- If the previous centering workflow is unknown, recalibrate each joint through the restored Calibration page. Never use another robot's calibration or treat factory defaults as measured zeros.
+
+Support the robot and check Default pose before testing Walk / get up. Source restoration and automated tests do not establish physical walking stability.
+
 
 
 [中文说明](ai-chat.md) · [English README](../README.md) · [Validation record](ai-validation.md)
 
-This is an open-source App for a user-owned **Arduino UNO Q**, rather than a preinstalled OS image. Complete installation with a computer once. The board can then start the App automatically and use the phone for Wi-Fi provisioning and account binding. Remote control uses cloud MCP. The existing web pages, audio/video and Doubao interfaces, calibration, gamepad and servo setup remain available.
+This is an open-source App for a user-owned **Arduino UNO Q**, rather than a preinstalled OS image. Complete installation with a computer once. The board can then start the App automatically and use the phone for Wi-Fi provisioning and account binding. Remote control uses cloud MCP. The matching stable web pages, existing audio/video and Doubao interfaces, calibration, gamepad and servo setup remain available.
 
 ## Choose a cloud explicitly
 
@@ -27,10 +80,10 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
 
 1. Install [Arduino App Lab](https://www.arduino.cc/en/uno-q). Connect UNO Q to the computer using a USB-C **data** cable. Complete the board name, Wi-Fi and Linux password setup described in the [UNO Q manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/). The board needs internet access for system packages, Arduino libraries, containers and Python dependencies.
 2. Check `ssh arduino@<board-ip>` using the Linux password you chose. Also verify App Lab Network access. There is no shared password supplied by this project. Prepare a powered USB-C Host hub for the USB microphone, speaker and optional camera. **Support installation selects USB Host and disconnects the computer's USB/ADB connection**, so install over working Wi-Fi/SSH.
-3. Get the `ai-chat-move` branch and package it on the computer:
+3. Get the `ai-chat-audio-video-tof` branch and package it on the computer:
 
    ```sh
-   git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
+   git clone --branch ai-chat-audio-video-tof https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git
    cd xgoduck_runtime_arduino
    python3 tools/package-ai-app.py
    ```
@@ -39,10 +92,10 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
 
    ```sh
    mkdir -p ~/ArduinoApps
-   git clone --branch ai-chat-move https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git ~/ArduinoApps/xgoduck_ai
+   git clone --branch ai-chat-audio-video-tof https://github.com/LuwuDynamics/xgoduck_runtime_arduino.git ~/ArduinoApps/xgoduck_ai
    ```
 
-4. Stop the old Duck App. Two Duck Apps cannot share Bridge, servos or ports 9527/9528. Keep the old installation. With both Apps stopped, copy this robot's `data/zero_pos.json` and optional `data/gamepad-bindings.json` into the new App's `data/` if needed. The ZIP excludes private state and calibration and does not migrate them automatically.
+4. Stop the old Duck App. Two Duck Apps cannot share Bridge, servos or ports 9527/9528. Keep the old installation. With both Apps stopped, preserve this robot's optional `data/gamepad-bindings.json`. Bringing legacy `data/zero_pos.json` requires the hardware-centering migration above. For a robot already migrated with this release, preserve its `data/hardware-centers.json` and corresponding legacy file together. The ZIP excludes private state and calibration and does not migrate them automatically.
 5. In the **UNO Q Debian 13 ARM64 host shell**, as `arduino`, choose one region and install host support. These commands do not run in the App container or on the Mac:
 
    ```sh
@@ -57,6 +110,8 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
    The installer first resolves the pinned MCU build dependencies as `arduino`, patches the Bridge cache, compiles and verifies the ELF without uploading. It then uses sudo for system packages and the host helper. It creates `data/native/`, installs root-owned helper code in `/usr/local/lib/xgoduck-ai-support/`, enables `xgoduck-ai-hardware.service`, and sets this directory as the official default App. It enables `xgoduck-ai-usb-host.service` before the official App CLI daemon on boot. It disables the old user media service to avoid audio/port conflicts, retaining existing Doubao settings. **Stop all Apps and install over Wi-Fi/SSH: installation selects Host and may restart the shared router, but does not start the App or flash the MCU.** Running Apps cause installation to refuse to continue. Rerun it after changing App paths or updating helper code.
 
    If installed, the old `duck-gamepad.service`, `duck-usb-device.service` and `duck-usb-host.service` are disabled as well. This prevents duplicate controller workers or an old late-starting USB service overriding Host mode. Their unit files and the old App are retained.
+
+   Host setup also installs and enables the nginx mobile entrance. Open `http://<board-ip>/` directly; no explicit port or page suffix is needed. On an existing installation, run `sudo bash tools/install-mobile-web.sh` independently while the App continues running.
 6. Set the original 2 Mbps Bridge rate and start the App:
 
    ```sh
@@ -176,6 +231,8 @@ sudo systemctl daemon-reload
 
 Re-enable only the services used by the old installation: `sudo systemctl enable --now duck-gamepad.service` and/or `systemctl --user enable --now duck-device-test.service`. If it previously used the USB Device boot default, restore `sudo systemctl enable duck-usb-device.service` and reboot once. Start the old App with App Lab or `arduino-app-cli app start "$duck_previous_app"`. If no default App was previously set, use `arduino-app-cli properties set default none` instead. Both Apps and their data remain intact. The old Duck also uses 2 Mbps Bridge; change router speed only when switching to an App that requires another baud rate.
 
+To remove the added port-80 entrance, delete `/etc/nginx/sites-enabled/xgoduck-mobile`, then run `sudo nginx -t && sudo systemctl reload nginx`. Previous site configuration is backed up under `/var/backups/xgoduck-mobile-web/`. Disable nginx itself only if it is not used by another site.
+
 ## Runtime, web and MCP
 
 There are two persistent business processes: `python/main.py` owns the original 50 Hz policy, Bridge, motion and web9527; `python/voice_process.py` owns headless AI Chat Pro, MCP and original media9528 in threads. The separate privileged host helper handles USB, gamepads and BluFi. Capture tools run on demand. Authenticated 9530/9531 IPC listens only on the container loopback. Chat never opens Bridge/UART. A chat crash withdraws motion and restarts chat; parent exit cleans up chat and capture processes.
@@ -204,22 +261,16 @@ Completion waits for the last submitted DAC samples before the next listening tu
 
 **TTS jaw motion (0.2.15).** `"tts_mouth_enabled": true` is the default. Each 20 ms window of actual speaker PCM contributes a DC-removed RMS envelope and a small zero-crossing component, with smoothing and a 0–12° limit. This is gentle animation rather than phoneme recognition. Targets use the DAC timestamp, including the current approximately 540 ms output latency; network prebuffering does not move the mouth early. The audio callback only appends bounded data; analysis and IPC run on a worker thread in the chat process. Adjacent frames are sent together; when IPC is slow, only the latest two frames are kept and expired data is discarded. Inspect `last_lead_ms`, `dropped_frames`, `ipc_errors` and `last_error` for diagnostics.
 
-Jaw targets apply only in Policy/Hold with body servos already enabled and fresh feedback/commands, outside get-up, pick and roll. This never enables the body, requires no voice-motion permission, and does not take body ownership or change velocity/head commands. Explicit mouth actions and manual mouth control take priority. Completion, interruption, session loss, shutdown or a roughly 180 ms mouth-lease timeout clears pending targets and restores the pre-speech mouth target, normally closed; retired utterances cannot resume. Chat remains usable while disarmed. Set the flag to `false` to disable; inspect `tts_mouth_enabled` and `tts_mouth` at `/api/voice/status`. Existing web pages and policies stay unchanged; torque-preserving pause requires the matching STM32 update.
+Jaw targets apply only in Policy/Hold with body servos already enabled and fresh feedback/commands, outside get-up, pick and roll. This never enables the body, requires no voice-motion permission, and does not take body ownership or change velocity/head commands. Explicit mouth actions and manual mouth control take priority. Completion, interruption, session loss, shutdown or a roughly 180 ms mouth-lease timeout clears pending targets and restores the pre-speech mouth target, normally closed; retired utterances cannot resume. Chat remains usable while disarmed. Set the flag to `false` to disable; inspect `tts_mouth_enabled` and `tts_mouth` at `/api/voice/status`. The restored policies and matching STM32 sketch run in the motion process.
 
 Voice and phone remote motion have independent permissions, both initially disabled. Starting the App remains inference-only with torque off. `Duck.EnableVoiceMotion` and `Duck.EnableRemoteMotion` grant their respective permissions without arming motors. Voice moves/turns last 0.1–10 seconds. Suggested ordinary voice commands are 0.2 m/s forward/backward, 0.15 m/s sideways, +1 rad/s for left turns and -1 rad/s for right turns, usually for 2–3 seconds. From 0.2.11, use a smaller turn rate only when the user explicitly requests slower motion. The ±1 rad/s limit, original web Q/E settings and phone remote limits are unchanged. Voice limits match the existing web joystick: ±0.4 m/s forward/backward, ±0.3 m/s sideways and ±1 rad/s turning. `Duck.RemoteMove` retains its 0.1 m/s and 0.5 rad/s limits, 0.1–1 second leases, a per-controller sequence and a newer stop on release. Late commands cannot revive a stopped lease. `Duck.GetStatus` reports readiness/control ownership; `Duck.Stop` keeps balance and `Duck.TorqueOff` explicitly releases torque.
 
 Place the Duck with room to get up, explicitly enable voice motion, then say “stand up.” `Duck.Stand` requests the original balance/get-up policy at zero directional speed, without changing permissions. The original web Policy button can also explicitly start balance. Acceptance is not confirmation of standing: check `Duck.GetStatus.movement_ready`. Stand reports failure if standing feedback is not confirmed within five seconds.
 
 
-**Temporary communication diagnostics (0.2.22).** This build sets `MOTION_TIMEOUT_CHECKS_ENABLED=false`. The MCU does not pause/disarm after the 250 ms command or 100 ms IMU timer and temporarily accepts new sequence numbers without enforcing the 150 ms source timestamp limit. State flag 64 advertises `timeout_checks_disabled`; only then does Linux bypass feedback/IMU timeout pauses and delayed ARM-ack timeout pauses, with corresponding MCP age/IMU gates bypassed. Actual ARM acknowledgement is still required before policy targets. The normal web heartbeat watchdog was already removed.
+**Current communication guards (0.2.33).** The restored `next-audio-video-tof` MCU disarms after 250 ms without valid commands or 100 ms without healthy IMU data, and validates target sample age. In motion modes Linux returns to inference-only and sends disarm on feedback older than 150 ms or invalid IMU. Ordinary web control needs no browser heartbeat to maintain standing; one second without input clears travel, while valid voice actions renew input only within their original deadline; calibration/servo setup retains its two-second session timeout. PAUSE, torque-preserving fault hold and timeout bypass are absent; historical implementation records remain in `ai-validation.md`. This release changes to the matching stable web and hardware-center protocol; upload its matching bundled MCU sketch.
 
-Missing/invalid samples retain the previous motion target instead of running ONNX with invalid IMU or jumping to the default pose. Valid samples can continue the previous motion request; this diagnostic build does not insert zero velocity on reconnection. `[motion-timeout-observed]`, `timeout_warning` and `timeout_events` retain measured ages; continuing faults are logged at most every five seconds. `full_robot_ready` and `feedback_warning` still report actual sensor health. Upload the matching sketch: Python alone cannot disable old MCU guards. Explicit Stop/TorqueOff, initial-enable IMU readiness, absent first feedback, required-servo checks, packet/finite-value/sequence validation, permissions, action duration and ownership remain. App shutdown, gamepad loss, policy errors and MCU resets may still pause with torque retained. Web assets and persisted settings are unchanged. The following 0.2.17 timeout description applies to firmware without state flag 64.
-
-**Torque-preserving pause (0.2.17).** Feedback older than 150 ms, invalid IMU, policy errors, App shutdown and gamepad disconnect stop motion and hold reliable joint positions instead of releasing torque. The MCU also latches this hold after 250 ms without commands or 100 ms without healthy IMU. Stale/out-of-order targets remain rejected; ordinary POLICY/HOLD frames cannot resume after a pause. Old gait, roll and queued jobs are discarded. Explicit Stand or the original Policy/Hold control uses fresh feedback to send ARM; TorqueOff/Off/Inference only and explicit diagnostic exit release torque.
-
-A restarted Linux App adopts an enabled MCU in paused hold and continues its command sequence. Diagnostic heartbeat loss or App shutdown retains the last diagnostic position until explicit control/exit. PAUSE command 4 ignores all Linux targets and source age, capturing reliable positions locally; it never enables a disabled motor. Inspect `fault_hold`, `fault_hold_supported` and `pause_events` for status and trigger details. Upload the matching sketch: capability flag 32 is required before enabling motors. Physical power loss, MCU reset and servo hardware protection necessarily remain outside Linux's torque guarantee.
-
-Frequent jaw targets use a private 0600 Unix datagram socket with the per-App token and session/utterance/sequence checks. Sends do not await HTTP replies; bounded queues, expired-data discard and DAC scheduling remain. MCP and other controls retain authenticated loopback HTTP. The audio callback only enqueues, and the jaw cannot release a body fault pause.
+Frequent jaw targets use a private 0600 Unix datagram socket with the per-App token and session/utterance/sequence checks. Sends do not await HTTP replies; bounded queues, expired-data discard and DAC scheduling remain. MCP and other controls retain authenticated loopback HTTP. The audio callback only enqueues, and jaw updates never enable body servos.
 
 Direction commands never arm motors or start get-up. The board requires Policy mode, enabled motors, fresh feedback from the ten leg joints and IMU, MCU command age at most 150 ms, recovery phase `walk`, and body tilt below 15 degrees continuously for one second. Fallen, recovering, picking/rolling or unknown states reject movement with a detailed reason. Pick/roll also require this standing check. Individual head/mouth commands still require an enabled, upright body in `walk`, without repeating the one-second standing wait. Stop remains available without it. If posture or communication is lost during locomotion, directional velocity is cancelled and the active phone controller is retired while the existing balance/recovery policy remains responsible for posture. Reopen the phone remote page after recovery to create a new controller session. Detailed MCP errors are readable by the existing cloud handlers as well as standard MCP text consumers.
 

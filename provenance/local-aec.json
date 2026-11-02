@@ -1,0 +1,105 @@
+{
+  "description": "Continuous full-duplex echo reference, compatible immediate cloud-abort handling, reply-generation isolation and optional AEC-only playback headroom. Server VAD/ASR and stable motion/web/MCU stay unchanged.",
+  "base_version": "0.2.34",
+  "source_changes": {
+    "python/vendor/luwu_os/apps/voice_chat/application.py": {
+      "before_sha256": "aa541b15d4d82c580d2a2c5819680e8b4415df4565acc7592321cfe51af2722e",
+      "sha256": "00155aadefde6a23613e87e7f6124a9ce11c70cf38bfe3bf8207c69f5ac627ec"
+    },
+    "python/vendor/luwu_os/apps/voice_chat/audio_codec.py": {
+      "before_sha256": "67a52cbffdb4d0c7f879bacfb65467e41a69a7a68ac9de71ddae9acca9cab3c2",
+      "sha256": "aa8f240c92758cfa26fc5ea1b631ac6ef99616dd48dd2c9d2c2bd40d0166c290"
+    },
+    "python/audio_devices.py": {
+      "before_sha256": "fa786891254c37c919eecef6acace0375ae7eb7aef6dd952c09f699bacbe4e5b",
+      "sha256": "ededf6a420318d90a49f511a09becfd16ec3842d5f5c2b550e99c0a5e7c7cb0a"
+    },
+    "python/voice_config.py": {
+      "before_sha256": "7f0f57b88d954e71a1af516b6bba276cb32227d19eb45a8bf69912d9b42bf36b",
+      "sha256": "22d82bd499bb6840cb7add69071564954e47db53f6f03d0582c7670ad9887874"
+    },
+    "python/voice_process.py": {
+      "before_sha256": "ab083268a7757df90769ecf8dc49534b386409b54e0d35f06cdb5ada16de60a7",
+      "sha256": "0cac8b6f518587c455e6cf7c2e50685c15b330243c43fd7a690954184f375b99"
+    },
+    "python/voice_application.py": {
+      "before_sha256": "58844fdaab4e4a7f1824578deb3d6ff093787c93ceacb79a694935818e26adc0",
+      "sha256": "3ff5fa03e1bc7a1a063fad694ad69882614f33a57e94908ab7df31d0849c3002"
+    },
+    "tools/configure-ai.py": {
+      "before_sha256": "9eb043c0c922e0a5718f16744d8daefd6ccd21c5bbdad0b8a5aeed0a685ff0c9",
+      "sha256": "1bc876f66e37402588c3f6afb4a9652644514b8138a9a55b931c7485a7704df1"
+    }
+  },
+  "status_fields": [
+    "aec_enabled",
+    "aec_backend",
+    "aec_frames",
+    "aec_reference_resets",
+    "aec_output_headroom_db"
+  ],
+  "server_changes": false,
+  "local_vad_added": false,
+  "hardware_echo_acceptance": "Not passed: live cloud replies still appeared in ASR and user confirmed self-conversation. Bench echo-only reduction is not live acceptance.",
+  "usb_reenumeration_root_cause": "unconfirmed",
+  "optional_config": {
+    "aec_output_headroom_db": {
+      "default": 0,
+      "range": [
+        0,
+        18
+      ],
+      "unit": "dB attenuation",
+      "active_only": "Real AEC plus an open and enabled capture stream. Combine with product volume/boost before PCM limiting. The final PCM remains the AEC render reference."
+    }
+  },
+  "board_tuning_evidence": {
+    "date": "2026-10-29",
+    "source": "same 10-second local speech sample; no near-end speech requested",
+    "capture_gain_sweep_db": [
+      -6,
+      -12,
+      -18
+    ],
+    "capture_gain_sweep_conclusion": "Control readback changed, but strong clipping remained; no permanent capture-gain change selected.",
+    "speaker_gain_sweep_db": [
+      6,
+      0,
+      -6
+    ],
+    "same_segment_echo_reduction_db": [
+      3.28,
+      7.16,
+      26.27
+    ],
+    "whole_recording_near_clipped_fraction": [
+      0.122024,
+      0.052754,
+      0.009481
+    ],
+    "limitations": "One controlled placement and a speech sample; not a guarantee of all-room echo suppression, double-talk intelligibility or interruption latency."
+  },
+  "regression_checks": {
+    "target_voice_audio": 22,
+    "target_audio_playback": 24,
+    "target_audio_capture": 9,
+    "target_duck_sound": 22,
+    "target_speech_mouth": 31,
+    "local_cloud_config": 5,
+    "local_ai_package": 4,
+    "local_stable_motion": 11,
+    "total_unique_cases": 128
+  },
+  "accepted_output_baseline": {
+    "volume": 100,
+    "output_gain_db": 0,
+    "aec_output_headroom_db": 0,
+    "user_report": "Hardware-volume audition loud enough; remove additional speaker boost and attenuation."
+  },
+  "prototype_only": [
+    "hardware-timestamp reference alignment",
+    "capture level applied after stream startup",
+    "raw microphone level 25/50 percent with separate post-AEC gain"
+  ],
+  "prototype_status": "Not included in production code or the ZIP. Last comparison lost SSH/LAN connection; completion and temporary-state restoration must be checked on reconnect."
+}
