@@ -48,6 +48,9 @@ After both sounds, say **“小鸭小鸭” (xiǎo yā, xiǎo yā)** to wake Duc
 ## 3. Bind an account and select an agent
 
 1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
+
+   <img src="docs/images/cockpit-en.jpg" alt="Cockpit home screen example; the Link AI button is near the top" width="380">
+
 2. Tap **Link AI**, tap **China** or **International** to save the region and reconnect voice immediately. The window shows the current region and binding state; open its matching platform:
 
    | Device region | Binding and agent platform |
