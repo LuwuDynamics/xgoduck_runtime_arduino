@@ -82,5 +82,33 @@
       },
       "rms_change_db": -11.337
     }
+  },
+  "speaker_test": {
+    "file": "python/assets/speaker-test.wav",
+    "sha256": "93fc4fa00ebfd346f146a2af2e0bde61c0d49cc3a3478afec565bb7c8740dc8b",
+    "duration_s": 2.866875,
+    "format": "48 kHz mono PCM16",
+    "recipe": {
+      "identity": "XGO-Duck speaker test",
+      "calls": [
+        [
+          "greet",
+          0
+        ],
+        [
+          "inquire",
+          1
+        ],
+        [
+          "greet",
+          2
+        ]
+      ],
+      "gap_s": 0.3,
+      "lead_s": 0.05,
+      "tail_s": 0.15
+    },
+    "generator": "tools/build-speaker-test.py",
+    "source": "Existing Apache-2.0 vendor/microduck_voice synthesizer; no network or additional runtime gain."
   }
 }

@@ -14,13 +14,13 @@
       listen:'Listen live', stopListening:'Stop listening', listenHint:'Duck mic · tap to start', stopListenHint:'Duck mic · tap to stop', listenIdle:'Tap Listen live to hear the sounds around Duck', listenStopped:'Live listening stopped', listenConnecting:'Connecting to Duck microphone…', listening:'Listening live · {seconds} s · tap to stop',
       audioBusy:'Duck audio is busy. Stop the current audio first.', audioPaused:'Audio is paused. Tap Listen live again.', liveUnavailable:'Live audio unavailable.', liveEnded:'Duck microphone stream ended. Tap Listen live to reconnect.', liveTimedOut:'Live audio timed out. Check the connection and tap Listen live again.',
       settings:'Settings', general:'General', gamepad:'Gamepad', servos:'Servos', calibration:'Calibration', configuration:'Duck configuration',
-      bindAi:'Link AI',bindingEntryCurrent:'Link AI · Current server: {region}',bindingChipCn:'CN',bindingChipGlobal:'INTL',bindingChipCustom:'CUST',bindingChipNone:'—',bindingTitle:'Link AI interaction',closeBinding:'Close AI binding',bindingIntro:'Choose China or International, apply the server, then open its platform to bind Duck.',
-      bindingRegion:'Current service region',bindingStatus:'Account binding',bindingCn:'China',bindingGlobal:'International',bindingCnHint:'China account · WeChat Mini Program',bindingGlobalHint:'International account · Android / iOS App',bindingOpenCn:'Open China platform ↗',bindingOpenGlobal:'Open international platform ↗',
+      bindAi:'Link AI',bindingEntryCurrent:'Link AI · Current server: {region}',bindingChipCn:'CN',bindingChipGlobal:'INTL',bindingChipCustom:'CUST',bindingChipNone:'—',bindingTitle:'Link AI interaction',closeBinding:'Close AI binding',bindingIntro:'Tap China or International to switch servers, then open its platform to bind Duck.',
+      bindingRegion:'Current service region',bindingStatus:'Account binding',bindingCn:'China',bindingGlobal:'International',bindingCnHint:'China account',bindingGlobalHint:'International account',bindingOpenCn:'Open China platform ↗',bindingOpenGlobal:'Open international platform ↗',
       bindingStep1:'Sign in to your platform, open Devices and choose Add device.',bindingStep2:'Follow the Bluetooth prompts, select the device beginning with XGO-Duck, and complete Wi-Fi setup and account binding.',bindingStep3:'Select an agent. When Duck is online, say “小鸭小鸭” (xiǎo yā, xiǎo yā) to chat.',
-      bindingNotice:'Switching reconnects voice. Accounts, devices and agents belong to each server; conversation language, volume and motion settings are preserved.',bindingBrowser:'For web Bluetooth, use a Chrome / Edge browser with Web Bluetooth support. On iPhone / iPad, use the matching Mini Program or App.',
-      bindingChooseRegion:'Choose service region',bindingCurrent:'In use',bindingApply:'Apply and reconnect',bindingApplying:'Switching…',bindingApplied:'Server saved. Reconnecting voice…',bindingSame:'This server is already in use.',bindingSelect:'Select a server and apply to reconnect voice.',bindingSwitchFailed:'Unable to switch server. Check the current region and retry.',bindingCustom:'Custom server',bindingNotConfigured:'Not selected',bindingRegionUnknown:'Check installation settings',bindingChecking:'Checking…',bindingUnavailable:'Status unavailable',bindingOnline:'Bound · Voice online',bindingBound:'Bound · Connecting',bindingCached:'Saved binding · Reconnecting',bindingUnbound:'Not bound · Add device',
+      bindingNotice:'Switching reconnects voice. Accounts, devices and agents belong to each server; conversation language, volume and motion settings are preserved.',bindingBrowser:'For web Bluetooth, use a Chrome / Edge browser with Web Bluetooth support.',
+      bindingChooseRegion:'Choose service region',bindingCurrent:'In use',bindingApplying:'Switching…',bindingApplied:'Server saved. Reconnecting voice…',bindingSame:'This server is already in use.',bindingSelect:'Tap a server to save it and reconnect voice.',bindingSwitchFailed:'Switch not confirmed. Check the current region and retry.',bindingCustom:'Custom server',bindingNotConfigured:'Not selected',bindingRegionUnknown:'Check installation settings',bindingChecking:'Checking…',bindingUnavailable:'Status unavailable',bindingOnline:'Bound · Voice online',bindingBound:'Bound · Connecting',bindingCached:'Saved binding · Reconnecting',bindingUnbound:'Not bound · Add device',
       usbConnection:'USB connection', usbDescription:'Enable Host for a USB camera, audio device or wired controller.', usbNotice:'Use Wi-Fi when switching modes; USB connections will be interrupted.', usbSwitching:'Switching…', usbOn:'USB Host: On', usbOff:'USB Host: Off', usbUnavailable:'USB control unavailable.', usbHostMode:'Host mode · USB accessories enabled', usbDeviceMode:'Device mode · Host is off',
-      speaker:'Speaker', duckVolume:'Duck volume', applyVolume:'Apply volume', testSpeaker:'Test speaker', listenMicrophone:'Listen to Duck microphone', stopAudio:'Stop audio', sendAudioFile:'Send an audio file', audioFileHint:'Choose up to 30 seconds of audio to play on Duck.',
+      speakerTestHint:'Play synthesized duck calls',speakerPlayingHint:'Duck calls playing · tap to stop',speakerPreparing:'Preparing…',stopSpeakerTest:'Stop playback',speakerTestDone:'Speaker test finished',speakerTestFailed:'Speaker test failed. Please retry.',speaker:'Speaker', duckVolume:'Duck volume', applyVolume:'Apply volume', testSpeaker:'Test speaker', listenMicrophone:'Listen to Duck microphone', stopAudio:'Stop audio', sendAudioFile:'Send an audio file', audioFileHint:'Choose up to 30 seconds of audio to play on Duck.',
       handheldView:'Handheld view', handheldDescription:'Use landscape orientation for a controller-mounted display. Fullscreen hides browser controls; hide the overlay for a clearer view.',
       gamepadHint:'Scan, connect, and bind controller buttons.', servoHint:'Turn torque off before entering servo setup. Support Duck before changing servo positions.', calibrationHint:'Turn torque off before calibration. Follow each joint’s calibration steps.',
       cameraInterrupted:'Camera stream interrupted. Reconnecting…', photoMissing:'No camera frame available.', fillNotice:'Fill view · edges are cropped', fitNotice:'Fit view · entire camera frame',
@@ -45,13 +45,13 @@
       listen:'实时监听', stopListening:'停止监听', listenHint:'点击收听小鸭麦克风', stopListenHint:'点击停止收听', listenIdle:'点击实时监听，收听小鸭周围的声音', listenStopped:'实时监听已停止', listenConnecting:'正在连接小鸭麦克风…', listening:'正在监听 · {seconds} 秒 · 点击停止',
       audioBusy:'小鸭音频正在使用中，请先停止当前音频。', audioPaused:'音频播放已暂停，请再次点击实时监听。', liveUnavailable:'实时监听暂不可用。', liveEnded:'麦克风音频流已结束，请再次点击实时监听。', liveTimedOut:'实时监听连接超时，请检查网络后重试。',
       settings:'设置', general:'常规', gamepad:'手柄', servos:'舵机', calibration:'校准', configuration:'小鸭配置',
-      bindAi:'AI 绑定',bindingEntryCurrent:'AI 绑定 · 当前服务区域：{region}',bindingChipCn:'国内',bindingChipGlobal:'国际',bindingChipCustom:'自定',bindingChipNone:'未选',bindingTitle:'AI 交互绑定',closeBinding:'关闭绑定窗口',bindingIntro:'选择国内或国际服务器，应用后打开对应平台绑定设备。',
-      bindingRegion:'当前服务区域',bindingStatus:'绑定状态',bindingCn:'国内版',bindingGlobal:'国际版',bindingCnHint:'国内账号 · 微信小程序',bindingGlobalHint:'国际账号 · Android / iOS App',bindingOpenCn:'打开国内版 ↗',bindingOpenGlobal:'打开国际版 ↗',
+      bindAi:'AI 绑定',bindingEntryCurrent:'AI 绑定 · 当前服务区域：{region}',bindingChipCn:'国内',bindingChipGlobal:'国际',bindingChipCustom:'自定',bindingChipNone:'未选',bindingTitle:'AI 交互绑定',closeBinding:'关闭绑定窗口',bindingIntro:'点击国内版或国际版即可切换服务器，再打开对应平台绑定设备。',
+      bindingRegion:'当前服务区域',bindingStatus:'绑定状态',bindingCn:'国内版',bindingGlobal:'国际版',bindingCnHint:'国内账号',bindingGlobalHint:'国际账号',bindingOpenCn:'打开国内版 ↗',bindingOpenGlobal:'打开国际版 ↗',
       bindingStep1:'在所选平台登录，进入「设备」并点击「添加设备」。',bindingStep2:'按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。',bindingStep3:'选择智能体；设备在线后，说「小鸭小鸭」开始聊天。',
-      bindingNotice:'切换服务器会重新连接语音服务，两边的账号、设备绑定和智能体独立；对话语言、音量及运动设置保持。',bindingBrowser:'网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge；iPhone / iPad 可使用对应小程序或 App 绑定。',
-      bindingChooseRegion:'选择服务区域',bindingCurrent:'当前使用',bindingApply:'应用并重连',bindingApplying:'正在切换…',bindingApplied:'服务区域已保存，正在重连语音…',bindingSame:'当前已使用该服务器。',bindingSelect:'选择服务器后，点击应用以重连语音。',bindingSwitchFailed:'服务器切换失败，请核对当前服务区域后重试。',bindingCustom:'自定义服务器',bindingNotConfigured:'尚未选择',bindingRegionUnknown:'请核对安装时的选区',bindingChecking:'正在读取',bindingUnavailable:'暂时无法读取状态',bindingOnline:'已绑定 · 语音在线',bindingBound:'已绑定 · 正在连接',bindingCached:'已保存绑定 · 正在重连',bindingUnbound:'未绑定 · 请添加设备',
+      bindingNotice:'切换服务器会重新连接语音服务，两边的账号、设备绑定和智能体独立；对话语言、音量及运动设置保持。',bindingBrowser:'网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge 浏览器。',
+      bindingChooseRegion:'选择服务区域',bindingCurrent:'当前使用',bindingApplying:'正在切换…',bindingApplied:'服务区域已保存，正在重连语音…',bindingSame:'当前已使用该服务器。',bindingSelect:'点击服务器即可保存并重连语音。',bindingSwitchFailed:'未能确认切换，请核对当前服务区域后重试。',bindingCustom:'自定义服务器',bindingNotConfigured:'尚未选择',bindingRegionUnknown:'请核对安装时的选区',bindingChecking:'正在读取',bindingUnavailable:'暂时无法读取状态',bindingOnline:'已绑定 · 语音在线',bindingBound:'已绑定 · 正在连接',bindingCached:'已保存绑定 · 正在重连',bindingUnbound:'未绑定 · 请添加设备',
       usbConnection:'USB 连接', usbDescription:'使用 USB 摄像头、音频设备或有线手柄时，请开启 Host 模式。', usbNotice:'请通过 Wi-Fi 操作；切换模式会中断当前 USB 连接。', usbSwitching:'正在切换…', usbOn:'USB Host：已开启', usbOff:'USB Host：已关闭', usbUnavailable:'USB 控制暂不可用。', usbHostMode:'Host 模式 · USB 外设已启用', usbDeviceMode:'Device 模式 · Host 已关闭',
-      speaker:'扬声器', duckVolume:'小鸭音量', applyVolume:'应用音量', testSpeaker:'测试扬声器', listenMicrophone:'监听小鸭麦克风', stopAudio:'停止音频', sendAudioFile:'发送音频文件', audioFileHint:'选择不超过 30 秒的音频，在小鸭扬声器播放。',
+      speakerTestHint:'播放几声合成鸭叫',speakerPlayingHint:'鸭叫播放中 · 点击停止',speakerPreparing:'正在准备…',stopSpeakerTest:'停止播放',speakerTestDone:'扬声器测试已结束',speakerTestFailed:'扬声器测试失败，请重试。',speaker:'扬声器', duckVolume:'小鸭音量', applyVolume:'应用音量', testSpeaker:'测试扬声器', listenMicrophone:'监听小鸭麦克风', stopAudio:'停止音频', sendAudioFile:'发送音频文件', audioFileHint:'选择不超过 30 秒的音频，在小鸭扬声器播放。',
       handheldView:'手持视图', handheldDescription:'横放手机适合配合手柄使用。全屏可隐藏浏览器栏；点击隐藏控件可获得更完整的画面。',
       gamepadHint:'扫描、连接手柄，并配置按键。', servoHint:'进入舵机设置前，请先卸力。调整关节位置时请支撑好小鸭。', calibrationHint:'校准前请先卸力，并按各关节的校准步骤操作。',
       cameraInterrupted:'视频流已中断，正在重新连接…', photoMissing:'摄像头画面尚未就绪。', fillNotice:'填满画面 · 边缘会被裁切', fitNotice:'适应画面 · 显示完整视野',
@@ -63,9 +63,8 @@
       tofRpcMissing:'当前固件未注册 ToF 读取接口。',tofReadFailed:'暂时无法读取 ToF，摄像头和音频可继续使用。',tofSensorError:'传感器离线或读取失败，请检查连接。',tofNotConnected:'未检测到 ToF，请检查 Qwiic 连接。',tofStaleHint:'未收到新帧，已隐藏旧的距离。',tofNoTarget:'无有效测距目标，请将物体放到传感器前方。',tofConnectionLost:'连接已中断，正在等待重连…',tofWaiting:'正在等待传感器的真实数据…'
     }
   };
-  let saved;
-  try { saved=localStorage.getItem('duck-cockpit-language'); } catch {}
-  let language=['zh','en'].includes(saved)?saved:/^zh\b/i.test(navigator.languages?.[0]||navigator.language||'en')?'zh':'en';
+  const systemLanguage=()=>/^zh(?:[-_]|$)/i.test(navigator.languages?.[0]||navigator.language||'en')?'zh':'en';
+  let language=systemLanguage();
   const t=(key,values={})=>(strings[language][key]||strings.en[key]||key).replace(/\{(\w+)\}/g,(_,name)=>String(values[name]??''));
   function apply(){
     document.documentElement.lang=language==='zh'?'zh-CN':'en';
@@ -77,9 +76,10 @@
   }
   window.DuckI18n={t,get language(){return language;},setLanguage(next){
     if(!['zh','en'].includes(next))return;
-    language=next;try{localStorage.setItem('duck-cockpit-language',next);}catch{}
+    language=next;
     apply();window.dispatchEvent(new CustomEvent('duck-languagechange'));
   }};
   document.getElementById('language')?.addEventListener('click',()=>window.DuckI18n.setLanguage(language==='zh'?'en':'zh'));
+  window.addEventListener('languagechange',()=>window.DuckI18n.setLanguage(systemLanguage()));
   apply();
 })();

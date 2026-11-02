@@ -161,7 +161,7 @@
     "status": "Expose the app input-source owner."
   },
   "preserved_sha256": {
-    "assets/mobile-i18n.js": "afbc65d0c4aa793ef67f0ea2c45724b70a42c899bcd58fab49011259156c2b93",
+    "assets/mobile-i18n.js": "643988f71a42a1b74db8ec4657af42d72de6c1c1d5bee3afdb4930400e8c5df6",
     "assets/mobile-tof.css": "63f141b35f703e52e502f470540b70f1e12057c9867943ec8a0ce373d5640104",
     "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
     "python/tof_status.py": "9adabb825be2808538ebd720c1dec4e585505bc44639362def27bf7f524f084a",
@@ -177,9 +177,9 @@
     "assets/mobile-fullscreen.js": "ffdef3bf57edd8b814a8a4b18563a9cf77eeaa90ca63384da580e58cd950ce92",
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
-    "assets/mobile.css": "8a59deb2564a4c040605057d1afbed597bb0c9ce73d93c6502b4fec667b8af3f",
-    "assets/mobile.html": "8ac5fdafee4b34b937167ce31b285ec41819a4e8b99fbc0bbc7e9e037526d6de",
-    "assets/mobile.js": "22f5cb7fceb083942fc487e841d1c9297d3dbcf65dbaf90bb2c141332fbbce52",
+    "assets/mobile.css": "d59e1a26f3103c462e305ec42a900d902bf0c33571fd8e17156afe62a9332f9a",
+    "assets/mobile.html": "cc7828b638c05a0d2faeced297c9223420c8f2b3668931cf1331c4c00966dd7d",
+    "assets/mobile.js": "d60fb9549e0516e25a381cb0e57d797c2bd4873d47dc62877ddef1fecad481e0",
     "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
     "python/app_paths.py": "9f854ee38ff303c435b337585a951f68bc811b393744fc1924cdf4ba121c763b",
@@ -227,7 +227,7 @@
     "python/vendor/microduck_voice/__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
     "python/voice_application.py": "3ff5fa03e1bc7a1a063fad694ad69882614f33a57e94908ab7df31d0849c3002",
     "python/voice_config.py": "49e43e60cb42f15fd987fe71f6e26d81119ed4631fdde326d3329b52b329dbad",
-    "python/voice_media.py": "b458e4f54c2beef1f67b6b951fe5a45d0dc1c2b4a10863282560a4280a092378",
+    "python/voice_media.py": "58be702b3aa29ee2ae2690d437a99f9473f5469f64a2bd14cb617866c40ff43b",
     "python/voice_process.py": "5b081afd1a668d95eaa296441a6202a445bf39c52ea05359b3576810d2b7a028",
     "python/voice_supervisor.py": "fe38af4572b30e11af3ce0fc0e1189cf6937b8422b96a338c6a6207761dc368c",
     "sketch/src/vl53l5cx/LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
@@ -247,8 +247,9 @@
     "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1",
-    "assets/mobile-binding.css": "9dda56a932efa505e9b006ee4ca58b47d31ab76c217451f9f681e738c2aaa70e",
-    "assets/mobile-binding.js": "26051bbf9637f518167879ac64212af8f7585931361af291e6284696556f8ff6"
+    "assets/mobile-binding.css": "161836789b0d7aae5de08f3f7cc4c435a76ef174abda0a22d1c86e7ca2318d00",
+    "assets/mobile-binding.js": "262975fcf350703f8571db04a509faec7051ef968db05fdbe7737ef94b7e8b78",
+    "python/assets/speaker-test.wav": "93fc4fa00ebfd346f146a2af2e0bde61c0d49cc3a3478afec565bb7c8740dc8b"
   },
   "preserved_snapshot": {
     "kind": "working-tree-before-motion-sync",
@@ -418,7 +419,7 @@
   },
   "ai_binding_overlay": {
     "date": "2026-11-02",
-    "scope": "Explicit browser-selected cn/global region via same-origin POST and voice IPC. Selection persists and reconnects voice only, preserving identity, conversation language, audio settings and motion. Platform links, UI language and phone provisioning never select a cloud automatically. First setup may remain unconfigured until the user applies a region.",
+    "scope": "Explicit browser selection of cn/global immediately saves via same-origin POST and voice IPC, then reconnects voice. No additional Apply button. Pending saves suppress repeated switches; failed or lost responses reconcile the actual persisted selection. Preserve identity, conversation language, audio and motion. Platform links, UI language and phone provisioning never select a cloud automatically. Initial UI language follows the accessing browser system language (Chinese locales use Chinese, all others English), ignoring persisted language overrides. Manual toggles are page-local and never change the cloud.",
     "links": {
       "cn": "https://agent.xgorobot.com/devices",
       "global": "https://agent.luwudynamics.ai/"
@@ -427,6 +428,11 @@
       "assets/mobile-i18n.js": "b1af0bd57ff7a4f3c7f0a800050a91c0b8e33d9a22b06932ef8915e8473dbc6a",
       "assets/mobile.html": "ae74c32419cd3edc3b1759da355181cff6e64cfb1f28a10082314ff1e0320a01"
     },
-    "validation": "8 region configuration/HTTP tests, 3 actual parent/voice IPC integration tests, 23 headless and 5 CLI configuration checks; real zh/en region-selection UI and 8 viewport layouts verified. MCU, models and motion math unchanged."
+    "validation": "Region HTTP and parent/voice IPC tests retained. UI lifecycle checks cover immediate save, duplicate suppression, rollback, lost-response reconciliation, close/reopen during save, stale connection isolation, idempotency, first selection, custom URL and preserved language. MCU, models and motion math unchanged. 13 locale/old-preference cases, temporary toggle and system languagechange checks passed."
+  },
+  "speaker_test_overlay": {
+    "date": "2026-11-02",
+    "scope": "Add an explicit speaker-test control to the left of live microphone listening. Play bundled duck calls through the existing media audio handoff using source=duck; preserve music/upload/recording/TTS sources, uploaded content, volume, MCU and all motion code. No playback on page load. Pending requests suppress overlap; users can stop their test, and natural completion restores controls. Reconnect chat after media releases the device.",
+    "validation": "Node VM cockpit lifecycle checks plus AudioHandoff and Runtime tests cover play/stop/finish, stale polling, errors, duplicate clicks, missing device, zh/en state, unchanged volume/uploads and chat resume."
   }
 }

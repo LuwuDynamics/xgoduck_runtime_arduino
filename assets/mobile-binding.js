@@ -1,12 +1,12 @@
 /* Server selection is explicit; opening links or changing UI language never writes configuration. */
 (() => {
-  const ids=['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','applyRegion','regionMessage','bindingRegionChip'];
+  const ids=['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip'];
   const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
   if(Object.values(el).some(value=>!value))return;
   const t=(key,values)=>window.DuckI18n.t(key,values);
   let snapshot=null,config=null,failed=false,request=null,generation=0,timer=null;
-  let selected=null,draft=false,saving=false,message='';
-  const changed=()=>!!config&&['cn','global'].includes(selected)&&(config.custom_endpoint||config.cloud_region!==selected);
+  let selected=null,saving=false,message='';
+  const changed=value=>!!config&&['cn','global'].includes(value)&&(config.custom_endpoint||config.cloud_region!==value);
   function render(){
     el.bindingRegion.textContent=!config?t('bindingRegionUnknown'):config.custom_endpoint?t('bindingCustom'):config.cloud_region==='cn'?t('bindingCn'):config.cloud_region==='global'?t('bindingGlobal'):t('bindingNotConfigured');
     el.bindingRegionChip.textContent=t(!config?'bindingChipNone':config.custom_endpoint?'bindingChipCustom':config.cloud_region==='cn'?'bindingChipCn':config.cloud_region==='global'?'bindingChipGlobal':'bindingChipNone');
@@ -22,11 +22,10 @@
     else if(bound===false){state='unbound';key='bindingUnbound';}
     el.bindingStatus.textContent=t(key);el.bindingStatus.dataset.state=state;
     for(const [value,input,card] of [['cn',el.regionCn,el.regionCnCard],['global',el.regionGlobal,el.regionGlobalCard]]){
-      input.checked=selected===value;input.disabled=saving;
+      input.checked=selected===value;input.disabled=saving||!config;
       card.dataset.selected=String(selected===value);card.dataset.current=String(config?.cloud_region===value&&!config.custom_endpoint);
     }
-    el.applyRegion.disabled=saving||!changed();el.applyRegion.textContent=t(saving?'bindingApplying':'bindingApply');
-    el.regionMessage.textContent=t(message||(!config||!config.configured||changed()?'bindingSelect':'bindingSame'));
+    el.regionMessage.textContent=t(message||(!config?'bindingChecking':!config.configured||config.custom_endpoint?'bindingSelect':'bindingSame'));
   }
   async function jsonResponse(response){
     if(!response.ok)throw Error('Region service unavailable');
@@ -42,29 +41,28 @@
       const [voice,region]=await Promise.all(['/api/voice/status','/api/voice/region'].map(path=>fetch(path,{cache:'no-store',signal:controller.signal}).then(jsonResponse)));
       if(current!==generation||!el.bindingDialog.open)return;
       snapshot=voice;config=region;failed=false;
-      if(!draft)selected=config.custom_endpoint?null:config.cloud_region;
+      selected=config.custom_endpoint?null:config.cloud_region;
       if(message==='bindingApplied'&&snapshot.cloud_connected===true&&snapshot.session_cloud_region===config.cloud_region)message='';
       render();
     }catch(error){
       if(current===generation&&el.bindingDialog.open){snapshot=null;failed=true;render();}
     }finally{clearTimeout(timeout);if(current===generation)request=null;}
   }
-  async function apply(){
-    if(saving||!changed())return;
-    const value=selected;request?.abort();++generation;saving=true;message='bindingApplying';render();
+  async function select(value){
+    if(saving||!changed(value)){render();return;}
+    selected=value;request?.abort();++generation;saving=true;message='bindingApplying';render();
     const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),10000);
     try{
       config=await jsonResponse(await fetch('/api/voice/region',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Test':'1'},body:JSON.stringify({cloud_region:value}),signal:controller.signal}));
-      selected=config.cloud_region;draft=false;snapshot=null;failed=false;message=config.changed?'bindingApplied':'bindingSame';
-    }catch(error){message='bindingSwitchFailed';}
+      selected=config.cloud_region;snapshot=null;failed=false;message=config.changed?'bindingApplied':'bindingSame';
+    }catch(error){selected=config.custom_endpoint?null:config.cloud_region;message='bindingSwitchFailed';}
     finally{clearTimeout(timeout);saving=false;render();refresh();}
   }
-  for(const [input,value] of [[el.regionCn,'cn'],[el.regionGlobal,'global']])input.addEventListener('change',()=>{selected=value;draft=true;message='';render();});
+  for(const [input,value] of [[el.regionCn,'cn'],[el.regionGlobal,'global']])input.addEventListener('change',()=>select(value));
   el.openBinding.addEventListener('click',()=>{
-    if(!el.bindingDialog.open){draft=false;message='';el.bindingDialog.showModal();}
+    if(!el.bindingDialog.open){if(!saving)message='';el.bindingDialog.showModal();}
     render();refresh();if(!timer)timer=setInterval(refresh,3000);
   });
-  el.applyRegion.addEventListener('click',apply);
   el.closeBinding.addEventListener('click',()=>el.bindingDialog.close());
   el.bindingDialog.addEventListener('close',()=>{++generation;request?.abort();request=null;clearInterval(timer);timer=null;});
   async function headerRegion(){
@@ -73,7 +71,7 @@
     try{
       const value=await jsonResponse(await fetch('/api/voice/region',{cache:'no-store'}));
       if(current!==generation||saving)return;
-      config=value;if(!draft)selected=config.custom_endpoint?null:config.cloud_region;render();
+      config=value;selected=config.custom_endpoint?null:config.cloud_region;render();
     }catch(error){if(current===generation)render();}
   }
   window.addEventListener('duck-languagechange',render);

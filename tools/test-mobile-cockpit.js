@@ -77,8 +77,9 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#welcome').isHidden(),true);
     await page.locator('#language').click();
     assert.equal(await page.locator('#startCamera').innerText(),'Start camera');
-    await page.reload();await page.getByRole('button',{name:'Start camera',exact:true}).waitFor();
-    assert.equal(await page.locator('html').getAttribute('lang'),'en');
+    await page.reload();await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
+    assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN','Reload follows the system language rather than a previous manual toggle.');
+    await page.locator('#language').click();await page.getByRole('button',{name:'Start camera',exact:true}).waitFor();
     await page.locator('#settings').click();await page.getByRole('heading',{name:'Speaker',exact:true}).waitFor();
     assert.equal(await page.getByText('Phone microphone',{exact:true}).count(),0);
     await page.locator('#closeConfig').click();assert.equal(writes.length,0);

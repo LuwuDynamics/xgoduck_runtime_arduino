@@ -1,7 +1,7 @@
 (() => {
   const $=id=>document.getElementById(id), t=window.DuckI18n.t;
   let media=null,robot=null,gamepad=null,streaming=false,cameraBusy=false,lightBusy=false,mediaBusy=false,usbBusy=false,volumeDirty=false;
-  let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,activePanel='quick';
+  let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
   const dialog=$('config');
   // Port 80 opens the cockpit; the original desktop page stays on port 9527.
@@ -45,6 +45,15 @@
     const fill=$('feed').classList.contains('fill');$('fit').setAttribute('aria-label',t(fill?'fitView':'fillView'));
     if(!volumeDirty&&a?.volume!=null){$('volume').value=a.volume;$('volumeLabel').textContent=a.volume+'%';}
     const busy=!!live||mediaBusy;
+    if(speakerTesting&&!mediaBusy&&a?.state==='idle'){
+      speakerTesting=false;audioStatus(a.error?'speakerTestFailed':'speakerTestDone');
+      if(a.error)notify(message(a.error));
+    }
+    const speakerPlaying=speakerTesting&&a?.state==='playing';
+    $('speakerTest').disabled=busy||!a?.available||(!speakerTesting&&a.state!=='idle');
+    $('speakerTest').classList.toggle('active',!!speakerPlaying);$('speakerTest').setAttribute('aria-pressed',String(!!speakerPlaying));
+    $('speakerLabel').textContent=t(speakerTesting&&mediaBusy?'speakerPreparing':speakerPlaying?'stopSpeakerTest':'testSpeaker');
+    $('speakerHint').textContent=t(speakerPlaying?'speakerPlayingHint':'speakerTestHint');
     $('applyVolume').disabled=busy||!a?.available||!volumeDirty;
     $('testSpeaker').disabled=$('testMic').disabled=busy||!a?.available||a.state!=='idle';
     $('volume').disabled=busy||!a?.available;$('voiceFile').disabled=busy||!a?.available||a.state!=='idle';
@@ -117,6 +126,16 @@
   }
   $('applyVolume').onclick=async()=>{if(await mediaAction('audio/volume',{volume:+$('volume').value}))volumeDirty=false;render();};
   $('testSpeaker').onclick=()=>mediaAction('audio/play',{source:'music'});
+  $('speakerTest').onclick=async()=>{
+    if(mediaBusy||live||!media?.audio.available)return;
+    if(speakerTesting){await mediaAction('audio/stop',{});return;}
+    if(media.audio.state!=='idle')return notify(t('audioBusy'));
+    speakerTesting=true;audioStatus('speakerPreparing');
+    if(await mediaAction('audio/play',{source:'duck'})){
+      audioStatus(speakerTesting?'speakerPlayingHint':'speakerTestDone');
+    }else{speakerTesting=false;audioStatus('speakerTestFailed');}
+    render();
+  };
   $('stopAudio').onclick=async()=>{stopLive();await mediaAction('audio/stop',{});};
   function player(){audioContext??=new (window.AudioContext||window.webkitAudioContext)();audioContext.resume();return audioContext;}
   function stopLive(){

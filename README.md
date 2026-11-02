@@ -39,7 +39,7 @@ Reconnect through **Network** in App Lab, open **XGO Duck AI** and click **Run**
 ## 3. Bind an account and select an agent
 
 1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
-2. Tap **Link AI**, select **China** or **International**, then tap **Apply and reconnect**. The window shows the current region and binding state; open its matching platform:
+2. Tap **Link AI**, tap **China** or **International** to save the region and reconnect voice immediately. The window shows the current region and binding state; open its matching platform:
 
    | Device region | Binding and agent platform |
    | --- | --- |
@@ -58,10 +58,12 @@ Web Bluetooth requires a compatible Chrome / Edge browser. On iPhone / iPad, add
 | <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="150"> | <img src="docs/images/qr_miniprogram.png" alt="China WeChat Mini Program QR" width="150"> |
 | [Open the App download page](https://agent.luwudynamics.ai/download) | Scan with WeChat |
 
-China and international accounts and bindings are separate. Applying a region saves it and reconnects voice, preserving conversation language, volume and motion settings. Bind separately when switching to another service for the first time. Opening a platform link alone does not switch servers. If the device belongs to another account, unbind it from that account first.
+China and international accounts and bindings are separate. Selecting a region saves it and reconnects voice, preserving conversation language, volume and motion settings. Bind separately when switching to another service for the first time. Opening a platform link alone does not switch servers. If the device belongs to another account, unbind it from that account first.
 
 ## 4. Everyday use
 
+- **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
+- **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
 - **Chat:** say “小鸭小鸭” to wake Duck. Manage its agent on the platform; adjust volume in **Settings → Speaker**.
 - **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
 - **Motion:** finish servo setup and calibration, support Duck, and test Default pose before standing or walking. Desktop control is at `http://<board-ip>:9527/`; gamepad and calibration are also accessible from cockpit settings. Servo KP/KD remain user-controlled and are not overwritten at startup.

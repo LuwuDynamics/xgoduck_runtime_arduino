@@ -1,6 +1,6 @@
 # XGO Duck AI App: installation and headless operation
 
-> You can also choose China/International in the cockpit’s **Link AI** window and click **Apply and reconnect**. First-time setup may run before choosing a region; select it in the web page after the first Run. The CLI option below remains supported. Phone provisioning does not change the region automatically.
+> You can also tap China/International in the cockpit’s **Link AI** window to save the region and reconnect voice immediately. First-time setup may run before choosing a region; select it in the web page after the first Run. The CLI option below remains supported. Phone provisioning does not change the region automatically.
 
 ## AEC playback headroom and interruption stop (0.2.36)
 

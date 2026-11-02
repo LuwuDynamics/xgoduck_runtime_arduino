@@ -372,6 +372,40 @@ class AudioHandoffTest(unittest.TestCase):
             self.bench.audio_start('playing', cancel=cancel)
         self.assertFalse(self.gate.busy())
 
+    def test_duck_speaker_check_preserves_upload_and_volume_and_releases_audio(self):
+        source = ROOT / 'python/assets/speaker-test.wav'
+        original = source.read_bytes()
+        upload = self.bench.dir / 'upload.wav'
+        upload.write_bytes(b'preserve user upload')
+        volume = self.config.get()['volume']
+        with wave.open(str(source), 'rb') as audio:
+            self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()), (1, 2, 48000))
+            self.assertGreater(audio.getnframes() / 48000, 2)
+            self.assertLess(audio.getnframes() / 48000, 5)
+            samples = array.array('h', audio.readframes(audio.getnframes()))
+            self.assertGreater(max(abs(x) for x in samples), 10000)
+            self.assertLess(max(abs(x) for x in samples), 32767)
+        def play(cmd, **kwargs):
+            self.assertTrue(self.paused.is_set(), 'Chat must release the speaker before aplay opens it.')
+            self.assertEqual(cmd[:3], ['aplay', '-D', 'plughw:3,0'])
+            self.assertEqual(cmd[-1], str(source))
+            return REAL_POPEN([sys.executable, '-c', 'import time; time.sleep(.05)'], **kwargs)
+        with patch('voice_media.usb_audio_cards', return_value=CARDS), \
+             patch('voice_media.subprocess.Popen', side_effect=play):
+            proc = self.bench.audio_start('playing', source='duck')
+            proc.wait(timeout=2)
+            until = time.monotonic() + 2
+            while self.gate.busy() and time.monotonic() < until:
+                time.sleep(.01)
+            self.assertFalse(self.gate.busy())
+        self.assertEqual(source.read_bytes(), original)
+        self.assertEqual(upload.read_bytes(), b'preserve user upload')
+        self.assertEqual(self.config.get()['volume'], volume)
+        with patch('voice_media.usb_audio_cards', return_value=CARDS):
+            with self.assertRaisesRegex(ValueError, 'not available'):
+                self.bench.audio_start('playing', source='../../private.wav')
+        self.assertFalse(self.gate.busy())
+
 
 if __name__ == '__main__':
     unittest.main()

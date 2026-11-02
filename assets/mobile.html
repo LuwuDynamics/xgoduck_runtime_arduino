@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261030-controls">
+<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261102-speaker1">
 <link rel="stylesheet" href="mobile-tof.css?v=20261030-tof1">
-<link rel="stylesheet" href="mobile-binding.css?v=20261102-binding1">
+<link rel="stylesheet" href="mobile-binding.css?v=20261102-binding3">
 </head>
 <body>
 <main id="cockpit">
@@ -67,23 +67,23 @@
   <button id="restoreHud" data-i18n="showControls" hidden>显示控件</button>
   <div class="hud bottom">
     <div class="flight-state"><span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span><button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button></div>
-    <div class="intercom"><div class="intercom-heading"><span class="eyebrow" data-i18n="liveAudio">实时音频</span></div><button id="listen" class="talk-button secondary listen-only" aria-pressed="false"><span class="button-icon" aria-hidden="true">↓</span><span><b id="listenLabel">实时监听</b><small id="listenHint">点击收听小鸭麦克风</small></span></button><div class="voice-line"><span id="voiceState" role="status">点击实时监听，收听小鸭周围的声音</span></div></div>
+    <div class="intercom"><div class="intercom-heading"><span class="eyebrow" data-i18n="liveAudio">实时音频</span></div><div class="intercom-actions"><button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><span><b id="speakerLabel">测试扬声器</b><small id="speakerHint">播放几声合成鸭叫</small></span></button><button id="listen" class="talk-button secondary listen-only" aria-pressed="false"><span class="button-icon" aria-hidden="true">↓</span><span><b id="listenLabel">实时监听</b><small id="listenHint">点击收听小鸭麦克风</small></span></button></div><div class="voice-line"><span id="voiceState" role="status">点击实时监听，收听小鸭周围的声音</span></div></div>
   </div>
   <div id="notice" class="toast" role="status" hidden></div>
 </main>
 <dialog id="bindingDialog" aria-labelledby="bindingTitle" aria-describedby="bindingIntro">
   <div class="dialog-head"><div><span class="eyebrow">AI INTERACTION</span><h2 id="bindingTitle" data-i18n="bindingTitle">AI 交互绑定</h2></div><button id="closeBinding" class="icon-button" type="button" aria-label="关闭绑定窗口" data-i18n-aria-label="closeBinding">×</button></div>
   <div class="binding-body">
-    <p id="bindingIntro" data-i18n="bindingIntro">选择国内或国际服务器，应用后打开对应平台绑定设备。</p>
+    <p id="bindingIntro" data-i18n="bindingIntro">点击国内版或国际版即可切换服务器，再打开对应平台绑定设备。</p>
     <div class="binding-device" aria-live="polite"><div><span data-i18n="bindingRegion">当前服务区域</span><strong id="bindingRegion">—</strong></div><div><span data-i18n="bindingStatus">绑定状态</span><strong id="bindingStatus">正在读取</strong></div></div>
     <fieldset class="binding-server-options"><legend data-i18n="bindingChooseRegion">选择服务区域</legend><div class="binding-choices">
-      <div class="binding-choice"><label class="binding-card" id="regionCnCard"><span class="binding-card-top"><span class="binding-symbol">CN</span><input id="regionCn" name="cloudRegion" type="radio" value="cn"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingCn">国内版</span><span class="binding-card-hint" data-i18n="bindingCnHint">国内账号 · 微信小程序</span><span class="binding-domain">agent.xgorobot.com</span></label><a class="binding-platform" href="https://agent.xgorobot.com/devices" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenCn">打开国内版 ↗</a></div>
-      <div class="binding-choice"><label class="binding-card" id="regionGlobalCard"><span class="binding-card-top"><span class="binding-symbol">GLOBAL</span><input id="regionGlobal" name="cloudRegion" type="radio" value="global"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingGlobal">国际版</span><span class="binding-card-hint" data-i18n="bindingGlobalHint">国际账号 · Android / iOS App</span><span class="binding-domain">agent.luwudynamics.ai</span></label><a class="binding-platform" href="https://agent.luwudynamics.ai/" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenGlobal">打开国际版 ↗</a></div>
+      <div class="binding-choice"><label class="binding-card" id="regionCnCard"><span class="binding-card-top"><span class="binding-symbol">CN</span><input id="regionCn" name="cloudRegion" type="radio" value="cn"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingCn">国内版</span><span class="binding-card-hint" data-i18n="bindingCnHint">国内账号</span><span class="binding-domain">agent.xgorobot.com</span></label><a class="binding-platform" href="https://agent.xgorobot.com/devices" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenCn">打开国内版 ↗</a></div>
+      <div class="binding-choice"><label class="binding-card" id="regionGlobalCard"><span class="binding-card-top"><span class="binding-symbol">GLOBAL</span><input id="regionGlobal" name="cloudRegion" type="radio" value="global"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingGlobal">国际版</span><span class="binding-card-hint" data-i18n="bindingGlobalHint">国际账号</span><span class="binding-domain">agent.luwudynamics.ai</span></label><a class="binding-platform" href="https://agent.luwudynamics.ai/" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenGlobal">打开国际版 ↗</a></div>
     </div></fieldset>
-    <div class="binding-apply"><button id="applyRegion" type="button" data-i18n="bindingApply" disabled>应用并重连</button><p id="regionMessage" role="status" aria-live="polite"></p></div>
+    <p id="regionMessage" class="binding-message" role="status" aria-live="polite"></p>
     <ol class="binding-steps"><li data-i18n="bindingStep1">在所选平台登录，进入「设备」并点击「添加设备」。</li><li data-i18n="bindingStep2">按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。</li><li data-i18n="bindingStep3">选择智能体；设备在线后，说「小鸭小鸭」开始聊天。</li></ol>
     <p class="binding-note" data-i18n="bindingNotice">切换服务器会重新连接语音服务，两边的账号、设备绑定和智能体独立；对话语言、音量及运动设置保持。</p>
-    <p class="binding-browser" data-i18n="bindingBrowser">网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge；iPhone / iPad 可使用对应小程序或 App 绑定。</p>
+    <p class="binding-browser" data-i18n="bindingBrowser">网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge 浏览器。</p>
   </div>
 </dialog>
 <dialog id="config">
@@ -96,5 +96,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=20261102-binding1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261030-tof1"></script><script src="mobile-binding.js?v=20261102-binding1"></script>
+<script src="mobile-i18n.js?v=20261102-binding-labels2"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261102-speaker1"></script><script src="mobile-binding.js?v=20261102-binding3"></script>
 </body></html>

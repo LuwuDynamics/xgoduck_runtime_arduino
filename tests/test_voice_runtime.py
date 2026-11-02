@@ -119,9 +119,9 @@ class VoiceRuntimeTest(unittest.IsolatedAsyncioTestCase):
             self.temp.cleanup()
 
     async def test_repeated_web_playback_releases_and_resumes_chat_without_overlap(self):
-        for _ in range(6):
+        for source in ['music', 'duck'] * 3:
             previous = self.runtime.app
-            proc = await asyncio.to_thread(self.runtime.bench.audio_start, 'playing')
+            proc = await asyncio.to_thread(self.runtime.bench.audio_start, 'playing', source=source)
             self.assertTrue(previous._closing)
             await asyncio.to_thread(proc.wait, 2)
             await eventually(lambda: self.runtime.app is not None and self.runtime.app is not previous and self.open_sessions == 1)

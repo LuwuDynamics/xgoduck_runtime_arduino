@@ -107,10 +107,13 @@ class MediaBench(legacy.Bench):
                            '-c', '1', '-d', str(seconds), str(self.dir / 'recording.wav')]
                 elif kind == 'playing':
                     names = {'music': 'music.wav', 'upload': 'upload.wav', 'recording': 'recording.wav', 'tts': 'tts.wav'}
-                    if source not in names or not (self.dir / names[source]).is_file():
+                    sources = {name: self.dir / filename for name, filename in names.items()}
+                    sources['duck'] = ROOT / 'python/assets/speaker-test.wav'
+                    path = sources.get(source)
+                    if path is None or not path.is_file():
                         raise ValueError('The selected audio source is not available.')
                     self.set_volume(self.config.get()['volume'] if volume is None else volume)
-                    cmd = ['aplay', '-D', f'plughw:{card},0', str(self.playback_file(self.dir / names[source]))]
+                    cmd = ['aplay', '-D', f'plughw:{card},0', str(self.playback_file(path))]
                 else:
                     raise ValueError('Unknown audio operation.')
                 log = tempfile.TemporaryFile()
