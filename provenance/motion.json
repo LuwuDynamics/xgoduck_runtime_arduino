@@ -161,7 +161,7 @@
     "status": "Expose the app input-source owner."
   },
   "preserved_sha256": {
-    "assets/mobile-i18n.js": "643988f71a42a1b74db8ec4657af42d72de6c1c1d5bee3afdb4930400e8c5df6",
+    "assets/mobile-i18n.js": "d81cc91355ab4b8190d42e4dbff3564577b085c25b9a3c2f9b81639b7f859ab2",
     "assets/mobile-tof.css": "63f141b35f703e52e502f470540b70f1e12057c9867943ec8a0ce373d5640104",
     "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
     "python/tof_status.py": "9adabb825be2808538ebd720c1dec4e585505bc44639362def27bf7f524f084a",
@@ -178,7 +178,7 @@
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
     "assets/mobile.css": "d59e1a26f3103c462e305ec42a900d902bf0c33571fd8e17156afe62a9332f9a",
-    "assets/mobile.html": "cc7828b638c05a0d2faeced297c9223420c8f2b3668931cf1331c4c00966dd7d",
+    "assets/mobile.html": "05eddb57db58625d8b41d95f8fa1bacc3646b8847058bd0ea7be691ac385d87c",
     "assets/mobile.js": "d60fb9549e0516e25a381cb0e57d797c2bd4873d47dc62877ddef1fecad481e0",
     "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
@@ -247,9 +247,12 @@
     "sketch/src/vl53l5cx/vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
     "sketch/src/vl53l5cx/vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1",
-    "assets/mobile-binding.css": "161836789b0d7aae5de08f3f7cc4c435a76ef174abda0a22d1c86e7ca2318d00",
+    "assets/mobile-binding.css": "feb058a88e9b256d6804723de7d3e1ff2ecb72476a96b348f74218abe2e11335",
     "assets/mobile-binding.js": "262975fcf350703f8571db04a509faec7051ef968db05fdbe7737ef94b7e8b78",
-    "python/assets/speaker-test.wav": "93fc4fa00ebfd346f146a2af2e0bde61c0d49cc3a3478afec565bb7c8740dc8b"
+    "python/assets/speaker-test.wav": "93fc4fa00ebfd346f146a2af2e0bde61c0d49cc3a3478afec565bb7c8740dc8b",
+    "assets/mobile-startup.js": "c597e6dfa7cf313c3bbeb25f54c19e26de4cfd9f9e68f0efc14f86f787ad5ded",
+    "assets/startup-network.wav": "f7a323f376e1bcf1306cf24d93904a820c4479d0b5c2c51f1c2f3114cda5d2d3",
+    "assets/startup-voice.wav": "aa497b679dbd48cf72aa91127161d3839f693e469ebb3682f8022caed56a5904"
   },
   "preserved_snapshot": {
     "kind": "working-tree-before-motion-sync",
@@ -434,5 +437,9 @@
     "date": "2026-11-02",
     "scope": "Add an explicit speaker-test control to the left of live microphone listening. Play bundled duck calls through the existing media audio handoff using source=duck; preserve music/upload/recording/TTS sources, uploaded content, volume, MCU and all motion code. No playback on page load. Pending requests suppress overlap; users can stop their test, and natural completion restores controls. Reconnect chat after media releases the device.",
     "validation": "Node VM cockpit lifecycle checks plus AudioHandoff and Runtime tests cover play/stop/finish, stale polling, errors, duplicate clicks, missing device, zh/en state, unchanged volume/uploads and chat resume."
+  },
+  "startup_guide_overlay": {
+    "date": "2026-11-02",
+    "scope": "Explain one-time setup, boot autostart, ordered network/voice duck sounds and the xiao-ya wake phrase in both READMEs and the AI binding dialog. Browser-local sound examples use the actual connection cue kinds and software gain. Previews never command Duck or write its configuration, and stop on close, hide, page exit or a new selection. Runtime autostart, actual connection sound playback, motion, models, calibration and MCU are unchanged."
   }
 }

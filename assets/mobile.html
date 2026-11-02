@@ -5,7 +5,7 @@
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
 <title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261102-speaker1">
 <link rel="stylesheet" href="mobile-tof.css?v=20261030-tof1">
-<link rel="stylesheet" href="mobile-binding.css?v=20261102-binding3">
+<link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 </head>
 <body>
 <main id="cockpit">
@@ -82,6 +82,18 @@
     </div></fieldset>
     <p id="regionMessage" class="binding-message" role="status" aria-live="polite"></p>
     <ol class="binding-steps"><li data-i18n="bindingStep1">在所选平台登录，进入「设备」并点击「添加设备」。</li><li data-i18n="bindingStep2">按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。</li><li data-i18n="bindingStep3">选择智能体；设备在线后，说「小鸭小鸭」开始聊天。</li></ol>
+    <section class="binding-startup" aria-labelledby="startupTitle">
+      <h3 id="startupTitle" data-i18n="startupTitle">开机自启与唤醒</h3>
+      <p data-i18n="startupAutostart">首次按 README 完成初始化，并在 App Lab 成功 Run 一次后，后续通电会自动启动网页、聊天和运动服务，无需每次再点 Run。</p>
+      <p data-i18n="startupReady">完成配网、账号绑定并接好 USB 音频设备后，启动就绪会依次播放两段鸭叫：</p>
+      <div class="startup-sounds">
+        <div class="startup-sound"><div><strong data-i18n="startupNetwork">① 联网成功</strong><span data-i18n="startupNetworkHint">第一段鸭叫</span></div><button id="previewStartupNetwork" type="button" aria-pressed="false" data-i18n="startupPreviewListen" data-i18n-aria-label="startupListenNetwork">试听</button></div>
+        <div class="startup-sound"><div><strong data-i18n="startupVoice">② 语音服务就绪</strong><span data-i18n="startupVoiceHint">第二段鸭叫</span></div><button id="previewStartupVoice" type="button" aria-pressed="false" data-i18n="startupPreviewListen" data-i18n-aria-label="startupListenVoice">试听</button></div>
+      </div>
+      <p class="startup-preview-hint" data-i18n="startupPreviewHint">试听在当前手机或电脑播放；开机提示音由小鸭扬声器播放。</p>
+      <p id="startupPreviewStatus" class="startup-preview-status" role="status" aria-live="polite" hidden></p>
+      <p class="startup-wake" data-i18n="startupWake">听到这两段启动提示音后，喊「小鸭小鸭」唤醒，听到唤醒鸭叫后就可以说话了。</p>
+    </section>
     <p class="binding-note" data-i18n="bindingNotice">切换服务器会重新连接语音服务，两边的账号、设备绑定和智能体独立；对话语言、音量及运动设置保持。</p>
     <p class="binding-browser" data-i18n="bindingBrowser">网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge 浏览器。</p>
   </div>
@@ -96,5 +108,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=20261102-binding-labels2"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261102-speaker1"></script><script src="mobile-binding.js?v=20261102-binding3"></script>
+<script src="mobile-i18n.js?v=20261102-startup1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261102-speaker1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

@@ -36,6 +36,15 @@ Setup asks for the Linux password and prepares hardware support, USB Host, the w
 
 Reconnect through **Network** in App Lab, open **XGO Duck AI** and click **Run**. The first Run downloads dependencies, compiles and uploads the STM32 sketch, and can take several minutes. After a successful first Run, the App starts automatically on later boots.
 
+Later power-ups prepare USB Host and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
+
+| Order | Meaning | Example |
+| --- | --- | --- |
+| 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
+| 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
+
+After both sounds, say **“小鸭小鸭” (xiǎo yā, xiǎo yā)** to wake Duck, then speak after its wake-up duck call. You can also listen under **Link AI → Automatic startup & wake**. Examples play on your phone/computer; real startup sounds play through Duck’s speaker.
+
 ## 3. Bind an account and select an agent
 
 1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.

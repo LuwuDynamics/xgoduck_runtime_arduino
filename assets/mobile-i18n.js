@@ -1,6 +1,14 @@
 (() => {
   const strings = {
     en: {
+      startupTitle:'Automatic startup & wake',
+      startupAutostart:'Complete the one-time README setup and a successful Run in App Lab. Duck then starts the cockpit, chat and motion services automatically on power-up; no need to click Run each time.',
+      startupReady:'After Wi-Fi, account binding and USB audio are ready, two duck sounds play in order:',
+      startupNetwork:'1. Network connected',startupNetworkHint:'First startup sound',startupVoice:'2. Voice service ready',startupVoiceHint:'Second startup sound',
+      startupWake:'After both startup sounds, say “小鸭小鸭” (xiǎo yā, xiǎo yā) to wake Duck. Speak after the wake-up duck call.',
+      startupPreviewHint:'Examples play on this phone/computer. Real startup sounds play through Duck’s speaker.',
+      startupPreviewListen:'Listen',startupPreviewStop:'Stop',startupPreviewLoading:'Loading…',startupPreviewPlaying:'Playing: {name}',startupPreviewEnded:'Finished: {name}',startupPreviewStopped:'Preview stopped',startupPreviewFailed:'Unable to play this example. Please try again.',
+      startupListenNetwork:'Listen to the network-connected duck sound',startupListenVoice:'Listen to the voice-ready duck sound',startupStopNetwork:'Stop the network-connected example',startupStopVoice:'Stop the voice-ready example',
       pageTitle:'Duck Cockpit', cockpit:'COCKPIT', cameraAlt:"Live view from Duck's camera", desktopControl:'Open desktop control', desktopControlLink:'Open desktop control ↗',
       switchLanguage:'切换为中文', fillView:'Fill camera view', fitView:'Fit entire camera view', openSettings:'Open settings', closeSettings:'Close settings',
       enterFullscreen:'Enter fullscreen', exitFullscreen:'Exit fullscreen', fullscreen:'Fullscreen', fullscreenError:'Could not enter fullscreen. Open this page directly in Chrome and tap Fullscreen again.', fullscreenUnsupported:'This browser does not support fullscreen.',
@@ -32,6 +40,14 @@
       tofRpcMissing:'The current firmware has no ToF read interface.',tofReadFailed:'Unable to read ToF. Camera and audio remain available.',tofSensorError:'Sensor offline or read failed. Check its connection.',tofNotConnected:'No ToF detected. Check the Qwiic connection.',tofStaleHint:'No fresh frame. Previous distances have been hidden.',tofNoTarget:'No valid target. Try an object in front of the sensor.',tofConnectionLost:'Connection lost. Waiting to reconnect…',tofWaiting:'Waiting for a real sensor frame…'
     },
     zh: {
+      startupTitle:'开机自启与唤醒',
+      startupAutostart:'首次按 README 完成初始化，并在 App Lab 成功 Run 一次后，后续通电会自动启动网页、聊天和运动服务，无需每次再点 Run。',
+      startupReady:'完成配网、账号绑定并接好 USB 音频设备后，启动就绪会依次播放两段鸭叫：',
+      startupNetwork:'① 联网成功',startupNetworkHint:'第一段鸭叫',startupVoice:'② 语音服务就绪',startupVoiceHint:'第二段鸭叫',
+      startupWake:'听到这两段启动提示音后，喊「小鸭小鸭」唤醒，听到唤醒鸭叫后就可以说话了。',
+      startupPreviewHint:'试听在当前手机或电脑播放；开机提示音由小鸭扬声器播放。',
+      startupPreviewListen:'试听',startupPreviewStop:'停止',startupPreviewLoading:'正在加载…',startupPreviewPlaying:'正在试听：{name}',startupPreviewEnded:'试听结束：{name}',startupPreviewStopped:'已停止试听',startupPreviewFailed:'试听失败，请重试。',
+      startupListenNetwork:'试听联网成功鸭叫',startupListenVoice:'试听语音就绪鸭叫',startupStopNetwork:'停止联网成功试听',startupStopVoice:'停止语音就绪试听',
       pageTitle:'小鸭驾驶舱', cockpit:'驾驶舱', cameraAlt:'小鸭摄像头实时画面', desktopControl:'打开桌面控制页', desktopControlLink:'打开桌面控制页 ↗',
       switchLanguage:'Switch to English', fillView:'填满画面', fitView:'显示完整画面', openSettings:'打开设置', closeSettings:'关闭设置',
       enterFullscreen:'进入全屏', exitFullscreen:'退出全屏', fullscreen:'全屏', fullscreenError:'无法进入全屏，请在 Chrome 中直接打开此页面后重试。', fullscreenUnsupported:'当前浏览器不支持全屏。',

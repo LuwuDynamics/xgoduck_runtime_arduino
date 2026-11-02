@@ -110,5 +110,29 @@
     },
     "generator": "tools/build-speaker-test.py",
     "source": "Existing Apache-2.0 vendor/microduck_voice synthesizer; no network or additional runtime gain."
+  },
+  "startup_previews": {
+    "description": "Browser-local examples of the existing startup connection sounds; no playback, network-status or binding changes on Duck.",
+    "generator": "tools/build-startup-previews.py",
+    "identity": "XGO-Duck",
+    "rate_hz": 16000,
+    "channels": 1,
+    "software_gain": 3,
+    "clips": {
+      "network": {
+        "asset": "assets/startup-network.wav",
+        "kind": "greet",
+        "variant": 0,
+        "duration_s": 0.9169375,
+        "sha256": "f7a323f376e1bcf1306cf24d93904a820c4479d0b5c2c51f1c2f3114cda5d2d3"
+      },
+      "voice_service": {
+        "asset": "assets/startup-voice.wav",
+        "kind": "wheee",
+        "variant": 0,
+        "duration_s": 1.404875,
+        "sha256": "aa497b679dbd48cf72aa91127161d3839f693e469ebb3682f8022caed56a5904"
+      }
+    }
   }
 }
