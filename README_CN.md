@@ -148,7 +148,7 @@ https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-
 
 1. 电脑或手机与小鸭连接同一网络，打开 **`http://<板子IP>/`**，无需端口和页面后缀。
 
-   <img src="docs/images/cockpit-cn.jpg" alt="电脑浏览器中的驾驶舱首页，顶部为 AI 绑定入口" width="1000">
+   <img src="docs/images/cockpit-live-cn.png" alt="中文驾驶舱的实时摄像头画面与 ToF 测距，顶部为 AI 绑定入口" width="1000">
 
 2. 点击顶部 **AI 绑定**，点击 **国内版** 或 **国际版**即可保存选区并重连语音。窗口会显示当前服务区域和绑定状态，再打开对应的平台：
 
