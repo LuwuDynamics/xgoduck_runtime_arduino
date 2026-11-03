@@ -56,12 +56,14 @@
 
 ### 让 AI 代装第 3～4 步
 
-把下面整段交给能执行终端命令的 AI。已经导入的 App 可以从实际安装目录继续。
+复制下面的提示词，在自己的 AI 会话里填入 **板子 IP、SSH 用户名和密码**。能执行终端命令的 AI 就可以通过 Wi-Fi SSH 直接登录板子。已经导入的 App 可以从实际安装目录继续。
 
 ```text
 请在我的 Arduino UNO Q 上完成 XGO Duck AI 的导入和启动。
-板子 IP：[填写]。安装方式：[首次安装 / 更新]。服务区域：[国内 cn / 国际 global]。
-通过 Wi-Fi SSH 以 arduino 登录，密码由我在终端输入。先核对系统、空间、App 列表和实际目录。
+板子 IP：[填写]。SSH 用户名：[填写，通常是 arduino]。SSH 密码：[填写板子的 Linux 登录密码]。
+安装方式：[首次安装 / 更新]。服务区域：[国内 cn / 国际 global]。
+用上面的凭据通过 Wi-Fi SSH 直接登录板子。不要把密码写进文件、命令历史或日志。
+先核对系统、空间、App 列表和实际目录。App CLI 命令以 arduino 用户运行。
 如未导入，下载下面的专用 ZIP，用同地址加 .sha256 的文件校验：
 https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
 板子下载失败时可在电脑下载并校验，再用 SCP 传过去。检查 arduino-app-cli app import --help，

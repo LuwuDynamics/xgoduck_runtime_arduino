@@ -56,12 +56,14 @@ I will enter the password at the terminal prompt.
 
 ### Let AI handle steps 3–4
 
-Copy this prompt to an AI assistant with terminal access. If you already imported the App, it can continue from the actual installation directory.
+Copy the prompt and fill in the **board IP, SSH username and password** in your own AI session. An assistant with terminal access can then sign in directly over Wi-Fi SSH. If you already imported the App, it can continue from the actual installation directory.
 
 ```text
 Import and start XGO Duck AI on my Arduino UNO Q.
-Board IP: [fill in]. Installation: [first install / update]. Service region: [China cn / International global].
-Connect over Wi-Fi SSH as arduino. I will enter passwords at terminal prompts.
+Board IP: [fill in]. SSH username: [fill in, usually arduino]. SSH password: [board's Linux login password].
+Installation: [first install / update]. Service region: [China cn / International global].
+Sign in to the board over Wi-Fi SSH with the credentials above. Keep the password out of files,
+shell history and logs. Run App CLI commands as the arduino user.
 Check the OS, disk space, installed Apps and their actual paths. If needed, download the dedicated ZIP:
 https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
 Verify it against the same URL with .sha256 appended. If needed, download on my computer and use SCP.
