@@ -107,7 +107,7 @@ and circuit board. Cite the slide number and ask me to check anything unclear on
 
 1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
 
-   <img src="docs/images/cockpit-en.jpg" alt="Cockpit home screen example; the Link AI button is near the top" width="380">
+   <img src="docs/images/cockpit-en.jpg" alt="Desktop cockpit home screen with Link AI in the top bar" width="1000">
 
 2. Tap **Link AI**, tap **China** or **International** to save the region and reconnect voice immediately. The window shows the current region and binding state; open its matching platform:
 
