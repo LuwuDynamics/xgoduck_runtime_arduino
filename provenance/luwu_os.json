@@ -35,8 +35,8 @@
     "libs/i18n.py": "Private per-App persistent language path.",
     "libs/__init__.py": "Empty namespace for headless SDK integration; desktop libraries are not bundled.",
     "apps/voice_chat/mqtt_udp_protocol.py": "Reject closed/stale MQTT callbacks; serialize client creation and shutdown; cancel reconnect tasks and disconnect before joining old network threads.",
-    "assets/music/send.wav": "0.2.34 local RIG-Omni short cue, 300 ms, extra -6 dB and edge fades; see provenance/audio-cues.json. Original upstream hash remains in sha256_original.",
-    "assets/music/ding.wav": "0.2.34 local RIG-Omni short cue, 300 ms, extra -6 dB and edge fades; see provenance/audio-cues.json. Original upstream hash remains in sha256_original."
+    "assets/music/send.wav": "RIG-Omni conversation cue, 300 ms with edge fades and 2× the PCM amplitude of the 0.2.34 cue. See provenance/audio-cues.json.",
+    "assets/music/ding.wav": "RIG-Omni conversation cue, 300 ms with edge fades and 3× the PCM amplitude of the 0.2.34 cue. See provenance/audio-cues.json."
   },
   "sha256_packaged": {
     "LICENSE": "ceb6e06c708f6ce983ea2be4adbb1b852ff29d807bd8980bc4bffc69b8a38186",
@@ -52,8 +52,8 @@
     "apps/voice_chat/ota.py": "042d3f9be170d10e61648472a01bb5d87ca0c835efd1fd32ce2558d77c5ea21b",
     "apps/voice_chat/sound_labels.csv": "7adeee160d8231e254d122cdb4948c3d89de4daeb6a99e1cdc0c7f2d56fbd116",
     "apps/voice_chat/vision.py": "a008ba08da4f4faf4b5719ddab3deee205ed5df4a88bab9c8b1ce3324ce3d5ae",
-    "assets/music/ding.wav": "20109348a0ebd35d33d16608750cfb42ca8efb7c7db0da9c839f634507de9db7",
-    "assets/music/send.wav": "675ff354d4723d7e9cccbef416295e5a806ecc747323f1bc2d6d336811718cf1",
+    "assets/music/ding.wav": "25f1e9356e4130efe13b57a735d21bf5959804345d51cf62a8c99b62edf1f43b",
+    "assets/music/send.wav": "aca1cd7482dc91f9adb4234f28a1663636d69941202a952208fdf0137c265657",
     "libs/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "libs/i18n.py": "cf429f4dd0f9efa43d0787028fcc4c8e44c41ee17a9ff1b7ed2143df9b848c54",
     "libs/webrtc_apm/__init__.py": "f9f32f8b73a943a0e67014513f81186e14b5fb9735dff014bc4394ef899e10ea",

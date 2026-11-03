@@ -1,5 +1,5 @@
 {
-  "description": "Short, quiet local conversation cues; wake/network/MCP/TTS resources are separate. Local WAV queue retains its existing mouthless path.",
+  "description": "Short local conversation cues with edge fades. Local WAV playback retains its mouthless path.",
   "reference": {
     "repository": "local RIG-Omni checkout",
     "source_commit": "c49b127ca7f8cb6aee7698c366496593515f46d0",
@@ -38,15 +38,16 @@
         "sample_width": 2,
         "frames": 4800,
         "duration_s": 0.3,
-        "rms_dbfs": -24.256,
-        "peak_dbfs": -15.551,
+        "rms_dbfs": -18.235,
+        "peak_dbfs": -9.53,
         "edge_samples": [
           0,
           0
         ],
-        "sha256": "675ff354d4723d7e9cccbef416295e5a806ecc747323f1bc2d6d336811718cf1"
+        "sha256": "aca1cd7482dc91f9adb4234f28a1663636d69941202a952208fdf0137c265657"
       },
-      "rms_change_db": -7.796
+      "rms_change_db": -1.775,
+      "pcm_gain_after_fades": 2
     },
     "reply_complete": {
       "asset": "python/vendor/luwu_os/assets/music/ding.wav",
@@ -72,15 +73,16 @@
         "sample_width": 2,
         "frames": 4800,
         "duration_s": 0.3,
-        "rms_dbfs": -26.024,
-        "peak_dbfs": -18.652,
+        "rms_dbfs": -16.481,
+        "peak_dbfs": -9.109,
         "edge_samples": [
           0,
           0
         ],
-        "sha256": "20109348a0ebd35d33d16608750cfb42ca8efb7c7db0da9c839f634507de9db7"
+        "sha256": "25f1e9356e4130efe13b57a735d21bf5959804345d51cf62a8c99b62edf1f43b"
       },
-      "rms_change_db": -11.337
+      "rms_change_db": -1.794,
+      "pcm_gain_after_fades": 3
     }
   },
   "speaker_test": {

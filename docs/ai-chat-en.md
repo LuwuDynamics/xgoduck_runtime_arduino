@@ -31,6 +31,8 @@ The send and reply-complete cues use the local RIG-Omni `message_send.ogg` / `ov
 
 Only these two local WAVs are replaced. They retain the existing local playback queue that excludes cues from mouth animation. Files are read on each playback, allowing updates without reflashing the MCU.
 
+Compared with 0.2.34, the send cue has 2× the PCM amplitude (+6.02 dB) and the reply-complete cue has 3× (+9.54 dB). Both retain their 0.30-second duration and fades.
+
 > **Current control layer:** motion is pinned to master [`b401d85`](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/b401d85d20bb5bfd0237242a8a5ab6847fc962a2), including eight policies, matching web/MCU control and Bridge reconnection. Voice permissions, mobile/gamepad ownership, speech-mouth exclusion, hardware-center migration and the independent ToF task remain. Ordinary forward/backward limits are 0.2/0.18 m/s. See [validation](ai-validation.md).
 
 The 0.2.33 section below records the previous archive integration. `provenance/motion.json` identifies the current source; its hardware-center migration workflow still applies.

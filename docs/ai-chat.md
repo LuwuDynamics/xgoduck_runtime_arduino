@@ -31,6 +31,8 @@ python3 tools/configure-ai.py --aec-output-headroom-db 12
 
 只替换这两个本地 WAV；提示音继续走不驱动嘴型的本地队列。播放器在每次播放时读取文件，可热更新，无需重新烧录 STM32。
 
+相较于 0.2.34 的音效，发送提示音的 PCM 振幅为 2 倍（+6.02 dB），回复结束音为 3 倍（+9.54 dB）。两者都保留 0.30 秒时长和淡入淡出。
+
 > **当前控制层：** 运动部分同步 master [`b401d85`](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/b401d85d20bb5bfd0237242a8a5ab6847fc962a2)，包括 8 个运动模型、配套网页/MCU 和 Bridge 重连处理。保留原有语音权限、手机遥控、手柄控制权、嘴型互斥、硬件中点迁移与 ToF 独立任务；普通行走前进/后退上限为 0.2/0.18 m/s。验证范围见[检查记录](ai-validation.md)。
 
 以下 0.2.33 小节记录上一次稳定包集成；当前来源以 `provenance/motion.json` 为准，硬件中点迁移流程继续适用。
