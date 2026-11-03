@@ -8,6 +8,19 @@ Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data
 
 The first seven steps follow the official developer guide, with this repository’s XGO Duck AI ZIP and startup commands.
 
+## Choose XGO Duck or XGO Duck AI
+
+Choose **XGO Duck (master)** for browser motion control, servo setup and calibration. Choose **XGO Duck AI (this branch)** if you also want voice chat, a USB camera view or ToF ranging. [Read the master branch guide](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/blob/master/README.md)
+
+| Feature | XGO Duck (master) | XGO Duck AI (this branch) |
+| --- | --- | --- |
+| Motion control | Browser controls, servo setup, calibration and actions such as walking | Browser motion controls, servo setup and calibration |
+| Voice chat | — | Bind an account, choose an agent and say “小鸭小鸭” to wake Duck |
+| Media and ranging | — | USB camera preview, snapshots, live microphone monitoring, speaker test, and optional ToF ranging and forward obstacle avoidance |
+| Web access | `http://<board-ip>:9527/` for motion control | `http://<board-ip>/` for the cockpit and Link AI, with motion control on port `9527` |
+
+Both apps use a 2 Mbps Bridge. For XGO Duck AI, download `xgoduck_ai.zip` in step 3 and follow step 4 to prepare USB Host, the cockpit and automatic startup.
+
 ## 1. Set up Wi-Fi
 
 Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)

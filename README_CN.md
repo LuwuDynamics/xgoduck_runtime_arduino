@@ -8,6 +8,19 @@
 
 下面按官方开发者指南的七步顺序配置，使用本仓库的 XGO Duck AI 安装包和启动命令。
 
+## XGO Duck 和 XGO Duck AI 怎么选
+
+只需要网页遥控、舵机设置和标定，可以选 **XGO Duck（master）**。想让小鸭语音聊天、查看 USB 摄像头或使用 ToF 测距，选 **XGO Duck AI（本分支）**。 [查看 master 说明](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/blob/master/README.md)
+
+| 功能 | XGO Duck（master） | XGO Duck AI（本分支） |
+| --- | --- | --- |
+| 运动控制 | 网页遥控、舵机设置、标定和行走等动作 | 同样提供网页运动控制、舵机设置和标定 |
+| 语音聊天 | — | 绑定账号、选择智能体后，用「小鸭小鸭」唤醒聊天 |
+| 音视频与测距 | — | USB 摄像头预览、拍照、麦克风监听、扬声器测试，以及可选 ToF 测距和前向避障 |
+| 网页入口 | `http://<板子IP>:9527/` 打开运动控制 | `http://<板子IP>/` 打开驾驶舱和 AI 绑定，`:9527` 打开运动控制 |
+
+两个版本都使用 2 Mbps Bridge。AI 版请下载第 3 步的 `xgoduck_ai.zip`，按第 4 步准备 USB Host、驾驶舱入口和开机自启。
+
 ## 1. 设置并连接 Wi-Fi
 
 用 USB 数据线把 UNO Q 连到电脑，在 Arduino App Lab 完成首次设置。选择键盘布局、设置设备名、连接 Wi-Fi 并设置板端 Linux 登录密码。等待检查和更新完成，断开 USB 后按指南接好扩展板，再重开 App Lab 并连接开发板。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/index.html)
