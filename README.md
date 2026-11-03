@@ -89,6 +89,11 @@ Recorded board reference: Router 0.10.0, App CLI 0.13.0 and Python base image 0.
 From the App directory, run bash tools/install-ai-support.sh and then sudo bash tools/router-2m.sh.
 Verify the Router ExecStart uses 2000000 and check the default App, then run arduino-app-cli app start "$PWD".
 The first start may upload the STM32 sketch. Check the cockpit and port 9527's /api/status and /api/voice/status.
+If ToF is connected, poll port 9527's /api/tof/status and verify state=ranging, fresh=true,
+an advancing seq and valid_zones > 0. HTTP 200 alone only verifies access. If the status is
+unexpected, compare it with python /app/tools/read-tof.py --seconds 4 inside the App container
+to distinguish backend, Bridge and sensor failures. Record an absent sensor as not installed
+when confirmed, or mark the hardware check as pending.
 If servos are not wired yet, mark feedback as pending. On failure, inspect logs. Report the actual results.
 ```
 

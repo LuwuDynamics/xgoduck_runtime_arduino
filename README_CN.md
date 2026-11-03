@@ -90,6 +90,10 @@ python3 tools/configure-ai-python.py --index-url https://pypi.tuna.tsinghua.edu.
 进入实际 App 目录，依次运行 bash tools/install-ai-support.sh 和 sudo bash tools/router-2m.sh。
 核对 Router 的 ExecStart 使用 2000000，确认默认 App 后，用 arduino-app-cli app start "$PWD" 启动。
 首次启动可能上传 STM32。检查驾驶舱、9527 的 /api/status 和 /api/voice/status。
+如果已接 ToF，连续请求 9527 的 /api/tof/status，确认 state=ranging、fresh=true、
+seq 递增且 valid_zones > 0。HTTP 200 只代表接口可访问。如果状态异常，用容器内
+的 python /app/tools/read-tof.py --seconds 4 对照读数，区分后台、Bridge 和传感器问题。
+没有安装 ToF 时记为未安装。如果还不确定是否接了 ToF，记为待确认。
 如果舵机尚未接线，记录反馈待验证。启动失败先查看日志。汇报安装目录、组件版本和实际结果。
 ```
 

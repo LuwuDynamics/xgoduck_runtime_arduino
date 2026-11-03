@@ -3,8 +3,10 @@ import copy
 import importlib.util
 import os
 from pathlib import Path
+import socket
 import threading
 import time
+from urllib.parse import urlparse
 
 
 def _decoder():
@@ -16,10 +18,60 @@ def _decoder():
 
 
 def _client():
-    # Never use app_utils.Bridge or the CLI's legacy cleanup here: that client
-    # belongs to the motion loop. This connection owns no provided methods.
-    from arduino.router_bridge import Bridge, DEFAULT_ADDRESS
+    try:
+        from arduino.router_bridge import Bridge, DEFAULT_ADDRESS
+    except ModuleNotFoundError as exc:
+        if exc.name not in ('arduino', 'arduino.router_bridge'):
+            raise
+        return _LegacyToFClient(os.environ.get('APP_SOCKET', 'unix:///var/run/arduino-router.sock'))
     return Bridge(os.environ.get('APP_SOCKET', DEFAULT_ADDRESS))
+
+
+class _LegacyToFClient:
+    """One outstanding read on a socket separate from the legacy motion singleton."""
+
+    def __init__(self, address):
+        import msgpack  # Also used by the legacy App SDK.
+        self._msgpack = msgpack
+        self._unpacker = msgpack.Unpacker()
+        self._address = urlparse(address)
+        self._socket = None
+        self._request_id = 0
+
+    def connect(self, timeout):
+        if self._address.scheme == 'unix':
+            self._socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self._socket.settimeout(timeout)
+            self._socket.connect(self._address.path)
+        elif self._address.scheme == 'tcp':
+            self._socket = socket.create_connection((self._address.hostname, self._address.port), timeout)
+        else:
+            raise ValueError('Unsupported Arduino Router socket address.')
+        return True
+
+    def call(self, method, *, timeout):
+        self._request_id += 1
+        deadline = time.monotonic() + timeout
+        self._socket.settimeout(timeout)
+        self._socket.sendall(self._msgpack.packb([0, self._request_id, method, []]))
+        while (remaining := deadline - time.monotonic()) > 0:
+            self._socket.settimeout(remaining)
+            chunk = self._socket.recv(4096)
+            if not chunk:
+                raise ConnectionError('Arduino Router closed the ToF connection.')
+            self._unpacker.feed(chunk)
+            for response in self._unpacker:
+                if isinstance(response, list) and response[:2] == [1, self._request_id] and len(response) == 4:
+                    _, _, error, result = response
+                    if error is not None:
+                        raise RuntimeError(f'Router {method} failed: {error}')
+                    return result
+        raise TimeoutError(f'Router {method} timed out.')
+
+    def disconnect(self):
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
 
 
 def _empty(state='starting', message=''):
