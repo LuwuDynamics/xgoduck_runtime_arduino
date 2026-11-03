@@ -69,6 +69,8 @@ I will enter the password at the terminal prompt.
 
 ### Let AI handle steps 3–4
 
+This prompt was tested in Codex and DeepSeek Harness, and the App installed successfully in both. Allow 30 minutes to 1 hour, depending on download speed.
+
 Copy the prompt and fill in the **board IP, SSH username and password** in your own AI session. An assistant with terminal access can then sign in directly over Wi-Fi SSH. If you already imported the App, it can continue from the actual installation directory.
 
 ```text
@@ -108,6 +110,10 @@ unexpected, compare it with python /app/tools/read-tof.py --seconds 4 inside the
 to distinguish backend, Bridge and sensor failures. Record an absent sensor as not installed
 when confirmed, or mark the hardware check as pending.
 If servos are not wired yet, mark feedback as pending. On failure, inspect logs. Report the actual results.
+After the App installs and starts successfully, point me back to this README for steps 5–8.
+Guide me through configuring and numbering the servos, assembling XGO Duck, calibrating and trying
+its first walk, then binding an account and selecting an agent. If I have already completed any
+of these steps, point me to the next unfinished one.
 ```
 
 ## 5. Configure and number the servos
