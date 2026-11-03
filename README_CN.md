@@ -125,13 +125,7 @@ App 安装并启动成功后，提醒我回到本 README，按顺序完成第 5 
 
 摄像头 USB 数据线通过直角 USB-C 插头接到 UNO Q，同一端的红黑两线插头接蓝色载板。ToF 传感器线束接 UNO Q 底部的 Qwiic 接口。两只扬声器和补光灯的接线位置也标在图上。
 
-<img src="docs/images/wiring/overview.svg" alt="小鸭摄像头和 ToF 接线实拍，标出 USB-C、载板两针插头、Qwiic、补光灯和扬声器接线" width="960">
-
-| 主板端与线束 | 载板端与头部 |
-| --- | --- |
-| <img src="docs/images/wiring/uno-q-usb.jpg" alt="UNO Q 的 USB-C 插头" width="320"><br>UNO Q 的 USB-C 插头 | <img src="docs/images/wiring/carrier-top.jpg" alt="载板两针插头与 UNO Q 底部走线" width="320"><br>载板两针插头与 UNO Q 底部走线 |
-| <img src="docs/images/wiring/av-harness.jpg" alt="摄像头 USB 数据线与 ToF 线束分支" width="320"><br>摄像头 USB 数据线与 ToF 线束分支 | <img src="docs/images/wiring/head-mount.jpg" alt="摄像头板背面与头部走线" width="320"><br>摄像头板背面与头部走线 |
-| <img src="docs/images/wiring/av-board.jpg" alt="摄像头板与两只扬声器接线" width="320"><br>摄像头板与两只扬声器接线 | <img src="docs/images/wiring/fill-light.jpg" alt="补光灯两线插头" width="320"><br>补光灯两线插头 |
+<img src="docs/images/wiring/overview-zh.png" alt="XGO Duck 实物端口接线图，标出 UNO Q、载板、摄像头、ToF 模块、扬声器和补光灯" width="960">
 
 需要 AI 协助核对时，可附上装配 PPT 和实物照片，并复制下面这段。
 
