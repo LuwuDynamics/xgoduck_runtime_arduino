@@ -28,9 +28,13 @@ I will enter the password at the terminal prompt.
 
 ## 3. Import XGO Duck AI
 
+> **Want AI to handle the installation?** Jump to the [AI prompt for steps 3–4](#ai-assisted-install). It starts with downloading the ZIP and covers importing, configuring and launching the App.
+
+### Import manually
+
 1. Download and keep the [XGO Duck AI App Lab ZIP](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip). The [matching SHA-256 file](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip.sha256) lets you verify the download.
 2. In App Lab, select **＋ next to Apps → Import App → Import from computer** and choose the ZIP.
-3. Open the imported **XGO Duck AI** card and leave the App stopped. Step 4 prepares the board libraries and Bridge before the first **Run**. The prompt in step 4 also covers importing the ZIP. [Illustrated import guide](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
+3. Open the imported **XGO Duck AI** card and leave the App stopped. Step 4 prepares the board libraries and Bridge before the first **Run**. [Illustrated import guide](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
 
 <img src="docs/images/applab-import.jpg" alt="Arduino App Lab's ZIP import dialog" width="760">
 
@@ -47,6 +51,8 @@ I will enter the password at the terminal prompt.
 
 3. The first script installs host dependencies, prepares USB Host, the cockpit and autostart, and precompiles the MCU sketch. The second sets the shared Router Bridge serial rate to **2 Mbps**. Switching to USB Host disconnects computer USB/ADB access.
 4. Stay online. Connect through **Network** in App Lab, open **XGO Duck AI**, and click **Run**. The first run may compile and upload the STM32 sketch while it prepares dependencies. Later power-ups start the App automatically. [XGO Duck AI installation and update details](docs/ai-chat-en.md)
+
+<a name="ai-assisted-install"></a>
 
 ### Let AI handle steps 3–4
 

@@ -28,9 +28,13 @@
 
 ## 3. 导入 XGO Duck AI App
 
+> **想让 AI 代装？** 现在就跳到[第 3～4 步的 AI 代装提示词](#ai-assisted-install)。AI 可以从下载 ZIP 开始，协助导入、配置和启动。
+
+### 手动导入
+
 1. 下载并保留 [XGO Duck AI 安装包 xgoduck_ai.zip](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip)。AI 版请使用此专用 ZIP，可用[配套 SHA-256 文件](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip.sha256)核对。
 2. 在 App Lab 点 **Apps 旁的 ＋ → Import App → Import from computer**，选择下载的 ZIP。
-3. 导入后点击 **XGO Duck AI** 卡片，保持应用停止，进入第 4 步。AI 版的初始化脚本会准备开发板库和 Bridge，配置完成后再点 **Run**。如需 AI 代为导入，可直接复制第 4 步的提示词。 [官网导入界面图解](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
+3. 导入后点击 **XGO Duck AI** 卡片，保持应用停止，进入第 4 步。AI 版的初始化脚本会准备开发板库和 Bridge，配置完成后再点 **Run**。 [官网导入界面图解](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
 
 <img src="docs/images/applab-import.jpg" alt="Arduino App Lab 的 ZIP 导入窗口" width="760">
 
@@ -47,6 +51,8 @@
 
 3. 第一个脚本安装主机依赖、准备 USB Host、驾驶舱和开机自启，并预编译 MCU。第二个脚本把共享 Router 的 Bridge 串口设置为 **2 Mbps**。切换 USB Host 会断开电脑的 USB/ADB 连接。
 4. 保持联网，在 App Lab 通过 **Network** 连接板子，打开 **XGO Duck AI → Run**。首次运行可能编译并上传 STM32 程序，需要等待依赖准备完成。后续通电会自动启动。 [AI 版详细安装与升级说明](docs/ai-chat.md)
+
+<a name="ai-assisted-install"></a>
 
 ### 让 AI 代装第 3～4 步
 
