@@ -116,6 +116,18 @@ seq 递增且 valid_zones > 0。HTTP 200 只代表接口可访问。如果状态
 
 按图核对 15 个舵机的标签和安装朝向，再装底座、腿、脚掌、头颈、电池支架和电路板。连接线缆后固定零件，合壳前检查走线、左右方向和螺丝规格。 [官方装配步骤](https://www.xgorobot.com/duck-developer-guide/06-assembly.html) · [下载中英装配 PPTX（约 69 MB）](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
 
+### 摄像头和 ToF 接线
+
+摄像头 USB 数据线通过直角 USB-C 插头接到 UNO Q，同一端的红黑两线插头接蓝色载板。ToF 传感器线束接 UNO Q 底部的 Qwiic 接口。两只扬声器和补光灯的接线位置也标在图上。
+
+<img src="docs/images/wiring/overview.svg" alt="小鸭摄像头和 ToF 接线实拍，标出 USB-C、载板两针插头、Qwiic、补光灯和扬声器接线" width="960">
+
+| 主板端与线束 | 载板端与头部 |
+| --- | --- |
+| <img src="docs/images/wiring/uno-q-usb.jpg" alt="UNO Q 的 USB-C 插头" width="320"><br>UNO Q 的 USB-C 插头 | <img src="docs/images/wiring/carrier-top.jpg" alt="载板两针插头与 UNO Q 底部走线" width="320"><br>载板两针插头与 UNO Q 底部走线 |
+| <img src="docs/images/wiring/av-harness.jpg" alt="摄像头 USB 数据线与 ToF 线束分支" width="320"><br>摄像头 USB 数据线与 ToF 线束分支 | <img src="docs/images/wiring/head-mount.jpg" alt="摄像头板背面与头部走线" width="320"><br>摄像头板背面与头部走线 |
+| <img src="docs/images/wiring/av-board.jpg" alt="摄像头板与两只扬声器接线" width="320"><br>摄像头板与两只扬声器接线 | <img src="docs/images/wiring/fill-light.jpg" alt="补光灯两线插头" width="320"><br>补光灯两线插头 |
+
 需要 AI 协助核对时，可附上装配 PPT 和实物照片，并复制下面这段。
 
 ```text

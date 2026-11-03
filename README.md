@@ -120,6 +120,18 @@ If servos are not wired yet, mark feedback as pending. On failure, inspect logs.
 
 Check the servo labels and mounting directions before assembling the base, legs, feet, head and neck, battery bracket and circuit board. Connect cables before securing parts. Check left and right orientation, cable routing and screws before closing the housing. [Official assembly steps](https://www.xgorobot.com/duck-developer-guide/06-assembly.html) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
 
+### Camera and ToF wiring
+
+The camera USB cable connects to the UNO Q through the right-angle USB-C plug. The red-and-black two-wire plug at the same end connects to the blue carrier. The ToF cable connects to the Qwiic port underneath the UNO Q. The photo also labels the two speaker leads and the fill light lead.
+
+<img src="docs/images/wiring/overview.svg" alt="Duck camera and ToF wiring photo with labels for USB-C, the carrier plug, Qwiic, the fill light, and the speaker leads" width="960">
+
+| Board connections and harness | Carrier and head connections |
+| --- | --- |
+| <img src="docs/images/wiring/uno-q-usb.jpg" alt="UNO Q USB-C plug" width="320"><br>UNO Q USB-C plug | <img src="docs/images/wiring/carrier-top.jpg" alt="Carrier plug and cable routing beneath the UNO Q" width="320"><br>Carrier plug and cable routing beneath the UNO Q |
+| <img src="docs/images/wiring/av-harness.jpg" alt="Camera USB cable and ToF harness branches" width="320"><br>Camera USB cable and ToF harness branches | <img src="docs/images/wiring/head-mount.jpg" alt="Back of the camera board and wiring inside the head" width="320"><br>Back of the camera board and wiring inside the head |
+| <img src="docs/images/wiring/av-board.jpg" alt="Camera board and both speaker leads" width="320"><br>Camera board and both speaker leads | <img src="docs/images/wiring/fill-light.jpg" alt="Two-wire fill light plug" width="320"><br>Two-wire fill light plug |
+
 To get help checking the assembly, attach the PPTX and photos of your Duck and copy this prompt.
 
 ```text
