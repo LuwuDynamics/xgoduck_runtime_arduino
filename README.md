@@ -86,6 +86,19 @@ the old App. Back up its directory and data/, then follow the migration notes in
 Confirm other running Apps can be stopped. Keep Wi-Fi SSH available and stop all Apps.
 Use sketch/sketch.yaml, provenance/toolchain.json and python/requirements.txt for dependencies.
 Recorded board reference: Router 0.10.0, App CLI 0.13.0 and Python base image 0.12.0. Reuse compatible versions.
+Before the first start, run arduino-cli core list as arduino and check the installed arduino:zephyr core.
+If it is missing or differs from sketch/sketch.yaml, run arduino-cli core install arduino:zephyr@1.0.0
+and check again. Upload can pick up options from the older board core even if the sketch compiled successfully.
+Verify that the ARM64 toolchain is version 1.0.1 as pinned in provenance/toolchain.json.
+If the toolchain download fails on the board, download the official Linux ARM64 archive on my computer
+from the URL in that file, check its size and SHA-256, and transfer it to the board with SCP.
+From the App directory, run python3 tools/prepare-ai-sketch.py --toolchain-archive <path-on-board>
+as arduino to verify and stage the archive in the download cache.
+If downloading the board core or pulling the Docker base image fails, check the error and connectivity.
+If needed, temporarily forward my computer's existing proxy over Wi-Fi SSH for the affected download.
+Remove the forwarding and temporary proxy settings after installation.
+For Python downloads in China, keep any existing custom index. If needed, run from the App directory:
+python3 tools/configure-ai-python.py --index-url https://pypi.tuna.tsinghua.edu.cn/simple/
 From the App directory, run bash tools/install-ai-support.sh and then sudo bash tools/router-2m.sh.
 Verify the Router ExecStart uses 2000000 and check the default App, then run arduino-app-cli app start "$PWD".
 The first start may upload the STM32 sketch. Check the cockpit and port 9527's /api/status and /api/voice/status.

@@ -85,6 +85,15 @@ https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-
 先确认其他正在运行的 App 可以停止，保持 Wi-Fi SSH，再停止所有 App。
 按 sketch/sketch.yaml、provenance/toolchain.json、python/requirements.txt 准备依赖。
 实机版本参考为 Router 0.10.0、App CLI 0.13.0、Python 基础镜像 0.12.0，复用兼容版本。
+首次启动前，以 arduino 用户执行 arduino-cli core list，检查板上已安装的 arduino:zephyr。
+如果缺失或与 sketch/sketch.yaml 不一致，先执行 arduino-cli core install arduino:zephyr@1.0.0
+并复查版本。Sketch 编译成功后，上传仍可能读到旧板级 core 的参数，所以这项检查要在启动前完成。
+核对 ARM64 工具链为 provenance/toolchain.json 指定的 1.0.1。
+若板上下载工具链失败，在电脑按该文件的 url 下载官方 Linux ARM64 压缩包，
+校验大小和 SHA-256 后用 SCP 传到板上。进入 App 目录，以 arduino 用户运行
+python3 tools/prepare-ai-sketch.py --toolchain-archive <板上压缩包路径>，让脚本校验并填入下载缓存。
+若下载板级 core 或拉取 Docker 基础镜像失败，检查报错和网络，必要时通过 Wi-Fi SSH
+临时转发电脑已有的代理，只给失败的下载使用。安装完后撤销转发及临时代理配置。
 国内下载 Python 依赖时，可在 App 目录运行以下命令。已有自定义源先保留：
 python3 tools/configure-ai-python.py --index-url https://pypi.tuna.tsinghua.edu.cn/simple/
 进入实际 App 目录，依次运行 bash tools/install-ai-support.sh 和 sudo bash tools/router-2m.sh。
