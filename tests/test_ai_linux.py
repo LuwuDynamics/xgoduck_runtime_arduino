@@ -169,7 +169,13 @@ async def check():
             'name':'Duck.RemoteMove','arguments':{'direction':'left','speed':40,'seconds':.7,
                 'controller_id':'phone_fixture_A','sequence':1}}})
         assert not reply['result']['isError']
-        assert calls[-1]['remote'] is True and calls[-1]['twist'] == [0,0,.2]
+        assert calls[-1]['remote'] is True and calls[-1]['twist'] == [0,0,.4]
+        for direction, twist in [('forward', [.15,0,0]), ('backward', [-.15,0,0]),
+                                 ('left', [0,0,1.]), ('right', [0,0,-1.])]:
+            reply = app.mcp.handle_message({'id':3,'method':'tools/call', 'params':{
+                'name':'Duck.RemoteMove','arguments':{'direction':direction,'speed':100,'seconds':.7,
+                    'controller_id':'phone_fixture_A','sequence':2}}})
+            assert not reply['result']['isError'] and calls[-1]['twist'] == twist
         await app.start_chat()
         app.protocol.open_audio_channel.assert_not_called()
         await app.shutdown()

@@ -361,6 +361,26 @@ class AudioHandoffTest(unittest.TestCase):
             self.assertEqual(list(array.array('h', src.readframes(src.getnframes()))), [2000, -2000, 32767, -32768])
         self.assertEqual(source.read_bytes(), original)
 
+    def test_battery_announcement_waits_for_configured_clip_to_finish(self):
+        for language in ('cn', 'en'):
+            with self.subTest(language=language):
+                self.config.update({'language': language})
+                with patch('voice_media.usb_audio_cards', return_value=CARDS), \
+                     patch('voice_media.subprocess.Popen') as popen, \
+                     patch.object(self.bench, 'finish_audio', side_effect=lambda proc, kind, log: log.close()):
+                    proc = popen.return_value
+                    proc.wait.return_value = 0
+                    self.bench.play_battery_warning()
+                    proc.wait.assert_called_once_with(timeout=9)
+                    clip = Path(popen.call_args.args[0][-1])
+                    self.assertEqual(clip.name, f'low-battery-{language}.wav')
+                    with wave.open(str(clip), 'rb') as audio:
+                        self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()),
+                                         (1, 2, 24000))
+                        self.assertLess(audio.getnframes() / audio.getframerate(), 9)
+                    self.gate.release(self.bench.audio_tokens.pop(proc))
+                    self.bench.audio = None
+
     def test_failed_open_or_cancelled_tts_releases_gate(self):
         with patch('voice_media.usb_audio_cards', return_value=[]):
             with self.assertRaises(ValueError):

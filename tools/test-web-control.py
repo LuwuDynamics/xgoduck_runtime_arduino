@@ -26,7 +26,8 @@ ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
           DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14,
           FACTORY_ZERO=[2047] * 15, collections=collections,
           EXCLUSIVE_MODES=('calibrate', 'servo_debug'),
-          CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4)
+          CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4,
+          BATTERY_SAMPLE_MAX_AGE_S=.4)
 exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
 
@@ -69,7 +70,8 @@ class WebControlTest(unittest.TestCase):
         c.sitstand_phase, c.sitstand_until = 'idle', 0.
         c.kick_until, c.kick_side = 0., None
         c._imu_source_us, c._imu_source_time = None, 0.
-        c.diagnostics = {}
+        c.diagnostics, c.diagnostic_time = {}, float('-inf')
+        c.battery_phase, c.battery_since = 'normal', None
         c.pick_active, c.pick_phi = False, 0.
         c.policy_needs_reset = False
         c.last_error = ''

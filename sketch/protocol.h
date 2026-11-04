@@ -55,6 +55,7 @@ struct __attribute__((packed)) DiagnosticPacket {
   uint32_t bridgeState, bridgeAttempts, bridgeFailures, notifyDrops;
   uint32_t imuSeq, imuUs, imuPeriodUs, imuWorkUs, imuOverruns, imuErrors, imuInitAttempts;
   uint32_t servoWrites, servoReads, servoWaitUs, reconnects, bridgeReadyUs;
+  uint32_t servoBusVoltageMv;
 };
 struct __attribute__((packed)) CalPacket {
   char magic[4];
@@ -87,7 +88,7 @@ struct __attribute__((packed)) ServoReplyPacket {
 };
 static_assert(sizeof(CommandPacket) == 80, "Command ABI");
 static_assert(sizeof(StatePacket) == 240, "State ABI");
-static_assert(sizeof(DiagnosticPacket) == 68, "Diagnostic ABI");
+static_assert(sizeof(DiagnosticPacket) == 72, "Diagnostic ABI");
 static_assert(sizeof(CalPacket) == 10, "Cal ABI");
 static_assert(sizeof(CalReplyPacket) == 10, "Cal reply ABI");
 static_assert(sizeof(ServoPacket) == 12, "Servo ABI");

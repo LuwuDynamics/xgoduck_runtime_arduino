@@ -8,6 +8,7 @@ import binascii
 import hashlib
 import os
 import re
+import subprocess
 
 CTRL, DATA = 0, 1
 ACK, CONNECT, STATUS, SCAN = 0, 3, 5, 9
@@ -70,6 +71,31 @@ def split_nmcli(line):
             field += char
     fields.append(field + ('\\' if escaped else ''))
     return fields
+
+
+def wifi_device_status(interface='wlan0'):
+    """Read the active access point without triggering a scan."""
+    status = {'type': 'wifi'}
+    try:
+        result = subprocess.run(
+            ['nmcli', '-t', '-e', 'yes', '-f', 'IN-USE,SSID,SIGNAL', 'device', 'wifi',
+             'list', 'ifname', interface, '--rescan', 'no'],
+            capture_output=True, encoding='utf-8', errors='replace', check=True,
+            timeout=1, env=dict(os.environ, LC_ALL='C'))
+    except (OSError, subprocess.SubprocessError):
+        return status
+    for line in result.stdout.splitlines():
+        fields = split_nmcli(line)
+        if len(fields) != 3 or fields[0] != '*':
+            continue
+        _, ssid, strength = fields
+        if ssid:
+            status['ssid'] = ssid
+        if strength.isascii() and strength.isdecimal() and 0 <= int(strength) <= 100:
+            percent = int(strength)
+            status['signal'] = 'strong' if percent >= 80 else ('medium' if percent >= 60 else 'weak')
+        break
+    return status
 
 
 async def run_command(args, timeout=10):

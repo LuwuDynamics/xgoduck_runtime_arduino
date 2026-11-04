@@ -269,6 +269,9 @@ class Runtime:
             if not isinstance(body, dict) or set(body) != {'cloud_region'}:
                 raise ValueError('Select cn or global.')
             return self.config.select_region(body['cloud_region'])
+        if method == 'POST' and path == '/battery-warning':
+            self.bench.play_battery_warning()
+            return {'ok': True}
         if method == 'POST' and path == '/stop':
             self.loop.call_soon_threadsafe(self.stop.set)
             return {'ok': True}

@@ -17,6 +17,13 @@ ROULADE_ALPHA = 0.15
 SITSTAND_STAND_S = 1.0
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
+LOW_BATTERY_MV = 6600
+BATTERY_REARM_MV = 7600
+BATTERY_SAMPLE_MAX_AGE_S = .4
+LOW_BATTERY_CONFIRM_S = 1.
+BATTERY_REARM_CONFIRM_S = 2.
+BATTERY_WARNING_TIMEOUT_S = 12.0
+LEG_FEEDBACK_MASK = 0x3ff  # The first ten bits of the hardware servo order.
 
 class Controller:
     def __init__(self, bridge):
@@ -91,6 +98,12 @@ class Controller:
         self._imu_source_us = None
         self._imu_source_time = 0.0
         self.diagnostics = {}
+        self.diagnostic_time = 0.
+        self.battery_phase = 'normal'
+        self.battery_since = None
+        self.battery_deadline = 0.
+        self.battery_warning = None
+        self.battery_warning_done = threading.Event()
         self.mode = 'shadow'
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
@@ -172,7 +185,72 @@ class Controller:
                 self._stop_pick_locked(); self._stop_roulade_locked()
                 self._stop_sitstand_locked()
                 self._stop_kick_locked()
-            self.diagnostics = values
+            now = time.monotonic()
+            if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
+                self.battery_since = None
+            self.diagnostics, self.diagnostic_time = values, now
+
+    def _battery_voltage(self, now):
+        if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
+            return None
+        return self.diagnostics.get('servo_bus_voltage_mv') or None
+
+    def _require_battery(self):
+        if self.battery_phase != 'normal':
+            raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
+
+    def _battery_step_locked(self, now):
+        voltage = self._battery_voltage(now)
+        phase = self.battery_phase
+        if phase in ('normal', 'locked'):
+            crossed = voltage is not None and (
+                voltage <= LOW_BATTERY_MV if phase == 'normal' else voltage >= BATTERY_REARM_MV)
+            if not crossed:
+                self.battery_since = None
+                return
+            if self.battery_since is None:
+                self.battery_since = now
+                return
+            duration = LOW_BATTERY_CONFIRM_S if phase == 'normal' else BATTERY_REARM_CONFIRM_S
+            if now - self.battery_since < duration:
+                return
+            self.battery_since = None
+            if phase == 'locked':
+                self.battery_phase = 'normal'
+                return
+            self.battery_phase = 'warning'
+            self.battery_deadline = now + BATTERY_WARNING_TIMEOUT_S
+            self._stop_pick_locked()
+            self._stop_roulade_locked()
+            self._stop_kick_locked()
+            self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
+            self.input_source = 'web'
+            self.arm_pending = False
+            self.generation += 1
+            self.battery_warning_done = threading.Event()
+            if self.battery_warning is not None:
+                threading.Thread(target=self._play_battery_warning, args=(self.battery_warning_done,),
+                                 name='battery-warning', daemon=True).start()
+            else:
+                self.battery_warning_done.set()
+        fb, filt = self.feedback, self.filtered
+        age = now - self.rx_time
+        ready = (self.mode in ('hold', 'policy') and fb and fb.enabled and age < .15
+                 and fb.imu_ok and age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 <= IMU_STALE_S
+                 and not fb.flags & 4 and fb.command_age_us <= 250000
+                 and fb.mask & LEG_FEEDBACK_MASK == LEG_FEEDBACK_MASK and filt and filt['imu_fusion_ready']
+                 and self.recovery.phase == 'walk')
+        if ready and now < self.battery_deadline and not self.battery_warning_done.is_set():
+            return
+        self.battery_phase = 'locked'
+        self.set_mode('off')
+        self._disarm_now()
+
+    def _play_battery_warning(self, done):
+        try:
+            self.battery_warning()
+        finally:
+            done.set()
 
     def receive(self, raw):
         try:
@@ -232,6 +310,8 @@ class Controller:
         if mode not in ('shadow', 'off', 'hold', 'policy', 'calibrate', 'servo_debug'):
             raise ValueError('unknown mode')
         with self.lock:
+            if mode not in ('off', 'shadow'):
+                self._require_battery()
             if mode == 'policy' and self.sitstand_phase != 'idle':
                 raise ValueError('stand up before switching to walk')
             if mode == 'policy' and self.kick_until:
@@ -390,6 +470,7 @@ class Controller:
         if side not in self.kick_policies:
             raise ValueError('kick side must be left or right')
         with self.lock:
+            self._require_battery()
             now = time.monotonic()
             if self.mode not in ('shadow', 'policy'):
                 raise ValueError('kick requires shadow/policy mode')
@@ -409,10 +490,22 @@ class Controller:
             self.last_error = ''
             return self._kick_status_locked(now, side)
 
+    def _start_sit_locked(self, now):
+        self.mode = 'policy'
+        self.arm_pending = not self.feedback.enabled
+        self.sitstand_phase = 'sit'
+        self.sitstand_until = 0.0
+        self.policy_needs_reset = True
+        self.head = [0.0]*4
+        self.twist = [0.0]*3
+        self.generation += 1
+        self.web_time = now
+
     def set_sitstand(self, action):
         if action not in ('sit', 'stand'):
             raise ValueError('sitstand action must be sit or stand')
         with self.lock:
+            self._require_battery()
             now = time.monotonic()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before sit/stand')
@@ -428,26 +521,22 @@ class Controller:
                     raise ValueError('sit/stand is already active')
                 if self.pick_active or self._roulade_on(now):
                     raise ValueError('wait for pick/roulade to finish before sitting')
-                self.mode = 'policy'
-                self.arm_pending = not fb.enabled
-                self.sitstand_phase = 'sit'
-                self.sitstand_until = 0.0
-                self.policy_needs_reset = True
-                self.head = [0.0]*4
+                self._start_sit_locked(now)
             else:
                 if self.sitstand_phase != 'sit':
                     raise ValueError('stand is only available after sit')
                 self.sitstand_phase = 'stand'
                 self.sitstand_until = now + SITSTAND_STAND_S
                 # Preserve the same model's action history across sit -> stand.
-            self.twist = [0.0]*3
-            self.generation += 1
-            self.web_time = now
+                self.twist = [0.0]*3
+                self.generation += 1
+                self.web_time = now
             self.last_error = ''
             return self._sitstand_status_locked(now)
 
     def start_pick(self):
         with self.lock:
+            self._require_battery()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before pick')
             if self.sitstand_phase != 'idle':
@@ -469,6 +558,7 @@ class Controller:
 
     def start_roulade(self):
         with self.lock:
+            self._require_battery()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before roulade')
             if self.sitstand_phase != 'idle':
@@ -504,6 +594,8 @@ class Controller:
             if not math.isfinite(m) or not 0 <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
+            if self.battery_phase != 'normal':
+                return {'ok': True, 'ignored': 'low battery protection'}
             if source != self.input_source:
                 return {'ok': True, 'ignored': 'inactive input source'}
             if self.mode in EXCLUSIVE_MODES:
@@ -528,6 +620,7 @@ class Controller:
             raise ValueError('joint index out of range')
         with self.cal_op_lock:
             with self.lock:
+                self._require_battery()
                 if self.mode != 'calibrate':
                     raise ValueError('not in calibrate mode')
                 if not self.feedback or time.monotonic()-self.rx_time > .15:
@@ -645,6 +738,7 @@ class Controller:
 
     def step(self):
         with self.lock:
+            self._battery_step_locked(time.monotonic())
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
             if mode in ('hold','policy'):
@@ -699,6 +793,9 @@ class Controller:
                     self._stop_pick_locked()
                     self._stop_sitstand_locked()
                     self._stop_kick_locked()
+                    if self.battery_phase == 'warning':
+                        self._battery_step_locked(now)
+                        return
             phase = self.recovery.phase
             if rolling and phase != 'walk':
                 self._stop_roulade_locked()
@@ -896,6 +993,11 @@ class Controller:
                 filter_clock='mcu_imu', snapshot='latest',
                 command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000)
             result['mcu_runtime'] = dict(self.diagnostics)
+            voltage = self._battery_voltage(now)
+            result['battery'] = dict(voltage_v=voltage / 1000 if voltage is not None else None,
+                                     low=self.battery_phase != 'normal' or
+                                         voltage is not None and voltage <= LOW_BATTERY_MV,
+                                     phase=self.battery_phase)
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']
             result['recovery'] = self.recovery.status()

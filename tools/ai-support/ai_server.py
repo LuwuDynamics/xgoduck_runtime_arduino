@@ -14,6 +14,15 @@ from usb_role import USBRole
 from usb_prepare import StartupUSB
 from blufi import SetupManager
 from audio_caps import capture_devices
+from provisioning import wifi_device_status
+
+
+class HardwareHandler(Handler):
+    def do_GET(self):
+        if self.path == '/network':
+            self.respond(200, wifi_device_status())
+        else:
+            super().do_GET()
 
 
 class Hardware:
@@ -78,7 +87,7 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, stop)
     try:
-        with Server(str(path), Handler) as server:
+        with Server(str(path), HardwareHandler) as server:
             server.manager = hardware
             os.chown(path, 0, grp.getgrnam('arduino').gr_gid)
             os.chmod(path, 0o660)

@@ -460,6 +460,7 @@ static void controlTask(void*, void*, void*) {
     }
     drainServoRx();
     servoRxMask = 0;
+    memset(servoVoltage, 0, sizeof(servoVoltage));
     readAllState(); Serial1.flush();
     ++servoReads;
     const uint32_t readStart = micros();
@@ -493,7 +494,7 @@ static void controlTask(void*, void*, void*) {
     RawPacket raw;
     fillRawPacket(raw);
     DiagnosticPacket diagnostic = {};
-    memcpy(diagnostic.magic, "DQD1", 4);
+    memcpy(diagnostic.magic, "DQD2", 4);
     diagnostic.bridgeState = atomic_get(&bridgeStage);
     diagnostic.bridgeAttempts = atomic_get(&bridgeAttempts);
     diagnostic.bridgeFailures = atomic_get(&bridgeFailures);
@@ -506,6 +507,7 @@ static void controlTask(void*, void*, void*) {
     diagnostic.servoWaitUs = servoWaitUs;
     diagnostic.reconnects = atomic_get(&bridgeReconnects);
     diagnostic.bridgeReadyUs = (uint32_t)atomic_get(&bridgeReadyUs);
+    diagnostic.servoBusVoltageMv = servoBusVoltageMv();
     k_mutex_lock(&stateMu, K_FOREVER);
     if (k_sem_count_get(&reportReady)) ++reportDrops;
     s.reportDrops = reportDrops; snapshot = s;

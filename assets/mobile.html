@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=20261102-speaker1">
+<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=battery1">
 <link rel="stylesheet" href="mobile-tof.css?v=20261030-tof1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 </head>
@@ -14,7 +14,7 @@
   <div class="reticle" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
   <header class="hud top">
     <a class="brand" href="/index.html" data-desktop-link aria-label="打开桌面控制页" data-i18n-aria-label="desktopControl"><span class="duck-mark">D<span>↗</span></span><span>DUCK<small data-i18n="cockpit">驾驶舱</small></span></a>
-    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button></div>
+    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
     <div class="top-actions">
       <button id="language" class="language-button" type="button">EN</button>
       <button id="fit" class="icon-button" aria-label="填满画面" data-i18n-aria-label="fillView">⤢</button>
@@ -108,5 +108,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=20261102-startup1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=20261102-speaker1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=battery1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=battery1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

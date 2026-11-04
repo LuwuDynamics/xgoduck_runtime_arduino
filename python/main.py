@@ -16,13 +16,14 @@ from fastapi import HTTPException
 from arduino.app_utils import App, Bridge
 from arduino.app_bricks.web_ui import WebUI
 from motion_calibration import AppController as Controller
+from controller import BATTERY_WARNING_TIMEOUT_S
 from media_proxy import register_media
 from gamepad import register_gamepad
 from motion_access import MotionAccess
 from voice_config import VoiceConfig
 from voice_region import register_voice_region
 from voice_supervisor import VoiceSupervisor
-from local_ipc import JsonServer
+from local_ipc import JsonServer, request
 from app_paths import PRIVATE
 from mouth_ipc import MouthReceiver
 from tof_status import ToFMonitor
@@ -65,6 +66,14 @@ ipc = JsonServer(motion_port, token, voice_dispatch)
 voice = VoiceSupervisor(token, motion_port=motion_port, voice_port=voice_port,
                         on_exit=lambda: access.heartbeat(None))
 os.environ['DUCK_MEDIA_URL'] = f'http://127.0.0.1:{media_port}'
+
+def play_battery_warning():
+    try:
+        request(voice_port, token, '/battery-warning', {}, timeout=BATTERY_WARNING_TIMEOUT_S)
+    except (OSError, ValueError) as exc:
+        print(f'[battery] Warning audio unavailable: {exc}', flush=True)
+
+controller.battery_warning = play_battery_warning
 ui = WebUI(port=9527, cors_origins='')
 register_media(ui)
 gamepad_control = register_gamepad(ui, controller)

@@ -563,12 +563,12 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.access.action['state'], 'completed')
         self.assertTrue(self.c.feedback.enabled)
 
-    def test_normal_forward_defaults_do_not_change_phone_percentage_remote(self):
+    def test_phone_percentage_uses_remote_speed_limit(self):
         self.access.remote_allowed = lambda: True
         reply, data = self.call_mcp(self.mcp(), 'Duck.RemoteMove',
             {'direction': 'forward', 'speed': 50, 'seconds': .7, 'controller_id': 'phone-1234', 'sequence': 1})
         self.assertFalse(reply['isError'])
-        self.assertEqual(self.c.twist, [.05, 0, 0])
+        self.assertEqual(self.c.twist, [.075, 0, 0])
 
     def test_command_link_loss_during_remote_lease_cancels_velocity(self):
         self.access.remote_allowed = lambda: True

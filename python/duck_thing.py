@@ -161,7 +161,8 @@ class DuckThing(Thing):
             raise ValueError('remote speed must be 0–100 percent')
         if direction not in ('forward', 'backward', 'left', 'right', 'stop'):
             raise ValueError('invalid remote direction')
-        twist = dict(forward=[speed * .001, 0, 0], backward=[-speed * .001, 0, 0],
-                     left=[0, 0, speed * .005], right=[0, 0, -speed * .005], stop=[0, 0, 0])[direction]
+        fraction = speed / 100
+        twist = dict(forward=[fraction * .15, 0, 0], backward=[-fraction * .15, 0, 0],
+                     left=[0, 0, fraction], right=[0, 0, -fraction], stop=[0, 0, 0])[direction]
         return self.action(kind='stop' if direction == 'stop' else 'move', twist=twist, duration=seconds,
                            remote=True, controller_id=controller_id, sequence=sequence)

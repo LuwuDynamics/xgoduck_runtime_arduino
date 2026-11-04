@@ -1,6 +1,7 @@
 (() => {
   const strings = {
     en: {
+      voltage:'Voltage', voltageLow:'Low voltage', voltageSource:'Servo supply voltage',
       startupTitle:'Automatic startup & wake',
       startupAutostart:'Complete the one-time README setup and a successful Run in App Lab. Duck then starts the cockpit, chat and motion services automatically on power-up; no need to click Run each time.',
       startupReady:'After Wi-Fi, account binding and USB audio are ready, two duck sounds play in order:',
@@ -40,6 +41,7 @@
       tofRpcMissing:'The current firmware has no ToF read interface.',tofReadFailed:'Unable to read ToF. Camera and audio remain available.',tofSensorError:'Sensor offline or read failed. Check its connection.',tofNotConnected:'No ToF detected. Check the Qwiic connection.',tofStaleHint:'No fresh frame. Previous distances have been hidden.',tofNoTarget:'No valid target. Try an object in front of the sensor.',tofConnectionLost:'Connection lost. Waiting to reconnect…',tofWaiting:'Waiting for a real sensor frame…'
     },
     zh: {
+      voltage:'电压', voltageLow:'低电压', voltageSource:'舵机供电总线电压',
       startupTitle:'开机自启与唤醒',
       startupAutostart:'首次按 README 完成初始化，并在 App Lab 成功 Run 一次后，后续通电会自动启动网页、聊天和运动服务，无需每次再点 Run。',
       startupReady:'完成配网、账号绑定并接好 USB 音频设备后，启动就绪会依次播放两段鸭叫：',

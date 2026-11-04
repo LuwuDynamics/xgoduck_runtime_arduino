@@ -12,6 +12,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const page=await context.newPage(),errors=[],writes=[];
     page.on('pageerror',error=>errors.push(error.message));
     const media={camera:{available:true,running:false,ready:false,device:'/dev/video2',frames:0,fps:0,error:'',light:{supported:true,enabled:false,error:''}},audio:{available:true,volume:100,state:'idle'}};
+    const battery={voltage_v:7.8,low:false};
     const tof={state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
     let tofHTTP=200,tofDelay=0;
@@ -42,7 +43,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
           return route.fulfill({json:media});
         }
-        if(url.pathname==='/api/status')return route.fulfill({json:{mode:'shadow',enabled:false,feedback_hz:100}});
+        if(url.pathname==='/api/status')return route.fulfill({json:{mode:'shadow',enabled:false,feedback_hz:100,battery}});
         if(url.pathname==='/api/tof/status'){
           const snapshot={...tof,seq:++tof.seq};
           if(tofDelay)await new Promise(resolve=>setTimeout(resolve,tofDelay));
@@ -67,6 +68,9 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
+    assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'电压 7.8 V');
+    Object.assign(battery,{voltage_v:7.3,low:true});
+    await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 7.3 V"]').waitFor();
     assert.equal(new URL(await page.locator('.brand').getAttribute('href')).port,'9527');
     assert.equal(await page.locator('#talk,#micSetup,#prepareMic,#flagAddress').count(),0);
     assert.equal(writes.length,0,'Opening the cockpit must not send hardware commands.');
@@ -77,6 +81,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#welcome').isHidden(),true);
     await page.locator('#language').click();
     assert.equal(await page.locator('#startCamera').innerText(),'Start camera');
+    assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'Low voltage 7.3 V');
     await page.reload();await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN','Reload follows the system language rather than a previous manual toggle.');
     await page.locator('#language').click();await page.getByRole('button',{name:'Start camera',exact:true}).waitFor();
@@ -137,7 +142,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
       for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
-        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','torqueOff'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
+        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','torqueOff','batteryVoltage'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
         const bounds=await page.evaluate(()=>({panel:document.getElementById('tofPanel').getBoundingClientRect().toJSON(),top:document.querySelector('.top').getBoundingClientRect().bottom,bottom:document.querySelector('.bottom').getBoundingClientRect().top,values:['tofCenter','tofNearest'].map(id=>document.getElementById(id).getBoundingClientRect().toJSON())}));
         assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);

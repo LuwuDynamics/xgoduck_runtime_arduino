@@ -1,6 +1,8 @@
 """Small product adapter around the production AI Chat Pro SDK."""
 import os
 from pathlib import Path
+import httpx
+from app_paths import DATA
 from duck_sound import DuckSoundPlayer
 
 WAKE_CUE = Path(__file__).with_name('assets') / 'wake-duck.wav'
@@ -76,6 +78,17 @@ def application_type(base, runtime):
 
         def _device_sn(self):
             return os.environ.get('DUCK_DEVICE_ID', '').replace(':', '').upper()
+
+        def _wifi_info(self):
+            socket = os.environ.get('DUCK_GAMEPAD_SOCKET', str(DATA / 'gamepad.sock'))
+            try:
+                with httpx.Client(transport=httpx.HTTPTransport(uds=socket), base_url='http://gamepad',
+                                  timeout=1.5, trust_env=False) as client:
+                    response = client.get('/network')
+                    response.raise_for_status()
+                    return response.json()
+            except (OSError, httpx.HTTPError, ValueError):
+                return {'type': 'wifi'}
 
         def mcp_get_system_info(self):
             info = super().mcp_get_system_info()

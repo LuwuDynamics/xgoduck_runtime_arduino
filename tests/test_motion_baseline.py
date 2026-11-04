@@ -51,6 +51,9 @@ class BaselineTest(unittest.TestCase):
         for overlay in manifest['sketch'].get('transport_overlays', []):
             self.assertEqual(source.count(overlay['integrated']), 1)
             source = source.replace(overlay['integrated'], overlay['upstream'])
+        for overlay in manifest['mcu_compatibility']['battery_overlays']:
+            self.assertEqual(source.count(overlay['integrated']), 1)
+            source = source.replace(overlay['integrated'], overlay['upstream'])
         self.assertEqual(hashlib.sha256(source.encode()).hexdigest(), manifest['sketch']['source_sha256'])
 
     def test_motion_math_models_and_control_methods_keep_upstream_implementation(self):
@@ -77,8 +80,8 @@ class BaselineTest(unittest.TestCase):
         source = (ROOT / 'sketch/sketch.ino').read_text()
         start = source.index('static void controlTask(')
         task = source[start:source.index('\nstatic void reportTask(', start)]
-        for overlay in manifest.get('gain_call_overlays', []):
-            self.assertEqual(task.count(overlay['integrated']), overlay['count'])
+        for overlay in manifest['gain_call_overlays'] + manifest['battery_overlays']:
+            self.assertEqual(task.count(overlay['integrated']), overlay.get('count', 1))
             task = task.replace(overlay['integrated'], overlay['upstream'])
         self.assertEqual(hashlib.sha256(task.encode()).hexdigest(), manifest['normal_control_task_sha256'])
 
@@ -100,6 +103,74 @@ class BaselineTest(unittest.TestCase):
             self.seq, sample, sample, self.c.seq, 0, 10000, 500, 0, 0, 0,
             0, 0, -16384, 0, 0, 0, *DEFAULT_DEG, *([0.] * 15), *DEFAULT_DEG)
         self.c.receive(raw)
+
+    def battery_tick(self, millivolts, *, enabled=True, elapsed=.125):
+        self.now += elapsed
+        self.feedback(enabled)
+        self.c.receive_diagnostics(wire.DIAGNOSTIC_V2.pack(b'DQD2', *([0] * 16), millivolts))
+        self.c.step()
+
+    def test_battery_warns_once_then_disarms_and_requires_recovery(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.battery_warning = Mock()
+        with patch('controller.threading.Thread') as audio:
+            for _ in range(10):
+                self.battery_tick(6700)
+            for _ in range(8):
+                self.battery_tick(6600)
+            self.assertEqual(self.c.battery_phase, 'normal')
+            self.battery_tick(6600)
+            self.assertEqual(self.c.battery_phase, 'warning')
+            audio.assert_called_once_with(target=self.c._play_battery_warning,
+                                          args=(self.c.battery_warning_done,),
+                                          name='battery-warning', daemon=True)
+            self.assertEqual(self.c.status()['battery']['voltage_v'], 6.6)
+            with self.assertRaisesRegex(ValueError, 'Low battery'):
+                self.c.set_mode('hold')
+            for _ in range(64):
+                self.battery_tick(6600)
+            self.assertEqual(self.c.battery_phase, 'warning')
+            self.assertEqual(self.c.sitstand_phase, 'idle')
+            self.c._play_battery_warning(self.c.battery_warning_done)
+            self.c.battery_warning.assert_called_once_with()
+            self.battery_tick(6600)
+            self.assertEqual(self.c.battery_phase, 'locked')
+            self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
+            for _ in range(20):
+                self.battery_tick(7500, enabled=False)
+            self.assertEqual(self.c.battery_phase, 'locked')
+            for _ in range(17):
+                self.battery_tick(7600, enabled=False)
+            self.assertEqual(self.c.battery_phase, 'normal')
+            self.assertEqual(self.c.mode, 'off')
+            audio.assert_called_once()
+
+    def test_battery_disarms_if_warning_never_finishes(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('hold')
+        self.c.battery_warning = Mock()
+        with patch('controller.threading.Thread'):
+            for _ in range(9):
+                self.battery_tick(6600)
+            self.assertEqual(self.c.battery_phase, 'warning')
+            self.assertFalse(self.c.battery_warning_done.is_set())
+            for _ in range(int(controller.BATTERY_WARNING_TIMEOUT_S / .125)):
+                self.battery_tick(6600)
+        self.assertEqual(self.c.battery_phase, 'locked')
+        self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
+
+    def test_battery_does_not_arm_unpowered_servos_and_ignores_missing_voltage(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.c.receive_diagnostics(wire.DIAGNOSTIC.pack(b'DQD1', *([0] * 16)))
+        self.assertIsNone(self.c.status()['battery']['voltage_v'])
+        for _ in range(10):
+            self.battery_tick(6600, enabled=False)
+        self.assertEqual(self.c.battery_phase, 'locked')
+        self.assertEqual(self.c.sitstand_phase, 'idle')
+        self.assertTrue(self.c.bridge.notify.call_args_list)
+        for command in self.c.bridge.notify.call_args_list:
+            self.assertEqual(wire.COMMAND.unpack(command.args[1])[4], wire.DISARM)
 
     def test_stand_uses_restored_signature_then_arms_at_measured_pose(self):
         self.make_motion(enabled=False)

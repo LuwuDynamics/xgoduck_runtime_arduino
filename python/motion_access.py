@@ -13,7 +13,7 @@ from motion_feedback import (LEG_IDS, HEAD_IDS, MOUTH_ID, SERVO_IDS,
 
 VOICE_TWIST_LIMITS = (.4, .3, 1.)  # Absolute ceiling; ordinary walking has tighter vx limits.
 WALK_VX_LIMITS = (-.18, .2)
-REMOTE_TWIST_LIMITS = (.1, .1, .5)
+REMOTE_TWIST_LIMITS = (.15, .1, 1.)
 VOICE_ACTION_SECONDS = 10.
 MAX_QUEUED_ACTIONS = 4
 MAX_QUEUED_SECONDS = 30.
@@ -250,6 +250,8 @@ class MotionAccess:
             if kind not in ('stand', 'move', 'turn', 'head', 'mouth', 'pick', 'roulade',
                             'sit', 'left_kick', 'right_kick', 'walking_mode'):
                 raise ValueError('unsupported duck action')
+            if getattr(self.controller, 'battery_phase', 'normal') != 'normal':
+                raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
             if not (self.remote_allowed() if remote else self.allowed()):
                 raise ValueError('Remote motion disabled; enable it in the control page.' if remote else
                                  'Voice motion disabled. 语音运动未开启，请先说“开启语音运动”；此开关本身不启动舵机。')

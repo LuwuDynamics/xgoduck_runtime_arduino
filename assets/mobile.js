@@ -29,6 +29,13 @@
   function render(){
     const cam=media?.camera,a=media?.audio,light=cam?.light,controlsBusy=cameraBusy||lightBusy;
     $('link').textContent='';$('link').append(document.createElement('i'),document.createTextNode(t(robot?'online':'reconnecting')));$('link').classList.toggle('online',!!robot);
+    const battery=robot?.battery, voltage=battery?.voltage_v, batteryChip=$('batteryVoltage');
+    const voltageLabel=t(battery?.low?'voltageLow':'voltage'), voltageText=Number.isFinite(voltage)?voltage.toFixed(1)+' V':'—';
+    $('batteryLabel').textContent=voltageLabel+' ';
+    $('batteryValue').textContent=voltageText;
+    batteryChip.setAttribute('aria-label',voltageLabel+' '+voltageText);
+    batteryChip.title=t('voltageSource');
+    batteryChip.classList.toggle('low-voltage',battery?.low===true);
     $('videoStats').textContent=cam?.running&&cam.ready?t('cameraLive',{fps:cam.fps||0}):t(cam?.running?'cameraStarting':'cameraOff');
     $('robotMode').textContent=robot?(modeKeys[robot.mode]?t(modeKeys[robot.mode]):robot.mode):t('disconnected');
     $('telemetry').textContent=robot?t('feedback',{hz:Number(robot.feedback_hz||0).toFixed(0),torque:t(robot.enabled?'torqueOn':'torqueOff')}):t('waitingFeedback');

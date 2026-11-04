@@ -26,13 +26,13 @@ class AudioGate:
         self.lock = threading.Lock()
         self.tokens = set()
 
-    def acquire(self):
+    def acquire(self, timeout=10):
         token = object()
         with self.lock:
             self.tokens.add(token)
         future = asyncio.run_coroutine_threadsafe(self.runtime.pause_for_media(), self.runtime.loop)
         try:
-            future.result(timeout=10)
+            future.result(timeout=timeout)
         except Exception:
             future.cancel()
             self.release(token)
@@ -82,13 +82,17 @@ class MediaBench(legacy.Bench):
             dest.writeframes(data)
         return output
 
-    def audio_start(self, kind, volume=None, seconds=5, source='music', cancel=None):
-        token = self.gate.acquire()  # never hold the Bench lock across chat shutdown
+    def audio_start(self, kind, volume=None, seconds=5, source='music', cancel=None, *, warning=False):
+        token = self.gate.acquire(timeout=1.5) if warning else self.gate.acquire()
+        # Never hold the Bench lock across chat shutdown.
         try:
             with self.lock:
                 if self.closed or (cancel is not None and cancel.is_set()):
                     raise legacy.doubao.Cancelled()
-                if self.audio or self.tts_busy:
+                if warning:
+                    self.tts_cancel.set()
+                    self.halt(self.audio, self.audio_kind == 'recording')
+                elif self.audio or self.tts_busy:
                     raise ValueError('Audio is busy. Stop playback or recording first.')
                 direction = 'input' if kind in ('recording', 'listening') else 'output'
                 selected = select_audio(usb_audio_cards(), direction, self.config.get()[direction + '_device'])
@@ -109,6 +113,9 @@ class MediaBench(legacy.Bench):
                     names = {'music': 'music.wav', 'upload': 'upload.wav', 'recording': 'recording.wav', 'tts': 'tts.wav'}
                     sources = {name: self.dir / filename for name, filename in names.items()}
                     sources['duck'] = ROOT / 'python/assets/speaker-test.wav'
+                    if warning:
+                        language = self.config.get()['language']
+                        sources['low-battery'] = ROOT / f'python/assets/low-battery-{language}.wav'
                     path = sources.get(source)
                     if path is None or not path.is_file():
                         raise ValueError('The selected audio source is not available.')
@@ -131,6 +138,15 @@ class MediaBench(legacy.Bench):
         except Exception:
             self.gate.release(token)
             raise
+
+    def play_battery_warning(self):
+        proc = self.audio_start('playing', source='low-battery', warning=True)
+        try:
+            if proc.wait(timeout=9) != 0:
+                raise ValueError('Low battery announcement playback failed.')
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            raise ValueError('Low battery announcement playback timed out.') from None
 
     def finish_audio(self, proc, kind, log):
         try:

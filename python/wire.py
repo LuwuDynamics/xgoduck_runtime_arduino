@@ -5,6 +5,7 @@ import struct
 
 STATE = struct.Struct('<4sBBH10I6h45f')
 DIAGNOSTIC = struct.Struct('<4s16I')
+DIAGNOSTIC_V2 = struct.Struct('<4s17I')
 COMMAND = struct.Struct('<4sIIIBBH15f')
 CAL = struct.Struct('<4sIBB')
 CAL_REPLY = struct.Struct('<4sIBB')
@@ -90,15 +91,18 @@ def decode_state(data):
                     tuple(x[35:50]), tuple(x[50:65]))
 
 def decode_diagnostics(data):
-    if not isinstance(data, (bytes, bytearray)) or len(data) != DIAGNOSTIC.size:
-        raise ValueError('expected 68-byte diagnostics')
-    values = DIAGNOSTIC.unpack(data)
-    if values[0] != b'DQD1':
+    if not isinstance(data, (bytes, bytearray)):
+        raise ValueError('invalid diagnostic ABI')
+    if len(data) == DIAGNOSTIC.size and data[:4] == b'DQD1':
+        values = DIAGNOSTIC.unpack(data)
+    elif len(data) == DIAGNOSTIC_V2.size and data[:4] == b'DQD2':
+        values = DIAGNOSTIC_V2.unpack(data)
+    else:
         raise ValueError('invalid diagnostic ABI')
     names = ('bridge_state', 'bridge_attempts', 'bridge_failures', 'notify_drops',
              'imu_seq', 'imu_us', 'imu_period_us', 'imu_work_us', 'imu_overruns',
              'imu_errors', 'imu_init_attempts', 'servo_writes', 'servo_reads',
-             'servo_wait_us', 'reconnects', 'bridge_ready_us')
+             'servo_wait_us', 'reconnects', 'bridge_ready_us', 'servo_bus_voltage_mv')
     return dict(zip(names, values[1:]))
 
 def encode_command(seq, sample_us, mode, targets, ttl_us=0):

@@ -22,3 +22,11 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
 .intercom{width:600px;max-width:64vw}.intercom-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.intercom-actions .talk-button{min-width:0;min-height:72px;touch-action:manipulation}.intercom-actions .talk-button>span:last-child{min-width:0}.intercom-actions .talk-button small{line-height:1.45}.speaker-test{background:#17352ee8;border-color:#9be6bf55}
 @media(orientation:portrait){.intercom{width:100%;max-width:none}.intercom-actions .talk-button{padding:12px 10px;gap:8px}}
 @media(orientation:landscape) and (max-height:500px){.intercom{width:470px;max-width:68vw}.intercom-actions .talk-button{min-height:54px;padding:8px 10px;gap:8px}}
+
+.status-row{flex-wrap:wrap}
+#batteryVoltage.low-voltage{background:#3b1d27;border-color:#c17881;color:#ffc1c5}
+@media(max-width:370px){
+  .status-row{gap:4px}
+  .status-row .chip{padding-inline:6px}
+  #batteryLabel,#bindingRegionChip{display:none}
+}

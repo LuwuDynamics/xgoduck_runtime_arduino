@@ -53,18 +53,18 @@
     "assets/servo.html": "5c7c6893eae4eb7cca4f37d7703c692186577ecd5c1394e86314242baf0e6eb2",
     "assets/servo.js": "5f9e5071a173ae8d27263173361bbf7bbf564490a49dc33f6603c00470873104",
     "assets/style.css": "45cace22f84a3e0b2465a81dd3e4e9fac0da2cb9f3869ae50bad1810d0652f98",
-    "python/controller.py": "168b77d2c7d708368c9ebf4423941df104b760386e95c8b86f347cdc0ae35272",
-    "python/duck_thing.py": "d092e952ea029799dc8a35bdd918b9af9fd75e1f0101cdc12067b508c509e839",
+    "python/controller.py": "4ebb2838397ff7fa7531b9d2ba3698f30ff3a6ebd86c05d28fb33aea22f8aac5",
+    "python/duck_thing.py": "e8ed555cbafba101d321f735902db3bcc63d8d445017138da0fb217bc60b7953",
     "python/gamepad.py": "232f679043d8cf76d5844db40e866b9962e224ecad58b1fcfaba40ad1227c525",
-    "python/main.py": "126648e9c6c98ff2d5f613ef11930d91b8f745f05965593cc76ba5ed697aeb34",
-    "python/motion_access.py": "a34cc6d26e9a88dd3ae108d5e142e1fb06535925194eb0fc6f02b7f3dd60a190",
+    "python/main.py": "be53e51f23cdac062da6cd9e00ddba81ce3a0ea4e57524f56d18d7f36d643ce5",
+    "python/motion_access.py": "fd812cb8109477860ad3e784437c86b348a0ca802e26e9eb72aa07930bfb0e11",
     "python/motion_calibration.py": "9253d9caf0b84fdc2f65839545a26abd2f73116146b6c355b2f2408a966226b8",
     "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
     "python/proc.py": "54a89a001dc2c66030a3741978779f0095921812ea3f47e3be9fcdf4edc115ba",
     "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
     "python/rl_core.py": "6710b0a7fd791cf5c4879f20f47df3771629dd0093158f2200a9964990aafa6c",
     "python/speech_mouth.py": "48b84890281956e0f4d0626ca327ddffba4f10040c3c0c693de602d024f7b4ee",
-    "python/wire.py": "1fd8663f7c95b61c9a76133b949459aa5bfdb86d5299388e89468de13082d722",
+    "python/wire.py": "a8f1508578b73fae3d3e55cfd4a60169221a99d3c7bb5e7ec723222910d7926b",
     "python/xgoduck_ballkick_left.onnx": "a64d35e9eef18a8b4851c0ae64323c0aabf9f26c8e64100b9a5100e01417f8c9",
     "python/xgoduck_ballkick_right.onnx": "c173b2f076552a9a1d6672cdcc627e5a153804ff3aca1a07b23b481f83b319b1",
     "python/xgoduck_getup.onnx": "c414f2bd84b0a79b89f0ba6997135eb45e4ecd9df9271ea989c237864027b2a3",
@@ -73,11 +73,11 @@
     "python/xgoduck_roulade.onnx": "8adb1e6bc3f5eef751ce4edbf940f6d5a25fdec3ec4a798e1d9ca135c8248e97",
     "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
     "python/xgoduck_walk.onnx": "5eaae52c92df20139a779b4656e49ab824bb501fdd219e1241bcda91386fd75a",
-    "sketch/duck_config.h": "0c16f9d6dcf5eb3b1e6789a77233d377edf2b53a4d670d9dd4cf22a5c54f93f7",
-    "sketch/protocol.h": "97d639b6712dcc88a9c0de10ee3e40d487aecad7f13f89920a588258dbb31d68",
+    "sketch/duck_config.h": "35757a6285cd9c47ee1bf72eda9e14be62de516489163eab71c345c41bac6458",
+    "sketch/protocol.h": "82f959b865796b6a64f7e70d9093e88dc4c7ec063cb45d4fd7acfadd867a3990",
     "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
-    "sketch/scs_bus.h": "2073a0fb100e545011a34752d6f83115bd523d8eea03f41f489a481da866a8b1",
-    "sketch/sketch.ino": "d1b448c0d6e4613ce6ee79972258d7ae48c963e45214a7710daa70f3eb48e804",
+    "sketch/scs_bus.h": "8bd028c17d1a4179d0d13580d32d22486426573a1a5aa5d35ee76ba383e6bc95",
+    "sketch/sketch.ino": "604cd08efaf141bb7c7e24bd54e40cd78cb31284bd02d2d84445bab4609086ed",
     "sketch/sketch.yaml": "46f0c79abfd9e04755661d3a878d9688cbd51fa35bb958ddf62c92209bf6d2ef",
     "sketch/tof_sensor.h": "72f4463bdfd8da5d307281fa988cd4a6f0d8e6b90f7bda8643ff947ace106303",
     "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
@@ -121,11 +121,9 @@
     "receive_raw": "ecd75849d27c0b6c5703fc0f2836eebd7a7348370b8764defa068161a93c4845",
     "receive_cal_reply": "a6db3b0414e68c50f056f675fa804b152c78441370fa533efc6de8a4a6049c99",
     "receive_servo_reply": "6c8609b9d42a899406105e8e59b49145dd18aaab0bfdaa9ea034d247013a6caa",
-    "receive_diagnostics": "144dc8caad7662b48a5870e2e6d2546f986bcf8166b7a0b2dcf3f63d573cb7eb",
     "receive": "bdf7bb841cd5b2e36cd6f9f901ee2b33800cf3723326acccb9132f2244e4f294",
     "_require_feedback": "955cbde1afe477c319a8c232bc30c951a6dabf194acbc8c889d70f23ca990934",
     "_disarm_now": "7661a978f0e0473291b665001b09b55896fa27429c49839c30a9d7f803baefac",
-    "set_mode": "94eae349dcff7432e3d10384415c7d16a33b34589f3698b05b2ff7b76bc063fd",
     "set_roller_mode": "407f5e6df17216828bc69fcdb16552fbc951b0a85930830d988f7446ee36721c",
     "_models": "2ed0147f74f6779ddd2a56db41a9731e97f4cd8a34131843d769c17990cdf503",
     "_standard_models": "ecee73819a3fc1c9d55a3f887f74c4f4f8f280a286f71588559fb73853333111",
@@ -140,17 +138,11 @@
     "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c",
     "_stop_kick_locked": "448808d5f3e99514faef41469dc6a2ac598b4e0d783f7e1ba89915840de95c8b",
     "_kick_status_locked": "07e434e3527a25a79e0088b29fa665223c6914263823f3b4a95265dbb698be5a",
-    "start_kick": "711fcb324a7440e250515674ea2473b334c4ae2ba59b04cc42a52e89dae8fadd",
-    "set_sitstand": "5bb6e0f50558372ca96c3cdaa9226bfdc5204abd031ce7ec97316ffdf651e159",
-    "start_pick": "8e8515e4f11f6120d5dce075b133941dce5127bbbe48f89461887af99dbbe603",
-    "start_roulade": "0381453effe1195dd4635a8d38d5af8611439641df7f178f2028c7789d8c7e9b",
     "cal_heartbeat": "a1acb51cf8cf2f833c9b22d90813b79e0b79648735b9824a8705e3d924f604fc",
-    "cal_center": "e23bb51b22a7c28026ca2e39cbecc66b4d5f72adc7987d32e6127e427e389182",
     "_require_servo_debug": "507f1f355b9da3f778869c3284e029850184f0c9985c1155ee7bb287cf993e36",
     "servo_op": "5439aa02274209578e698c299195250591115815f8a10b29ee8372b0411dd3c4",
     "_servo_op": "19aecf412173efcebd3edbd282c4068339d6d64a91697d8a63967dd46bc220bc",
     "_wait_servo_reply": "3cbb49c83288eedfa3f2a3657fdcd5b5ee6c6f91a1df808f828f7d60c71fa561",
-    "step": "dd7050dbc2caf5fa334353fb1d4c950fb25c5ff78847e334b5fadb50b3bad298",
     "_keep_warm_idle": "0436c3a3854e0f5883cfc3234b90ad61b33c1b7a765c5a4716ed9ebe57d64e67",
     "run": "00799b8d5cdc12172dd7764ff46a6b8c9e42aabda962b4dd2331bf8db56281d8",
     "stop": "908e7841341d2bc7fcea661855ffe73bece1d99bed532f2b26cb460375510117"
@@ -158,10 +150,18 @@
   "controller_adaptations": {
     "__init__": "Retain the app input-source owner.",
     "command": "Reject inactive web/voice/gamepad input without changing upstream command limits.",
-    "status": "Expose the app input-source owner."
+    "status": "Expose the app input-source owner.",
+    "receive_diagnostics": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "set_mode": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "start_kick": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "set_sitstand": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "start_pick": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "start_roulade": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "cal_center": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
+    "step": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence."
   },
   "preserved_sha256": {
-    "assets/mobile-i18n.js": "d81cc91355ab4b8190d42e4dbff3564577b085c25b9a3c2f9b81639b7f859ab2",
+    "assets/mobile-i18n.js": "549fd637c934846cbfd8c04992e4f960a1fd489a63157bdf39b1ea0e6568528f",
     "assets/mobile-tof.css": "63f141b35f703e52e502f470540b70f1e12057c9867943ec8a0ce373d5640104",
     "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
     "python/tof_status.py": "a727dc9cb694c79d2437d6b75632e38064b4ae5357f17b037bc048e1a2b9505b",
@@ -177,9 +177,9 @@
     "assets/mobile-fullscreen.js": "ffdef3bf57edd8b814a8a4b18563a9cf77eeaa90ca63384da580e58cd950ce92",
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
-    "assets/mobile.css": "d59e1a26f3103c462e305ec42a900d902bf0c33571fd8e17156afe62a9332f9a",
-    "assets/mobile.html": "05eddb57db58625d8b41d95f8fa1bacc3646b8847058bd0ea7be691ac385d87c",
-    "assets/mobile.js": "d60fb9549e0516e25a381cb0e57d797c2bd4873d47dc62877ddef1fecad481e0",
+    "assets/mobile.css": "7fe582c27c402eda6733f312160db563fa8dcc52d991d8422b90fa33cbf3efa9",
+    "assets/mobile.html": "ee060b98f29285b77079813da5b6282a632374b76fbf6092ded4ce43302ef2d5",
+    "assets/mobile.js": "3a2dec1a1f18fdc8fc5dd2d0ad08b519ba194d141a6b47c754d8b3bab6d7f25d",
     "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
     "python/app_paths.py": "9f854ee38ff303c435b337585a951f68bc811b393744fc1924cdf4ba121c763b",
@@ -225,10 +225,10 @@
     "python/vendor/microduck_voice/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
     "python/vendor/microduck_voice/NOTICE.md": "8b600d72ccaca4acf005e07394aff20e736f44f3eea55299b93bb6f766163f96",
     "python/vendor/microduck_voice/__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
-    "python/voice_application.py": "3ff5fa03e1bc7a1a063fad694ad69882614f33a57e94908ab7df31d0849c3002",
+    "python/voice_application.py": "71b9705df56ccea70d8ef7806cff98199bc0068aab2a3127b88206f5e335444a",
     "python/voice_config.py": "49e43e60cb42f15fd987fe71f6e26d81119ed4631fdde326d3329b52b329dbad",
-    "python/voice_media.py": "58be702b3aa29ee2ae2690d437a99f9473f5469f64a2bd14cb617866c40ff43b",
-    "python/voice_process.py": "5b081afd1a668d95eaa296441a6202a445bf39c52ea05359b3576810d2b7a028",
+    "python/voice_media.py": "f07934b91a1bb0446b49648a4c3d149685603939be9f26bd7b9593b4e1ec4996",
+    "python/voice_process.py": "18488b43cfaceafa8162f1b99dfcf4ad9c59a7726e9a20d0e0234648648291b1",
     "python/voice_supervisor.py": "fe38af4572b30e11af3ce0fc0e1189cf6937b8422b96a338c6a6207761dc368c",
     "sketch/src/vl53l5cx/LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
     "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.cpp": "9c7668b87766eac634d1b008e46e4528726144ffa26923838799ad3af17b43f0",
@@ -327,6 +327,20 @@
         "integrated": "          enabled = true; timedOut = false;\n        }",
         "upstream": "          enabled = true; timedOut = false;\n          setMouthKpKd();\n        }",
         "count": 1
+      }
+    ],
+    "battery_overlays": [
+      {
+        "integrated": "    memset(servoVoltage, 0, sizeof(servoVoltage));\n",
+        "upstream": ""
+      },
+      {
+        "integrated": "    memcpy(diagnostic.magic, \"DQD2\", 4);",
+        "upstream": "    memcpy(diagnostic.magic, \"DQD1\", 4);"
+      },
+      {
+        "integrated": "    diagnostic.servoBusVoltageMv = servoBusVoltageMv();\n",
+        "upstream": ""
       }
     ]
   },
@@ -441,5 +455,22 @@
   "startup_guide_overlay": {
     "date": "2026-11-02",
     "scope": "Explain one-time setup, boot autostart, ordered network/voice duck sounds and the xiao-ya wake phrase in both READMEs and the AI binding dialog. Browser-local sound examples use the actual connection cue kinds and software gain. Previews never command Duck or write its configuration, and stop on close, hide, page exit or a new selection. Runtime autostart, actual connection sound playback, motion, models, calibration and MCU are unchanged."
+  },
+  "battery_overlay": {
+    "description": "Sample the median servo supply voltage and publish it in DQD2 diagnostics. Linux also accepts legacy DQD1 packets. At 6.6 V or below for one second, stop travel, play the configured language announcement, then disarm with a bounded wait.",
+    "audio": {
+      "model": "qwen-audio-3.1-tts-flash",
+      "voice": "XGO Duck custom voice",
+      "cn": {
+        "path": "python/assets/low-battery-cn.wav",
+        "text": "当前电量低，请先关机充电，关机充电哦，我现在准备卸力了。",
+        "sha256": "b765ab7b88f8cc0d9a3f6a0dd2f30039aef7cd776b8ba6479b0ff53ab5b05651"
+      },
+      "en": {
+        "path": "python/assets/low-battery-en.wav",
+        "text": "My battery is low. Please turn me off and charge me. Remember to turn me off before charging. I’m about to release my joints.",
+        "sha256": "88eab74bbbd9a9eba7d333f56df4bbd2e219a89fe2c58940988da6bea9374487"
+      }
+    }
   }
 }
