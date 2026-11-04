@@ -26,7 +26,7 @@ class Controller:
         self.cal_op_lock = threading.Lock()
         self.policy_lock = threading.Lock()
         self.policy = Policy()
-        ok, message = self.policy.load()
+        ok, message = self.policy.load('xgoduck_walk.onnx', use_model_home=True)
         if not ok:
             raise RuntimeError(message)
         self.model_message = message
@@ -40,17 +40,17 @@ class Controller:
         self.model_message += '; ' + message
         self.roller_mode = False
         self.getup_policy = Policy()
-        ok, message = self.getup_policy.load('xgoduck_getup.onnx')
+        ok, message = self.getup_policy.load('xgoduck_getup.onnx', use_model_home=True)
         if not ok:
             raise RuntimeError(message)
         self.model_message += '; ' + message
         self.pick_policy = Policy()
-        ok, message = self.pick_policy.load('xgoduck_pick.onnx')
+        ok, message = self.pick_policy.load('xgoduck_pick.onnx', use_model_home=True)
         if not ok:
             raise RuntimeError(message)
         self.model_message += '; ' + message
         self.roulade_policy = Policy()
-        ok, message = self.roulade_policy.load('xgoduck_roulade.onnx')
+        ok, message = self.roulade_policy.load('xgoduck_roulade.onnx', use_model_home=True)
         if not ok:
             raise RuntimeError(message)
         self.model_message += '; ' + message
