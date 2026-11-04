@@ -1,63 +1,61 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261021-3">
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title data-i18n="srv.title">舵机设置</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261021-3">
 <main class="page-servo">
 <header>
-  <div><small>ARDUINO UNO Q</small><h1>Servo setup</h1></div>
+  <div><small>ARDUINO UNO Q</small><h1 data-i18n="srv.title">舵机设置</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html" aria-current="page">Servo setup</a></nav>
-    <button class="stop" id="exit">Exit</button>
+    <nav class="nav"><a href="/" data-i18n="common.nav.control">控制</a><a href="/calibrate.html" data-i18n="common.nav.calibrate">标定</a><a href="/servo.html" aria-current="page" data-i18n="common.nav.servo">舵机设置</a></nav>
+    <button id="lang-toggle" class="lang" type="button">EN</button>
+    <button class="stop" id="exit" data-i18n="common.exit">退出</button>
   </div>
 </header>
-<p class="warn">When changing an ID, connect only the servo you want to change. Duplicate IDs cannot be distinguished on the same bus.</p>
-<p id="message" role="status">Scan for servos, then select an ID to read or change its settings.</p>
+<p class="warn" data-i18n="srv.id_warning"></p>
+<p id="message" role="status" data-i18n="srv.initial"></p>
 <section class="servo-panel">
   <div class="servo-scan">
     <div class="servo-scan-actions">
-      <button id="scan">Scan all IDs</button>
-      <button id="scan-stop" hidden>Stop scan</button>
-      <span id="scan-status" role="status">Scan IDs 0–253 to find connected servos.</span>
+      <button id="scan" data-i18n="srv.scan">扫描全部 ID</button>
+      <button id="scan-stop" hidden data-i18n="srv.scan_stop">停止扫描</button>
+      <span id="scan-status" role="status" data-i18n="srv.scan_status_init"></span>
     </div>
-    <progress id="scan-progress" max="254" value="0" hidden aria-label="Servo scan progress"></progress>
-    <div id="scan-results" class="servo-scan-results" aria-label="Discovered servo IDs"></div>
-    <p class="hint">Select a found ID to read or change that servo's settings. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
+    <progress id="scan-progress" max="254" value="0" hidden data-i18n-aria="srv.scan_progress_aria"></progress>
+    <div id="scan-results" class="servo-scan-results" data-i18n-aria="srv.scan_results_aria"></div>
+    <p class="hint" data-i18n="srv.scan_hint"></p>
   </div>
   <div class="servo-grid">
-    <div class="servo-row servo-action-row">
-      <button id="reset-mid" disabled>Reset Mid</button>
-    </div>
     <div class="servo-row">
-      <span class="servo-label">Set KP/KD</span>
+      <span class="servo-label" data-i18n="srv.kp_kd">设置 KP/KD</span>
       <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
       <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
-      <button id="set-gains" disabled>Set KpKd</button>
+      <button id="set-gains" disabled data-i18n="srv.set_gains">写入 KpKd</button>
     </div>
     <div class="servo-row">
-      <span class="servo-label">Change ID to</span>
-      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" disabled>
-      <button id="set-id" disabled>Change ID</button>
+      <span class="servo-label" data-i18n="srv.new_id">修改 ID 为</span>
+      <input id="new-id" type="number" min="0" max="253" value="10" data-i18n-title="srv.new_id" disabled>
+      <button id="set-id" disabled data-i18n="srv.change_id">修改 ID</button>
     </div>
     <div class="servo-row servo-action-row">
-      <button id="read" disabled>Read</button>
+      <button id="read" disabled data-i18n="srv.read">读取</button>
       <strong id="read-out" class="servo-readout">—</strong>
     </div>
   </div>
 </section>
 <section class="servo-panel servo-protection">
-  <h2>All-servo voltage / overcurrent protection</h2>
+  <h2 data-i18n="srv.protection_title">全部舵机电压 / 过流保护</h2>
   <div class="protection-controls">
-    <button id="enable-protection">Enable</button>
-    <button id="disable-protection">Disable</button>
-    <span id="protection-out" class="servo-readout" role="status">Not applied</span>
+    <button id="enable-protection" data-i18n="srv.enable">启用</button>
+    <button id="disable-protection" data-i18n="srv.disable">禁用</button>
+    <span id="protection-out" class="servo-readout" role="status" data-i18n="srv.not_applied">未应用</span>
   </div>
   <div class="protection-controls">
-    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" aria-label="Protection current in amperes">
+    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" data-i18n-aria="srv.protection_current_aria">
     <span>A</span>
-    <button id="set-protection-current">Set protection current</button>
-    <span id="protection-current-out" class="servo-readout" role="status">Not applied</span>
+    <button id="set-protection-current" data-i18n="srv.set_current">设置保护电流</button>
+    <span id="protection-current-out" class="servo-readout" role="status" data-i18n="srv.not_applied">未应用</span>
   </div>
-  <p class="hint">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
+  <p class="hint" data-i18n="srv.protection_hint"></p>
 </section>
 </main>
-<script src="servo.js?v=20261021-3"></script>
+<script src="i18n.js?v=20261104"></script><script src="servo.js?v=20261104"></script>
 </html>

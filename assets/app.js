@@ -7,21 +7,31 @@ const motionRanges={
   walk:{forward:.2,backward:.18,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
   roller:{forward:.4,backward:.4,strafe:0,yaw:.25,keyboard:[.4,0,.25]}
 };
-for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>head ${i+1}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
-$('head-controls').insertAdjacentHTML('beforeend','<label>Mouth 34 (°)<input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>');
-async function post(path, body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.detail||'request failed');return x;}
+for(let i=0;i<4;i++) $('head-controls').insertAdjacentHTML('beforeend',`<label>${t('idx.head.slider',{n:i+1})}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
+$('head-controls').insertAdjacentHTML('beforeend',`<label>${t('idx.head.mouth')}<input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>`);
+function relabelHeadControls(){
+  const labels=$('head-controls').querySelectorAll('label');
+  for(let i=0;i<4;i++)labels[i].firstChild.nodeValue=t('idx.head.slider',{n:i+1});
+  if(labels[4])labels[4].firstChild.nodeValue=t('idx.head.mouth');
+}
+async function post(path, body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.detail||t('idx.msg.request_failed'));return x;}
 function showError(e){$('message').textContent=e.message;}
-async function setMode(mode){try{await post('mode',{mode});$('message').textContent='Mode updated';}catch(e){showError(e);}}
+async function setMode(mode){try{await post('mode',{mode});$('message').textContent=t('idx.msg.mode_updated');}catch(e){showError(e);}}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 function showRoller(enabled){
   const changed=rollerEnabled!==enabled;
   rollerEnabled=enabled;
-  $('roller-mode').checked=enabled;$('roller-state').textContent=enabled?'On':'Off';
+  $('roller-mode').checked=enabled;$('roller-state').textContent=enabled?t('idx.mode.on'):t('idx.mode.off');
   $('roller-warning').hidden=!enabled;
-  $('action-profile').textContent=enabled?'Roller walking':'Walking / other models';
+  $('action-profile').textContent=enabled?t('idx.action.profile_roller'):t('idx.action.profile_walk');
   const limits=motionRanges[enabled?'roller':'walk'];
-  $('motion-limits').textContent=`Limits: vx -${limits.backward} to +${limits.forward}, vy ${limits.strafe?'±'+limits.strafe:'0'}, ωz ±${limits.yaw}.`;
-  $('left-label').textContent=enabled?'Forward / backward':'Forward / strafe';
+  $('motion-limits').textContent=t('idx.limits',{
+    back:limits.backward,
+    forward:limits.forward,
+    strafe:limits.strafe?'±'+limits.strafe:'0',
+    yaw:limits.yaw
+  });
+  $('left-label').textContent=enabled?t('idx.motion.left_roller'):t('idx.motion.left');
   if(changed)zero(false);
 }
 $('roller-mode').onchange=async()=>{
@@ -29,12 +39,12 @@ $('roller-mode').onchange=async()=>{
   const enabled=$('roller-mode').checked;
   showRoller(enabled);
   rollerBusy=true;$('roller-mode').disabled=true;
-  try{const r=await post('roller',{enabled});showRoller(r.enabled);showActionSettings(r);$('message').textContent=`Roller mode ${r.enabled?'on':'off'} · ${r.model}`;}
+  try{const r=await post('roller',{enabled});showRoller(r.enabled);showActionSettings(r);$('message').textContent=r.enabled?t('idx.msg.roller_on',{model:r.model}):t('idx.msg.roller_off',{model:r.model});}
   catch(e){showRoller(!enabled);showError(e);}
   finally{rollerBusy=false;$('roller-mode').disabled=false;}
 };
-$('pick').onclick=async()=>{try{const r=await post('pick',{});$('message').textContent=`Pick started · ${r.model}`;}catch(e){showError(e);}};
-$('roulade').onclick=async()=>{try{const r=await post('roulade',{});$('message').textContent=`Roulade · ${r.model}`;}catch(e){showError(e);}};
+$('pick').onclick=async()=>{try{const r=await post('pick',{});$('message').textContent=t('idx.msg.pick_started',{model:r.model});}catch(e){showError(e);}};
+$('roulade').onclick=async()=>{try{const r=await post('roulade',{});$('message').textContent=t('idx.msg.roulade',{model:r.model});}catch(e){showError(e);}};
 function showKick(state){
   const active=!!state?.active;
   if(active!==kickActive)zero(false);
@@ -56,7 +66,7 @@ for(const side of ['left','right'])$(side+'_kick').onclick=async()=>{
   for(const foot of ['left','right'])$(foot+'_kick').disabled=true;
   try{
     showKick(await post(side+'_kick',{}));
-    $('message').textContent=`${side}_kick · returning to walk after 0.4 s`;
+    $('message').textContent=t('idx.msg.kick_return',{side:side==='left'?t('idx.mode.left_kick'):t('idx.mode.right_kick')});
   }catch(e){showError(e);}
   finally{
     kickBusy=false;
@@ -67,7 +77,7 @@ function showSitstand(state){
   const phase=state?.phase||'idle';
   if(phase!==sitstandPhase)zero(false);
   sitstandPhase=phase;
-  $('sitstand').textContent=phase==='idle'?'Sit':'Stand';
+  $('sitstand').textContent=phase==='idle'?t('idx.mode.sit'):t('idx.mode.stand');
   $('sitstand').disabled=sitstandBusy||phase==='stand'||!sitstandReady||kickActive;
   if(phase!=='idle'){
     document.querySelector('[data-mode="policy"]').disabled=true;
@@ -81,7 +91,7 @@ $('sitstand').onclick=async()=>{
   sitstandBusy=true;showSitstand({phase:sitstandPhase});
   try{
     const r=await post('sitstand',{action});showSitstand(r);
-    $('message').textContent=action==='sit'?'Sit · holding':`Stand · returning to walk after ${r.stand_seconds} s`;
+    $('message').textContent=action==='sit'?t('idx.msg.sit_holding'):t('idx.msg.stand_return',{seconds:r.stand_seconds});
   }catch(e){showError(e);}
   finally{sitstandBusy=false;showSitstand({phase:sitstandPhase});}
 };
@@ -158,8 +168,16 @@ window.addEventListener('pagehide',()=>{
   zero(false);
   navigator.sendBeacon('/api/command',new Blob([JSON.stringify({twist:[0,0,0]})],{type:'application/json'}));
 });
+window.addEventListener('xgoduck:langchange',()=>{
+  relabelHeadControls();
+  showRoller(rollerEnabled);
+  showMotion();
+  showSitstand({phase:sitstandPhase});
+});
 setInterval(()=>{if(!document.hidden&&!commandBusy)sendCommand();},50);
-setInterval(async()=>{if(statusBusy||document.hidden)return;statusBusy=true;try{const r=await fetch('/api/status');if(!r.ok)throw new Error('status read failed');const s=await r.json();const modeLabel={shadow:'inference only',off:'torque off',hold:'default pose',policy:'walk',calibrate:'calibrate',servo_debug:'servo setup'};$('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';$('rl').textContent=s.inference_hz.toFixed(1)+' Hz';$('servos').textContent=(s.servo_ids?.length||0)+'/15';$('imu').textContent=s.imu_ok?'online':'offline';$('mode').textContent=(s.left_kick?.active?'left_kick':s.right_kick?.active?'right_kick':s.sitstand?.active?s.sitstand.phase:(modeLabel[s.mode]||s.mode))+(s.enabled?' · enabled':' · torque off');$('message').textContent=s.last_error||`Bridge ${(s.bridge_baud/1e6).toFixed(0)} Mbps · state age ${(s.feedback_age_ms||0).toFixed(1)} ms`;
+setInterval(async()=>{if(statusBusy||document.hidden)return;statusBusy=true;try{const r=await fetch('/api/status');if(!r.ok)throw new Error(t('idx.msg.status_failed'));const s=await r.json();const modeKey={shadow:'idx.mode.shadow',off:'common.torque_off',hold:'idx.mode.hold',policy:'idx.phase.walk',calibrate:'common.nav.calibrate',servo_debug:'common.nav.servo'};$('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';$('rl').textContent=s.inference_hz.toFixed(1)+' Hz';$('servos').textContent=(s.servo_ids?.length||0)+'/15';$('imu').textContent=s.imu_ok?t('idx.imu.online'):t('idx.imu.offline');
+const activeLabel=s.left_kick?.active?t('idx.mode.left_kick'):s.right_kick?.active?t('idx.mode.right_kick'):s.sitstand?.active?t(s.sitstand.phase==='stand'?'idx.phase.stand':'idx.phase.sit'):(modeKey[s.mode]?t(modeKey[s.mode]):s.mode);
+$('mode').textContent=activeLabel+' · '+(s.enabled?t('idx.status.enabled'):t('idx.status.torque_off'));$('message').textContent=s.last_error||t('idx.msg.bridge',{mbps:(s.bridge_baud/1e6).toFixed(0),age:(s.feedback_age_ms||0).toFixed(1)});
 document.querySelectorAll('[data-mode="hold"],[data-mode="policy"]').forEach(b=>b.disabled=!s.control_ready);
 if(s.roller&&!rollerBusy)showRoller(s.roller.enabled);
 if(!rollerBusy)showActionSettings(s.deployment);
@@ -176,11 +194,11 @@ const upright=(s.mode==='shadow'||s.mode==='policy')&&recovery&&recovery.active&
 $('pick').disabled=sitActive||kickRunning||!upright||(pick&&pick.active)||(roulade&&roulade.active);
 $('roulade').disabled=$('pick').disabled;
 for(const side of ['left','right'])$(side+'_kick').disabled=kickBusy||!s[side+'_kick']||!s.control_ready||$('pick').disabled;
-if(recovery){const phaseLabel=kickRunning?`${kick.side}_kick`:sitActive?sitstand.phase:roulade&&roulade.active?'roulade':pick&&pick.active?'pick':({walk:'walk',default_pose:'get-up · action = 0',getup:'get-up'}[recovery.phase]||recovery.phase);
-$('recovery-phase').textContent=recovery.active?phaseLabel:'idle';$('active-model').textContent=s.active_model||'—';$('tilt-angle').textContent=recovery.angle_deg==null?'—':recovery.angle_deg.toFixed(1)+'°';
-$('recovery-timer').textContent=!recovery.active?'—':kickRunning?`${kick.side}_kick ${kick.remaining_s.toFixed(2)} s left`:sitActive?(sitstand.phase==='sit'?'sit · holding':`stand ${sitstand.remaining_s.toFixed(2)} s left`):roulade&&roulade.active?`roulade ${roulade.remaining_s.toFixed(2)} / ${roulade.seconds.toFixed(2)} s`:pick&&pick.active?`pick φ ${pick.phi.toFixed(2)} / 1.00`:recovery.phase==='default_pose'?`hold ${recovery.hold_remaining_s.toFixed(2)} s left`:recovery.phase==='getup'?`upright ${recovery.stand_elapsed_s.toFixed(2)} / 1.00 s`:`fallen ${recovery.fall_elapsed_s.toFixed(2)} / 0.15 s`;
+if(recovery){const kickLabel=kickRunning?t(kick.side==='left'?'idx.mode.left_kick':'idx.mode.right_kick'):'';const phaseLabel=kickRunning?kickLabel:sitActive?t(sitstand.phase==='stand'?'idx.phase.stand':'idx.phase.sit'):roulade&&roulade.active?t('idx.phase.roulade'):pick&&pick.active?t('idx.phase.pick'):({walk:t('idx.phase.walk'),default_pose:t('idx.phase.default_pose'),getup:t('idx.phase.getup')}[recovery.phase]||recovery.phase);
+$('recovery-phase').textContent=recovery.active?phaseLabel:t('idx.phase.idle');$('active-model').textContent=s.active_model||'—';$('tilt-angle').textContent=recovery.angle_deg==null?'—':recovery.angle_deg.toFixed(1)+'°';
+$('recovery-timer').textContent=!recovery.active?'—':kickRunning?t('idx.timer.kick',{side:kickLabel,remaining:kick.remaining_s.toFixed(2)}):sitActive?(sitstand.phase==='sit'?t('idx.timer.sit'):t('idx.timer.stand',{remaining:sitstand.remaining_s.toFixed(2)})):roulade&&roulade.active?t('idx.timer.roulade',{remaining:roulade.remaining_s.toFixed(2),seconds:roulade.seconds.toFixed(2)}):pick&&pick.active?t('idx.timer.pick',{phi:pick.phi.toFixed(2)}):recovery.phase==='default_pose'?t('idx.timer.hold',{remaining:recovery.hold_remaining_s.toFixed(2)}):recovery.phase==='getup'?t('idx.timer.upright',{elapsed:recovery.stand_elapsed_s.toFixed(2)}):t('idx.timer.fallen',{elapsed:recovery.fall_elapsed_s.toFixed(2)});
 if(pick&&pick.active)$('mouth').value=Math.round(s.mouth||0);}
 for(const [id,values]of [['acc-values',s.acc],['gyro-values',s.gyro],['gravity-values',s.gravity]])$(id).textContent=values?values.map(x=>x.toFixed(3)).join(' / '):'—';
-$('command-health').textContent=`sent ${s.sent} · MCU echo ${s.mcu_command_seq??'—'} · command age ${s.mcu_command_age_us<1e9?(s.mcu_command_age_us/1000).toFixed(1)+' ms':'—'} · gaps ${s.sequence_gaps} · rejected ${s.mcu_invalid_commands??0}`;
+$('command-health').textContent=t('idx.health',{sent:s.sent,echo:s.mcu_command_seq??'—',age:s.mcu_command_age_us<1e9?(s.mcu_command_age_us/1000).toFixed(1)+' ms':'—',gaps:s.sequence_gaps,rejected:s.mcu_invalid_commands??0});
 if(s.angles)$('joints').innerHTML=s.motors.map((id,i)=>`<tr class="${s.servo_ids.includes(id)?'':'missing'}"><td>${id}</td><td>${s.angles[i].toFixed(1)}</td><td>${s.targets[i].toFixed(1)}</td></tr>`).join('');
 }catch(e){showError(e);}finally{statusBusy=false;}},250);
