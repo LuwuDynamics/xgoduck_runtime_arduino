@@ -6,19 +6,34 @@ from __future__ import annotations
 import math
 import time
 from rl_core import State, ImuFilter, FEEDBACK_PERIOD, VEL_ALPHA, GYRO_ALPHA, GRAVITY_TAU
+from rl_core import _rotate_imu_bias
 
 class SignalFilter:
-    def __init__(self):
+    def __init__(self, correction=None):
+        self.correction = correction
+        self.command_acc_x_bias_ms2 = 0.0  # Temporary, never saved into calibration.
         self.gyro_alpha = GYRO_ALPHA
         self.vel_alpha = VEL_ALPHA
         self.gravity_tau_s = GRAVITY_TAU
         self.reset()
 
     def reset(self):
-        self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s)
+        self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s,
+                              body_transform=self.correct_imu)
         self._last_t = None
         self._last_imu_t = None
         self._last = None
+
+    def correct_imu(self, acc, gyro):
+        if self.correction is not None:
+            acc, gyro = self.correction.apply(acc, gyro)
+            acc[0] += self.command_acc_x_bias_ms2
+            return acc, gyro
+        return _rotate_imu_bias(acc), _rotate_imu_bias(gyro)
+
+    def set_correction(self, correction):
+        self.correction = correction
+        self.reset()
 
     def set_imu_filters(self, gyro_alpha=None, gravity_tau_s=None):
         gyro = self.gyro_alpha if gyro_alpha is None else float(gyro_alpha)
@@ -51,7 +66,8 @@ class SignalFilter:
             return out
         dt = FEEDBACK_PERIOD if self._last_t is None else now - self._last_t
         if self._last_t is None:
-            self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s)
+            self._imu = ImuFilter(self.gyro_alpha, self.vel_alpha, self.gravity_tau_s,
+                                  body_transform=self.correct_imu)
         self._last_t = now
         new_imu = self._last_imu_t is None or imu_now > self._last_imu_t
         imu_dt = FEEDBACK_PERIOD if self._last_imu_t is None else imu_now-self._last_imu_t

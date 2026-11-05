@@ -30,12 +30,18 @@ MOTOR_IDS = [
     30, 31, 32, 33, 34,
 ]
 
-# Ordinary walking/fallback pose, in MOTOR_IDS order; Roller uses its ONNX home.
+# Ordinary walking/fallback pose, in MOTOR_IDS order.
 DEFAULT_DEG = [
     0.0, -5.0, -22.0, 0.0, 22.0,
     0.0, 5.0, 22.0, 0.0, -22.0,
     20.0, 20.0, 0.0, 0.0, 0.0,
 ]
+
+# Fixed Roller leg home, keyed by motor ID. Neck/head retain the model's home.
+ROLLER_LEG_DEFAULT_DEG = {
+    10: 0.0, 11: 2.0, 12: -10.0, 13: 10.0, 14: 20.0,
+    20: 0.0, 21: -2.0, 22: 10.0, 23: -10.0, 24: -20.0,
+}
 
 POLICY_IDS = [
     10, 11, 12, 13, 14,
@@ -93,10 +99,11 @@ class ImuFilter:
     """Body-frame gravity: gyro prediction plus accel-magnitude-weighted correction. No bias estimate."""
 
     def __init__(self, gyro_alpha: float = GYRO_ALPHA, vel_alpha: float = VEL_ALPHA,
-                 gravity_tau_s: float = GRAVITY_TAU) -> None:
+                 gravity_tau_s: float = GRAVITY_TAU, *, body_transform=None) -> None:
         self.gyro_alpha = gyro_alpha
         self.vel_alpha = vel_alpha
         self.gravity_tau_s = gravity_tau_s
+        self.body_transform = body_transform
         self._gravity: Optional[List[float]] = None
         self._gyro: Optional[List[float]] = None
         self._vel: Optional[List[float]] = None
@@ -115,8 +122,12 @@ class ImuFilter:
             st.vels = list(self._vel)
             return st
         dt = dt if imu_dt is None else imu_dt
-        acc_n = _rotate_imu_bias([st.acc[2], -st.acc[0], -st.acc[1]])
-        gyro_n = _rotate_imu_bias([st.gyro[2], -st.gyro[0], -st.gyro[1]])
+        acc_n = [st.acc[2], -st.acc[0], -st.acc[1]]
+        gyro_n = [st.gyro[2], -st.gyro[0], -st.gyro[1]]
+        if self.body_transform is None:
+            acc_n, gyro_n = _rotate_imu_bias(acc_n), _rotate_imu_bias(gyro_n)
+        else:
+            acc_n, gyro_n = self.body_transform(acc_n, gyro_n)
         norm = math.sqrt(sum(v * v for v in acc_n))
         acc_unit = [v / norm for v in acc_n] if norm > 1e-6 else None
         # Large gaps cannot be reconstructed from a single angular-rate sample.

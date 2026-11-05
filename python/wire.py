@@ -5,6 +5,7 @@ import struct
 
 STATE = struct.Struct('<4sBBH10I6h45f')
 DIAGNOSTIC = struct.Struct('<4s16I')
+VOLTAGE = struct.Struct('<4sIIH15B')
 COMMAND = struct.Struct('<4sIIIBBH15f')
 CAL = struct.Struct('<4sIBB')
 CAL_REPLY = struct.Struct('<4sIBB')
@@ -31,6 +32,7 @@ SERVO_OPS = (SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID,
 
 assert STATE.size == 240
 assert DIAGNOSTIC.size == 68
+assert VOLTAGE.size == 29
 assert COMMAND.size == 80
 assert CAL.size == 10
 assert CAL_REPLY.size == 10
@@ -97,6 +99,16 @@ def decode_diagnostics(data):
              'imu_errors', 'imu_init_attempts', 'servo_writes', 'servo_reads',
              'servo_wait_us', 'reconnects', 'bridge_ready_us')
     return dict(zip(names, values[1:]))
+
+
+def decode_voltage(data):
+    if not isinstance(data, (bytes, bytearray)) or len(data) != VOLTAGE.size:
+        raise ValueError('expected 29-byte voltage report')
+    magic, seq, sample_us, mask, *raw = VOLTAGE.unpack(data)
+    if magic != b'DQV1' or mask & ~ALL_MASK:
+        raise ValueError('invalid voltage ABI')
+    return dict(seq=seq, sample_us=sample_us, mask=mask,
+                volts=[v/10.0 if mask & (1 << i) and v else None for i, v in enumerate(raw)])
 
 def encode_command(seq, sample_us, mode, targets, ttl_us=0):
     if mode not in range(4):

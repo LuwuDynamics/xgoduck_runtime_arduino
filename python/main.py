@@ -15,6 +15,7 @@ controller = Controller(Bridge)
 ui = WebUI(port=9527, cors_origins='')
 Bridge.provide('duck_state', controller.receive)
 Bridge.provide('duck_diagnostics', controller.receive_diagnostics)
+Bridge.provide('duck_voltage', controller.receive_voltage)
 Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
 Bridge.provide('duck_raw', controller.receive_raw)
 Bridge.provide('duck_servo_reply', controller.receive_servo_reply)
@@ -40,6 +41,14 @@ def filtering(body: dict):
 
 def imu_filtering(body: dict):
     try: return controller.set_imu_filters(**body)
+    except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def imu_calibration(body: dict):
+    try:
+        action = body.get('action', 'start')
+        if action == 'start': return controller.start_imu_calibration()
+        if action == 'reset': return controller.reset_imu_calibration()
+        raise ValueError('unknown IMU calibration action')
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def action_scale(body: dict):
@@ -105,9 +114,11 @@ ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/command', command)
 ui.expose_api('POST', '/api/filter', filtering)
 ui.expose_api('POST', '/api/imu-filter', imu_filtering)
+ui.expose_api('POST', '/api/imu-calibration', imu_calibration)
 ui.expose_api('POST', '/api/action-scale', action_scale)
 ui.expose_api('POST', '/api/pick', pick)
 ui.expose_api('POST', '/api/roulade', roulade)
+ui.expose_api('GET', '/api/roulade-timing', controller.roulade_timing)
 ui.expose_api('POST', '/api/sitstand', sitstand)
 ui.expose_api('POST', '/api/right_kick', right_kick)
 ui.expose_api('POST', '/api/left_kick', left_kick)

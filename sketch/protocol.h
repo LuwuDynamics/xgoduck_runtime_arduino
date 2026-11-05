@@ -6,6 +6,7 @@ constexpr uint32_t TICK_US = 10000;
 constexpr uint32_t HOST_HEARTBEAT_US = 250000; // Calibration/debug modes only.
 constexpr uint32_t IMU_STALE_US = 500000; // Mirrored by wire.py IMU_STALE_S.
 constexpr uint32_t MAX_SOURCE_AGE_US = 150000;
+constexpr uint32_t VOLTAGE_STALE_US = 2000000;
 enum CommandMode : uint8_t { DISARM = 0, ARM = 1, POLICY = 2, HOLD = 3 };
 
 enum HostBusMode : uint8_t { HOST_NORMAL = 0, HOST_CAL = 1, HOST_SERVO_DEBUG = 2 };
@@ -22,7 +23,7 @@ enum ServoOp : uint8_t {
   SERVO_UNLOCK = 2,
   SERVO_SET_ID = 3,
   // 4 was the removed arbitrary-position operation.
-  SERVO_SET_PERM_KP_KD = 5,
+  SERVO_SET_PERM_KP_KD = 5, // Legacy opcode: write and verify EEPROM + live KP/KD.
   SERVO_READ = 6,
   SERVO_PING = 7,
   SERVO_RESET_MID = 8,
@@ -53,6 +54,12 @@ struct __attribute__((packed)) DiagnosticPacket {
   uint32_t bridgeState, bridgeAttempts, bridgeFailures, notifyDrops;
   uint32_t imuSeq, imuUs, imuPeriodUs, imuWorkUs, imuOverruns, imuErrors, imuInitAttempts;
   uint32_t servoWrites, servoReads, servoWaitUs, reconnects, bridgeReadyUs;
+};
+struct __attribute__((packed)) VoltagePacket {
+  char magic[4];
+  uint32_t seq, sampleUs;
+  uint16_t servoMask;
+  uint8_t deciV[15];
 };
 struct __attribute__((packed)) CalPacket {
   char magic[4];
@@ -86,6 +93,7 @@ struct __attribute__((packed)) ServoReplyPacket {
 static_assert(sizeof(CommandPacket) == 80, "Command ABI");
 static_assert(sizeof(StatePacket) == 240, "State ABI");
 static_assert(sizeof(DiagnosticPacket) == 68, "Diagnostic ABI");
+static_assert(sizeof(VoltagePacket) == 29, "Voltage ABI");
 static_assert(sizeof(CalPacket) == 10, "Cal ABI");
 static_assert(sizeof(CalReplyPacket) == 10, "Cal reply ABI");
 static_assert(sizeof(ServoPacket) == 12, "Servo ABI");

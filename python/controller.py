@@ -3,23 +3,34 @@ import collections
 import math
 import threading
 import time
+from statistics import median
 from policy import Policy
 from recovery import Recovery
 from proc import SignalFilter
-from rl_core import MOTOR_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG
+from standing_imu import (CALIBRATION_PATH, SAMPLE_SECONDS, ImuCorrection,
+                          check_standing, estimate as estimate_imu, load as load_imu,
+                          save as save_imu, disable as disable_imu)
+from rl_core import (MOTOR_IDS, POLICY_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG,
+                     ROLLER_LEG_DEFAULT_DEG)
 from wire import *
 
 EXCLUSIVE_MODES = ('calibrate', 'servo_debug')
 PICK_PERIOD_S = 4.0
 PICK_MOUTH_CLOSE_PHI = 0.4
-ROULADE_S = 1.9
-ROULADE_ALPHA = 0.15
+ROULADE_S = 1.7
+ROULADE_ALPHA = 0.05
+ROULADE_START_TIMEOUT_S = 0.5
 SITSTAND_STAND_S = 1.0
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
+ACTION_PREPARE_S = 0.2
+ACTION_PREPARE_TIMEOUT_S = 0.5
+ROLLER_YAW_LIMIT = 0.45  # rad/s, symmetric in Roller mode.
+COMMAND_ACC_X_BIAS_MS2 = -1.5  # Temporary IMU trim; set to 0 to disable.
+VOLTAGE_TIMEOUT_S = 3.0
 
 class Controller:
-    def __init__(self, bridge):
+    def __init__(self, bridge, *, imu_calibration_path=None):
         self.bridge = bridge
         self.lock = threading.RLock()
         self.servo_op_lock = threading.Lock()
@@ -35,6 +46,11 @@ class Controller:
         ok, message = self.roller_policy.load('xgoduck_roller.onnx', use_model_home=True)
         if not ok:
             raise RuntimeError(message)
+        # One home is shared by default pose, relative joint observations and
+        # action offsets. Only leg values override the ONNX metadata.
+        for index, motor_id in enumerate(POLICY_IDS):
+            if motor_id in ROLLER_LEG_DEFAULT_DEG:
+                self.roller_policy.home_deg[index] = ROLLER_LEG_DEFAULT_DEG[motor_id]
         self.roller_policy.action_scale = 0.7
         self.roller_policy.set_action_alphas(leg=0.4, head=0.5)
         self.model_message += '; ' + message
@@ -58,7 +74,6 @@ class Controller:
         ok, message = self.sitstand_policy.load('xgoduck_sitstand.onnx')
         if not ok:
             raise RuntimeError(message)
-        self.sitstand_policy.action_scale = 1.1
         self.model_message += '; ' + message
         self.right_kick_policy = Policy()
         ok, message = self.right_kick_policy.load('xgoduck_ballkick_right.onnx')
@@ -79,14 +94,34 @@ class Controller:
         self.pick_active = False
         self.pick_phi = 0.0
         self.roulade_until = 0.0
+        self.roulade_pending = False
+        self._roulade_requested_at = 0.0
+        self._roulade_started_at = None
+        self._roulade_frames = collections.deque(maxlen=128)
+        self._roulade_timing = dict(state='idle', startup_ms=None, elapsed_s=0.0)
         self.sitstand_phase = 'idle'
         self.sitstand_until = 0.0
         self.kick_until = 0.0
         self.kick_side = None
         self._roulade_alpha = None
         self._warm_index = 0
-        self.filter = SignalFilter()
+        self.action_preparation = None
+        self._action_first_target = None
+        self._imu_path = CALIBRATION_PATH if imu_calibration_path is None else imu_calibration_path
+        self._imu_record = None
+        self._imu_job_token = 0
+        self._imu_job = dict(state='idle', active=False, progress=0., samples=0,
+                             message='Not calibrated. Hold the board upright and still.')
+        try:
+            self._imu_record = load_imu(self._imu_path)
+            if self._imu_record is not None:
+                self._imu_job.update(state='saved', message='Saved IMU calibration loaded.')
+        except (OSError, ValueError, TypeError, KeyError):
+            self._imu_job.update(state='error', message='Calibration could not be loaded. Calibrate again or reset it.')
+        self.filter = SignalFilter(ImuCorrection(self._imu_record) if self._imu_record else None)
         self.feedback = self.filtered = None
+        self.voltage_packet = None
+        self.voltage_rx_time = 0.0
         self.rx_time = 0.0
         self._imu_source_us = None
         self._imu_source_time = 0.0
@@ -165,13 +200,29 @@ class Controller:
         with self.lock:
             previous = self.diagnostics.get('bridge_ready_us')
             if previous is not None and previous != values['bridge_ready_us']:
+                self.voltage_packet = None; self.voltage_rx_time = 0.0
                 self.mode = 'shadow'; self.generation += 1; self.arm_pending = False
                 self.filter.reset(); self.recovery.reset(); self.policy_needs_reset = True
                 self._imu_source_us = None
-                self._stop_pick_locked(); self._stop_roulade_locked()
-                self._stop_sitstand_locked()
-                self._stop_kick_locked()
+                self._cancel_actions_locked()
             self.diagnostics = values
+
+    def receive_voltage(self, raw):
+        try:
+            packet = decode_voltage(raw)
+        except ValueError:
+            return
+        with self.lock:
+            if self.voltage_packet and packet['seq'] == self.voltage_packet['seq']:
+                return
+            if self.feedback:
+                age = elapsed_us(self.feedback.sample_us, packet['sample_us'])
+                if age < 0x80000000 and age > VOLTAGE_TIMEOUT_S*1e6:
+                    return
+                if age >= 0x80000000 and elapsed_us(packet['sample_us'], self.feedback.sample_us) > 100000:
+                    return
+            self.voltage_packet = packet
+            self.voltage_rx_time = time.monotonic()
 
     def receive(self, raw):
         try:
@@ -186,13 +237,12 @@ class Controller:
                 step = elapsed_us(fb.seq, old.seq)
                 if step == 0: return
                 if step > 0x80000000:
+                    self.voltage_packet = None; self.voltage_rx_time = 0.0
                     self.mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.filter.reset()
                     self._imu_source_us = None
                     self.recovery.reset(); self.policy_needs_reset = True
-                    self._stop_pick_locked(); self._stop_roulade_locked()
-                    self._stop_sitstand_locked()
-                    self._stop_kick_locked()
+                    self._cancel_actions_locked()
                     self.cal_done = [False]*15
                     self.cal_expected_index = None
                     self.cal_reply_event.set()
@@ -208,6 +258,13 @@ class Controller:
                 else:
                     self._imu_source_time += imu_step / 1e6
             self._imu_source_us = fb.imu_us
+            self.filter.command_acc_x_bias_ms2 = COMMAND_ACC_X_BIAS_MS2 if (
+                self._imu_record is not None and self.mode in ('shadow', 'policy')
+                and not self.roller_mode and (self.twist[0] < 0.0 or self.twist[2] != 0.0)
+                and self.recovery.phase == 'walk' and not self.pick_active
+                and not (self._roulade_on(now) and self.action_preparation is None)
+                and self.sitstand_phase == 'idle'
+                and not self.kick_until and not self._imu_job['active']) else 0.
             self.filtered = self.filter.update(fb.acc, fb.gyro, fb.angles, fb.velocities,
                 timestamp=now, imu_timestamp=self._imu_source_time, imu_ok=fb.imu_ok)
             self.feedback, self.rx_time = fb, now
@@ -227,15 +284,126 @@ class Controller:
         sample = self.feedback.sample_us if self.feedback else 0
         self.bridge.notify('duck_command', encode_command(self.seq, sample, DISARM, self.policy.default_deg))
 
+    def _check_imu_idle_locked(self):
+        if self._imu_job['active']:
+            raise ValueError('IMU calibration is in progress. Wait for it to finish or exit calibration.')
+
+    def _imu_status_locked(self):
+        record = self._imu_record or {}
+        return dict(self._imu_job, calibrated=bool(self._imu_record), seconds=SAMPLE_SECONDS,
+                    method='offset', acc_offset_ms2=record.get('acc_offset_ms2'),
+                    gyro_zero_dps=record.get('gyro_zero_dps'),
+                    calibrated_at=record.get('calibrated_at'), measurement=record.get('measurement'))
+
+    def start_imu_calibration(self):
+        with self.lock:
+            if self._imu_job['active']:
+                return self._imu_status_locked()
+            if self.mode not in ('off', 'shadow', 'hold', 'calibrate'):
+                raise ValueError('Stop motion and hold the board upright and still.')
+            if self.mode == 'calibrate' and (any(self.cal_done) or self.cal_expected_index is not None):
+                raise ValueError('Unload all joints before calibrating the IMU.')
+            if (self.action_preparation or self.pick_active or self._roulade_on(time.monotonic())
+                    or self.sitstand_phase != 'idle' or self.kick_until):
+                raise ValueError('Wait for the current action to finish before calibrating.')
+            fb = self._require_feedback(0)
+            if elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
+                raise ValueError('IMU readings are stale. Check the connection and try again.')
+            check_standing(fb.acc)
+            self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
+            self.generation += 1
+            self._imu_job_token += 1
+            token = self._imu_job_token
+            self._imu_job = dict(state='sampling', active=True, progress=0., samples=0,
+                                 message=f'Keep the board still. Calibrating for {SAMPLE_SECONDS:g} seconds…')
+            threading.Thread(target=self._sample_imu_calibration, args=(token, self.generation),
+                             name='imu-calibration', daemon=True).start()
+            return self._imu_status_locked()
+
+    def _sample_imu_calibration(self, token, generation):
+        rows = []
+        begin = time.monotonic()
+        try:
+            while not self.stop_event.wait(.005):
+                with self.lock:
+                    if token != self._imu_job_token or not self._imu_job['active']:
+                        return
+                    if generation != self.generation:
+                        raise ValueError('Calibration cancelled because the control mode changed.')
+                    fb = self._require_feedback(0)
+                    if elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
+                        raise ValueError('IMU readings were interrupted. Try again.')
+                    stamp = self._imu_source_time
+                    if rows and stamp < rows[-1][0]:
+                        raise ValueError('The IMU restarted. Try again.')
+                    if not rows or stamp > rows[-1][0]:
+                        rows.append((stamp, list(fb.acc), list(fb.gyro)))
+                        span = stamp-rows[0][0]
+                        self._imu_job.update(samples=len(rows), progress=min(1., span/SAMPLE_SECONDS))
+                        if span >= SAMPLE_SECONDS:
+                            break
+                if time.monotonic()-begin > SAMPLE_SECONDS+2:
+                    raise ValueError('Not enough IMU readings. Check the connection and try again.')
+            else:
+                raise ValueError('Calibration cancelled because the app stopped.')
+            record = estimate_imu(rows)
+            correction = ImuCorrection(record)
+            with self.lock:
+                if token != self._imu_job_token or not self._imu_job['active']:
+                    return
+                if generation != self.generation:
+                    raise ValueError('Calibration cancelled because the control mode changed.')
+                # A cancelled job must never publish a file or apply its result.
+                save_imu(self._imu_path, record)
+                self._imu_record = record
+                self.filter.set_correction(correction)
+                self.filtered = None
+                self.recovery.reset()
+                self.policy_needs_reset = True
+                self.generation += 1
+                self._imu_job.update(state='saved', active=False, progress=1.,
+                                     message='IMU calibrated and saved.')
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            with self.lock:
+                if token == self._imu_job_token and self._imu_job['active']:
+                    self._imu_job.update(state='error', active=False,
+                                         message='Previous calibration kept. '+str(exc))
+
+    def reset_imu_calibration(self):
+        with self.lock:
+            self._check_imu_idle_locked()
+            if self.mode not in ('off', 'shadow', 'hold', 'calibrate'):
+                raise ValueError('Stop motion before resetting IMU calibration.')
+            try:
+                disable_imu(self._imu_path)
+            except OSError as exc:
+                raise ValueError('Could not reset calibration. Previous calibration kept.') from exc
+            self._imu_record = None
+            self.filter.set_correction(None)
+            self.filtered = None
+            self.recovery.reset()
+            self.policy_needs_reset = True
+            self.generation += 1
+            self._imu_job = dict(state='idle', active=False, progress=0., samples=0,
+                                 message='IMU calibration reset. Previous calibration backed up.')
+            return self._imu_status_locked()
+
     def set_mode(self, mode):
         if mode not in ('shadow', 'off', 'hold', 'policy', 'calibrate', 'servo_debug'):
             raise ValueError('unknown mode')
         with self.lock:
+            if self._imu_job['active']:
+                if mode == 'off' or (self.mode == 'calibrate' and mode == 'shadow'):
+                    self._imu_job_token += 1
+                    self._imu_job.update(state='cancelled', active=False, message='Calibration cancelled. Previous calibration kept.')
+                elif mode != self.mode or mode == 'calibrate':
+                    self._check_imu_idle_locked()
             if mode == 'policy' and self.sitstand_phase != 'idle':
                 raise ValueError('stand up before switching to walk')
             if mode == 'policy' and self.kick_until:
                 raise ValueError('wait for kick to finish before switching to walk')
             if mode == self.mode and mode != 'calibrate':
+                self._cancel_preparation_locked()
                 self.web_time = time.monotonic()
                 return {'mode': self.mode}
             if mode in ('hold', 'policy') and self.mode in EXCLUSIVE_MODES:
@@ -248,9 +416,7 @@ class Controller:
             previous = self.mode
             self.generation += 1; self.mode = mode
             self.recovery.reset(); self.policy_needs_reset = True
-            self._stop_pick_locked(); self._stop_roulade_locked()
-            self._stop_sitstand_locked()
-            self._stop_kick_locked()
+            self._cancel_actions_locked()
             self.last_error = ''
             self.web_time = time.monotonic()
             self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
@@ -282,10 +448,16 @@ class Controller:
         if not isinstance(enabled, bool):
             raise ValueError('roller enabled must be true or false')
         with self.lock:
+            if enabled != self.roller_mode:
+                self._check_imu_idle_locked()
+                if self.action_preparation:
+                    raise ValueError('wait for the current action to finish preparing')
             if enabled != self.roller_mode and self.kick_until:
                 raise ValueError('wait for kick to finish before switching roller mode')
             if enabled != self.roller_mode and self.sitstand_phase != 'idle':
                 raise ValueError('stand up before switching roller mode')
+            if enabled != self.roller_mode and self._roulade_on(time.monotonic()):
+                raise ValueError('wait for roulade to finish before switching roller mode')
             if enabled != self.roller_mode:
                 with self.policy_lock:
                     self.policy = self.roller_policy if enabled else self.walk_policy
@@ -339,15 +511,80 @@ class Controller:
             with self.policy_lock:
                 models = (self.roller_policy,) if self.roller_mode else self._standard_models()
                 for model in models:
-                    if model is not self.sitstand_policy:
-                        model.action_scale = scale
+                    model.action_scale = scale
         return {'scale': scale}
 
     def _stop_pick_locked(self):
         self.pick_active = False
         self.pick_phi = 0.0
 
-    def _stop_roulade_locked(self):
+    def _cancel_preparation_locked(self, reason='cancelled'):
+        pending = self.action_preparation
+        self.action_preparation = None
+        if pending and pending['name'] == 'roulade':
+            self._stop_roulade_locked(reason)
+
+    def _cancel_actions_locked(self):
+        self._cancel_preparation_locked()
+        self._action_first_target = None
+        self._stop_pick_locked()
+        self._stop_roulade_locked()
+        self._stop_sitstand_locked()
+        self._stop_kick_locked()
+
+    def _queue_action_locked(self, name, policy, now):
+        if self.action_preparation:
+            raise ValueError('wait for the current action to finish preparing')
+        self.action_preparation = dict(name=name, policy=policy, requested_at=now,
+                                       ready_at=now+ACTION_PREPARE_S, warm_passes=0)
+        self.web_time = now
+        self.last_error = ''
+
+    def _advance_preparation_locked(self, now, valid):
+        pending = self.action_preparation
+        if not pending:
+            return
+        if now-pending['requested_at'] >= ACTION_PREPARE_TIMEOUT_S:
+            self._cancel_preparation_locked('start_timeout')
+            self.last_error = 'Action preparation timed out; action cancelled.'
+            return
+        if not valid or now < pending['ready_at'] or not pending['warm_passes']:
+            return
+        name = pending['name']
+        self.action_preparation = None
+        self.generation += 1
+        self.policy_needs_reset = name != 'stand'
+        if name == 'pick':
+            self.pick_active = True
+            self.pick_phi = 0.0
+            self.mouth = MOUTH_MAX_DEG
+        elif name == 'roulade':
+            self._roulade_alpha = (self.walk_policy.action_alpha, self.walk_policy.action_alpha_head)
+            with self.policy_lock:
+                self._apply_alphas_locked(ROULADE_ALPHA, ROULADE_ALPHA)
+            self._roulade_timing['state'] = 'pending'
+        elif name in ('sit', 'stand'):
+            if name == 'sit':
+                self.mode = 'policy'
+                self.arm_pending = not self.feedback.enabled
+                self.head = [0.0]*4
+            self.sitstand_phase = name
+            self.sitstand_until = now+SITSTAND_STAND_S if name == 'stand' else 0.0
+            self.twist = [0.0]*3
+            self._action_first_target = name
+        else:
+            self.kick_side = name.removesuffix('_kick')
+            self.kick_until = now+KICK_S
+            self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
+            self._action_first_target = name
+
+    def _stop_roulade_locked(self, reason='cancelled'):
+        if self.roulade_pending or self.roulade_until:
+            elapsed = (time.monotonic()-self._roulade_started_at
+                       if self._roulade_started_at is not None else 0.0)
+            self._roulade_timing.update(state=reason, elapsed_s=elapsed)
+        self.roulade_pending = False
+        self._roulade_started_at = None
         self.roulade_until = 0.0
         saved = self._roulade_alpha
         self._roulade_alpha = None
@@ -356,9 +593,59 @@ class Controller:
                 self._apply_alphas_locked(*saved)
 
     def _roulade_on(self, now):
-        return now < self.roulade_until
+        return self.roulade_pending or now < self.roulade_until
+
+    def _expire_roulade_locked(self, now):
+        if self.action_preparation and self.action_preparation['name'] == 'roulade':
+            return False
+        timeout = self.roulade_pending and now-self._roulade_requested_at >= ROULADE_START_TIMEOUT_S
+        if not timeout and not (self.roulade_until and now >= self.roulade_until):
+            return False
+        self._stop_roulade_locked('start_timeout' if timeout else 'completed')
+        if timeout:
+            self.last_error = 'Roulade start timed out; action cancelled.'
+        self.recovery.fall_elapsed = 0.0
+        self.policy_needs_reset = True
+        return True
+
+    def _record_roulade_frame_locked(self, submitted, inference_ms, wait_ms, step_ms):
+        # Start the action clock only after submitting its first actual target.
+        if self.roulade_pending:
+            self.roulade_pending = False
+            self._roulade_started_at = submitted
+            self.roulade_until = submitted + ROULADE_S
+            self._roulade_timing.update(state='running',
+                startup_ms=(submitted-self._roulade_requested_at)*1000)
+        t_ms = (submitted-self._roulade_started_at)*1000
+        interval = t_ms-self._roulade_frames[-1]['t_ms'] if self._roulade_frames else None
+        self._roulade_frames.append(dict(t_ms=t_ms, inference_ms=inference_ms,
+            policy_wait_ms=wait_ms, step_ms=step_ms, interval_ms=interval,
+            missed_periods=max(0, round(interval/(CONTROL_PERIOD*1000))-1)
+                if interval is not None else 0))
+
+    def _roulade_timing_locked(self, now, include_frames=False):
+        frames = list(self._roulade_frames)
+        result = dict(self._roulade_timing)
+        if self._roulade_started_at is not None:
+            result['elapsed_s'] = now-self._roulade_started_at
+        result.update(frames=len(frames), target_hz=1.0/CONTROL_PERIOD,
+            actual_hz=(len(frames)-1)*1000/frames[-1]['t_ms']
+                if len(frames)>1 and frames[-1]['t_ms']>0 else None,
+            missed_periods=sum(f['missed_periods'] for f in frames))
+        for name in ('inference_ms', 'policy_wait_ms', 'step_ms', 'interval_ms'):
+            values = [f[name] for f in frames if f[name] is not None]
+            result[name] = dict(mean=sum(values)/len(values), max=max(values)) if values else {}
+        if include_frames:
+            result['samples'] = [dict(f) for f in frames]
+        return result
+
+    def roulade_timing(self):
+        with self.lock:
+            return self._roulade_timing_locked(time.monotonic(), include_frames=True)
 
     def _stop_sitstand_locked(self):
+        if self._action_first_target in ('sit', 'stand'):
+            self._action_first_target = None
         if self.sitstand_phase != 'idle':
             self.twist = [0.0]*3
             self.policy_needs_reset = True
@@ -372,6 +659,8 @@ class Controller:
                     action_scale=self.sitstand_policy.action_scale)
 
     def _stop_kick_locked(self):
+        if self._action_first_target in ('left_kick', 'right_kick'):
+            self._action_first_target = None
         if self.kick_until:
             self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
             self.policy_needs_reset = True
@@ -389,6 +678,7 @@ class Controller:
         if side not in self.kick_policies:
             raise ValueError('kick side must be left or right')
         with self.lock:
+            self._check_imu_idle_locked()
             now = time.monotonic()
             if self.mode not in ('shadow', 'policy'):
                 raise ValueError('kick requires shadow/policy mode')
@@ -399,19 +689,14 @@ class Controller:
                     or self._roulade_on(now) or self.sitstand_phase != 'idle'
                     or self.kick_until):
                 raise ValueError('kick only while walking upright with no other action')
-            self.kick_side = side
-            self.kick_until = now + KICK_S
-            self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
-            self.policy_needs_reset = True
-            self.generation += 1
-            self.web_time = now
-            self.last_error = ''
-            return self._kick_status_locked(now, side)
+            self._queue_action_locked(side+'_kick', self.kick_policies[side], now)
+            return dict(self._kick_status_locked(now, side), preparing=True)
 
     def set_sitstand(self, action):
         if action not in ('sit', 'stand'):
             raise ValueError('sitstand action must be sit or stand')
         with self.lock:
+            self._check_imu_idle_locked()
             now = time.monotonic()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before sit/stand')
@@ -427,47 +712,31 @@ class Controller:
                     raise ValueError('sit/stand is already active')
                 if self.pick_active or self._roulade_on(now):
                     raise ValueError('wait for pick/roulade to finish before sitting')
-                self.mode = 'policy'
-                self.arm_pending = not fb.enabled
-                self.sitstand_phase = 'sit'
-                self.sitstand_until = 0.0
-                self.policy_needs_reset = True
-                self.head = [0.0]*4
             else:
                 if self.sitstand_phase != 'sit':
                     raise ValueError('stand is only available after sit')
-                self.sitstand_phase = 'stand'
-                self.sitstand_until = now + SITSTAND_STAND_S
-                # Preserve the same model's action history across sit -> stand.
-            self.twist = [0.0]*3
-            self.generation += 1
-            self.web_time = now
-            self.last_error = ''
-            return self._sitstand_status_locked(now)
+            self._queue_action_locked(action, self.sitstand_policy, now)
+            return dict(self._sitstand_status_locked(now), preparing=True)
 
     def start_pick(self):
         with self.lock:
+            self._check_imu_idle_locked()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before pick')
             if self.sitstand_phase != 'idle':
                 raise ValueError('stand up before starting pick')
             if self.mode not in ('shadow', 'policy'):
                 raise ValueError('pick requires shadow/policy mode')
-            if self.recovery.phase != 'walk' or self._roulade_on(time.monotonic()):
+            if self.recovery.phase != 'walk' or self.pick_active or self._roulade_on(time.monotonic()):
                 raise ValueError('pick only while walking upright')
-            self.pick_active = True
-            self.pick_phi = 0.0
-            self.mouth = MOUTH_MAX_DEG
-            self.policy_needs_reset = True
-            self.web_time = time.monotonic()
-            self.last_error = ''
-        with self.policy_lock:
-            self.pick_policy.reset_action_filter()
-            self.pick_policy.warm(2)
-        return {'ok': True, 'phi': 0.0, 'model': self.pick_policy.file}
+            self._require_feedback(0)
+            self._queue_action_locked('pick', self.pick_policy, time.monotonic())
+        return {'ok': True, 'preparing': True, 'phi': 0.0, 'model': self.pick_policy.file}
 
     def start_roulade(self):
         with self.lock:
+            self._check_imu_idle_locked()
+            now = time.monotonic()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before roulade')
             if self.sitstand_phase != 'idle':
@@ -476,17 +745,19 @@ class Controller:
                 raise ValueError('roulade requires shadow/policy mode')
             if self.recovery.phase != 'walk' or self.pick_active:
                 raise ValueError('roulade only while walking')
-            if self._roulade_alpha is None:
-                self._roulade_alpha = (self.walk_policy.action_alpha, self.walk_policy.action_alpha_head)
-            self.roulade_until = time.monotonic() + ROULADE_S
-            self.policy_needs_reset = True
-            self.web_time = time.monotonic()
-            self.last_error = ''
-            with self.policy_lock:
-                self._apply_alphas_locked(ROULADE_ALPHA, ROULADE_ALPHA)
-                self.roulade_policy.reset_action_filter()
-                self.roulade_policy.warm(2)
-        return {'ok': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
+            if self._roulade_on(now):
+                raise ValueError('wait for roulade to finish')
+            self._require_feedback(0)
+            if not self.filtered or not self.filtered['imu_fusion_ready']:
+                raise ValueError('wait for IMU feedback before roulade')
+            self._queue_action_locked('roulade', self.roulade_policy, now)
+            self.roulade_pending = True
+            self.roulade_until = 0.0
+            self._roulade_requested_at = now
+            self._roulade_started_at = None
+            self._roulade_frames.clear()
+            self._roulade_timing = dict(state='preparing', startup_ms=None, elapsed_s=0.0)
+        return {'ok': True, 'preparing': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
 
     def command(self, twist=None, head=None, mouth=None):
         def values(seq, limits):
@@ -503,10 +774,15 @@ class Controller:
             if not math.isfinite(m) or not 0 <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
+            if self._imu_job['active']:
+                self.web_time = time.monotonic()
+                return {'ok': True, 'ignored': 'imu_calibration'}
             if self.mode in EXCLUSIVE_MODES:
                 raise ValueError('motion commands disabled in calibrate/servo_debug')
-            if t is not None and not self.roller_mode and not -.18 <= t[0] <= .2:
-                raise ValueError('walking vx must be between -0.18 and 0.2')
+            if t is not None and not self.roller_mode and not -.2 <= t[0] <= .2:
+                raise ValueError('walking vx must be between -0.2 and 0.2')
+            if t is not None and self.roller_mode and abs(t[2]) > ROLLER_YAW_LIMIT:
+                raise ValueError(f'roller wz must be between {-ROLLER_YAW_LIMIT} and {ROLLER_YAW_LIMIT}')
             if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until: self.twist = t
             if h is not None and not self.pick_active and not self.kick_until: self.head = h
             if m is not None and not self.pick_active and not self.kick_until: self.mouth = m
@@ -525,6 +801,7 @@ class Controller:
             raise ValueError('joint index out of range')
         with self.cal_op_lock:
             with self.lock:
+                self._check_imu_idle_locked()
                 if self.mode != 'calibrate':
                     raise ValueError('not in calibrate mode')
                 if not self.feedback or time.monotonic()-self.rx_time > .15:
@@ -641,6 +918,7 @@ class Controller:
         return reply
 
     def step(self):
+        step_started = time.monotonic()
         with self.lock:
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
@@ -656,9 +934,7 @@ class Controller:
                     self.arm_pending = False; self.last_error = lost
                     generation = self.generation
                     self.recovery.reset(); self.policy_needs_reset = True
-                    self._stop_pick_locked(); self._stop_roulade_locked()
-                    self._stop_sitstand_locked()
-                    self._stop_kick_locked()
+                    self._cancel_actions_locked()
             elif mode in EXCLUSIVE_MODES:
                 if time.monotonic()-self.web_time > 2.0:
                     previous = mode
@@ -673,7 +949,6 @@ class Controller:
                     else:
                         self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
                     self._disarm_now()
-            twist, head, mouth = list(self.twist), list(self.head), self.mouth
             valid = bool(fb and age < .15 and fb.imu_ok and filt
                          and filt['imu_fusion_ready']
                          and age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 <= IMU_STALE_S)
@@ -682,21 +957,22 @@ class Controller:
                 self._stop_sitstand_locked()
             if self.kick_until and now >= self.kick_until:
                 self._stop_kick_locked()
-                twist, head, mouth = [0.0]*3, [0.0]*4, 0.0
-            if self.roulade_until and now >= self.roulade_until:
-                self._stop_roulade_locked()
-                self.recovery.fall_elapsed = 0.0
-                self.policy_needs_reset = True
-            rolling = self._roulade_on(now)
+            self._expire_roulade_locked(now)
+            rolling = self._roulade_on(now) and self.action_preparation is None
             if mode in ('shadow', 'policy') and not rolling:
                 changed = self.recovery.update(filt['grav'] if filt else [0,0,0],
                                                now, valid)
                 self.policy_needs_reset |= changed
                 if changed and self.recovery.phase != 'walk':
-                    self._stop_pick_locked()
-                    self._stop_sitstand_locked()
-                    self._stop_kick_locked()
+                    self._cancel_actions_locked()
             phase = self.recovery.phase
+            if phase == 'walk':
+                self._advance_preparation_locked(now, valid)
+            elif self.action_preparation:
+                self._cancel_preparation_locked()
+            mode, generation = self.mode, self.generation
+            twist, head, mouth = list(self.twist), list(self.head), self.mouth
+            rolling = self._roulade_on(now) and self.action_preparation is None
             if rolling and phase != 'walk':
                 self._stop_roulade_locked()
                 rolling = False
@@ -743,21 +1019,15 @@ class Controller:
                 twist, head = [0.0]*3, [0.0]*4
             begin = time.monotonic()
             with self.policy_lock:
+                acquired = time.monotonic()
                 if reset_policy:
                     selected.reset_action_filter()
-                    # One warm pass keeps the newly selected session's arenas resident.
-                    selected.warm(1)
                 action = selected.infer(filt['grav'], filt['gyro_rad'], filt['angles_deg'], filt['vels_deg'], twist, head)
                 target = selected.action_to_deg(action)
             finish = time.monotonic()
             with self.lock:
                 self.inferred += 1; self.infer_times.append(finish)
                 self.infer_ms.append((finish-begin)*1000)
-                if picking:
-                    self.pick_phi += CONTROL_PERIOD / PICK_PERIOD_S
-                    if self.pick_phi >= 1.0:
-                        self._stop_pick_locked()
-                        self.policy_needs_reset = True
         with self.lock:
             # A stop arriving during ONNX always wins; never send its obsolete action.
             if self.generation != generation:
@@ -765,12 +1035,16 @@ class Controller:
             mode = self.mode
             if mode in EXCLUSIVE_MODES:
                 return
+            if rolling and self._expire_roulade_locked(time.monotonic()):
+                return  # An inference finishing late must not submit an expired action.
             command_mode = {'shadow':DISARM,'off':DISARM,'hold':HOLD,'policy':POLICY}[mode]
             if self.arm_pending:
                 command_mode = ARM
                 # Initial enable always uses measured angles.
                 target = list(fb.angles)
                 self.arm_pending = False
+                if inferring and (rolling or picking or sitting or kicking):
+                    self.policy_needs_reset = True
             else:
                 target = list(target)
                 target[MOUTH_INDEX] = mouth
@@ -780,36 +1054,48 @@ class Controller:
             payload = encode_command(self.seq, fb.sample_us, command_mode, target)
             self.bridge.notify('duck_command', payload)
             self.sent += 1
+            if inferring and command_mode in (DISARM, POLICY):
+                submitted = time.monotonic()
+                if rolling:
+                    self._record_roulade_frame_locked(submitted, (finish-begin)*1000,
+                        (acquired-begin)*1000, (submitted-step_started)*1000)
+                if picking:
+                    self.pick_phi += CONTROL_PERIOD / PICK_PERIOD_S
+                    if self.pick_phi >= 1.0:
+                        self._stop_pick_locked()
+                        self.policy_needs_reset = True
+                if sitting and self._action_first_target == 'stand':
+                    self.sitstand_until = submitted+SITSTAND_STAND_S
+                if kicking and self._action_first_target == self.kick_side+'_kick':
+                    self.kick_until = submitted+KICK_S
+                self._action_first_target = None
 
     def _keep_warm_idle(self):
         """Run one dummy pass on an idle session so all policy sessions stay hot."""
         with self.lock:
             phase = self.recovery.phase
-            rolling = self._roulade_on(time.monotonic()) and phase == 'walk'
-            picking = self.pick_active and phase == 'walk' and not rolling
-            sitting = self.sitstand_phase != 'idle' and phase == 'walk'
-            if self.kick_until and phase == 'walk':
-                active = self.kick_policies[self.kick_side]
-            elif sitting:
-                active = self.sitstand_policy
-            elif rolling:
-                active = self.roulade_policy
-            elif picking:
-                active = self.pick_policy
-            elif phase == 'walk':
-                active = self.policy
+            pending = self.action_preparation
+            if pending:
+                idle = pending['policy']
             else:
-                active = self.getup_policy
-            candidates = [p for p in self._models() if p is not active]
-        if not candidates:
-            return
-        self._warm_index = (self._warm_index + 1) % len(candidates)
-        idle = candidates[self._warm_index]
-        if self.policy_lock.acquire(blocking=False):
-            try:
-                idle.warm(1)
-            finally:
-                self.policy_lock.release()
+                if (self._roulade_on(time.monotonic()) or self.pick_active
+                        or self.kick_until or self.sitstand_phase == 'stand'):
+                    return
+                active = self.sitstand_policy if self.sitstand_phase == 'sit' else (
+                    self.policy if phase == 'walk' else self.getup_policy)
+                candidates = [p for p in self._models() if p is not active]
+                self._warm_index = (self._warm_index + 1) % len(candidates)
+                idle = candidates[self._warm_index]
+            if not self.policy_lock.acquire(blocking=False):
+                return
+        try:
+            idle.warm(1)
+        finally:
+            self.policy_lock.release()
+        if pending:
+            with self.lock:
+                if self.action_preparation is pending:
+                    pending['warm_passes'] += 1
 
     def run(self):
         deadline = time.monotonic()
@@ -819,9 +1105,7 @@ class Controller:
             except Exception as exc:
                 with self.lock:
                     self.last_error = str(exc); self.mode = 'off'; self.generation += 1; self.arm_pending = False
-                    self._stop_pick_locked(); self._stop_roulade_locked()
-                    self._stop_sitstand_locked()
-                    self._stop_kick_locked()
+                    self._cancel_actions_locked()
             deadline += CONTROL_PERIOD
             now = time.monotonic()
             if deadline <= now:
@@ -839,10 +1123,12 @@ class Controller:
     def stop(self):
         self.stop_event.set()
         with self.lock:
+            if self._imu_job['active']:
+                self._imu_job_token += 1
+                self._imu_job.update(state='cancelled', active=False, message='App stopped. Calibration cancelled.')
             previous = self.mode
             self.mode = 'off'; self.generation += 1; self.arm_pending = False
-            self._stop_sitstand_locked()
-            self._stop_kick_locked()
+            self._cancel_actions_locked()
             if previous == 'calibrate':
                 self.cal_done = [False]*15
                 self.cal_expected_index = None
@@ -879,8 +1165,22 @@ class Controller:
                 cal_done=list(self.cal_done), cal_hold_pos=CAL_HOLD_POS, raw_mask=self.raw_mask)
             result['control_ready']=bool(fb and fb.imu_ok and now-self.rx_time<.15 and self.mode not in EXCLUSIVE_MODES)
             result['servo_scan_version'] = 2
+            pending = self.action_preparation
+            result['action_preparation'] = dict(active=bool(pending),
+                action=pending['name'] if pending else None,
+                remaining_s=max(0.0, pending['ready_at']-now) if pending else 0.0,
+                warm_passes=pending['warm_passes'] if pending else 0)
+            voltage_age = (now-self.voltage_rx_time)*1000 if self.voltage_packet else None
+            voltage_fresh = voltage_age is not None and 0 <= voltage_age <= VOLTAGE_TIMEOUT_S*1000
+            volts = self.voltage_packet['volts'] if voltage_fresh else []
+            valid_volts = [v for v in volts if v is not None]
+            result['voltage_v'] = median(valid_volts) if valid_volts else None
+            result['voltage_age_ms'] = voltage_age
+            result['servo_voltage_v'] = {str(MOTOR_IDS[i]): v for i, v in enumerate(volts) if v is not None}
+            result['imu_calibration'] = self._imu_status_locked()
             result['roller'] = dict(enabled=self.roller_mode, model=self.roller_policy.file,
                                     walk_model=self.policy.file, default_deg=self.roller_policy.default_deg,
+                                    yaw_limit=ROLLER_YAW_LIMIT,
                                     action_scale=self.roller_policy.action_scale,
                                     action_alpha=self.roller_policy.action_alpha,
                                     action_alpha_head=self.roller_policy.action_alpha_head)
@@ -889,7 +1189,10 @@ class Controller:
                 action_scale=self.policy.action_scale, action_alpha=self.policy.action_alpha,
                 action_alpha_head=self.policy.action_alpha_head,
                 gyro_alpha=self.filter.gyro_alpha, velocity_alpha=self.filter.vel_alpha,
-                gravity_tau_s=self.filter.gravity_tau_s, imu_bias_deg=list(IMU_BIAS_DEG),
+                gravity_tau_s=self.filter.gravity_tau_s,
+                imu_bias_deg=[0., 0., 0.] if self._imu_record else list(IMU_BIAS_DEG),
+                imu_acc_offset_ms2=self._imu_record['acc_offset_ms2'] if self._imu_record else [0., 0., 0.],
+                command_acc_x_bias_ms2=self.filter.command_acc_x_bias_ms2,
                 filter_clock='mcu_imu', snapshot='latest',
                 command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000)
             result['mcu_runtime'] = dict(self.diagnostics)
@@ -900,9 +1203,10 @@ class Controller:
             result['pick'] = dict(active=self.pick_active, phi=self.pick_phi,
                                  period_s=PICK_PERIOD_S, mouth_close_phi=PICK_MOUTH_CLOSE_PHI,
                                  model=self.pick_policy.file)
-            remain = max(0.0, self.roulade_until - now)
-            result['roulade'] = dict(active=remain > 0, remaining_s=remain,
-                                    seconds=ROULADE_S, model=self.roulade_policy.file)
+            remain = ROULADE_S if self.roulade_pending else max(0.0, self.roulade_until - now)
+            result['roulade'] = dict(active=self._roulade_on(now), remaining_s=remain,
+                                    seconds=ROULADE_S, model=self.roulade_policy.file,
+                                    timing=self._roulade_timing_locked(now))
             result['sitstand'] = self._sitstand_status_locked(now)
             result['right_kick'] = self._kick_status_locked(now, 'right')
             result['left_kick'] = self._kick_status_locked(now, 'left')
@@ -911,7 +1215,7 @@ class Controller:
                     result['active_model'] = self.kick_policies[self.kick_side].file
                 elif self.sitstand_phase != 'idle' and self.recovery.phase == 'walk':
                     result['active_model'] = self.sitstand_policy.file
-                elif remain > 0 and self.recovery.phase == 'walk':
+                elif remain > 0 and not pending and self.recovery.phase == 'walk':
                     result['active_model'] = self.roulade_policy.file
                 elif self.pick_active and self.recovery.phase == 'walk':
                     result['active_model'] = self.pick_policy.file
@@ -922,6 +1226,7 @@ class Controller:
             else:
                 result['active_model'] = None
             if fb:
+                acc_corrected, gyro_corrected = self.filter.correct_imu(fb.acc, fb.gyro)
                 result.update(servo_ids=[i for j,i in enumerate(MOTOR_IDS) if fb.mask & (1<<j)],
                     imu_ok=fb.imu_ok, enabled=fb.enabled, mcu_watchdog=bool(fb.flags&4),
                     mcu_calibrating=fb.calibrating, mcu_servo_debug=fb.servo_debugging,
@@ -930,6 +1235,7 @@ class Controller:
                     mcu_invalid_commands=fb.invalid_commands, mcu_command_seq=fb.command_seq,
                     mcu_command_age_us=fb.command_age_us, angles=fb.angles,
                     velocities=fb.velocities, targets=fb.targets, acc=fb.acc, gyro=fb.gyro,
+                    acc_corrected=acc_corrected, gyro_corrected=gyro_corrected,
                     gravity=self.filtered['grav'] if self.filtered else None,
                     missing_joint_ids=[i for j,i in enumerate(MOTOR_IDS) if not fb.mask&(1<<j)])
             return result
