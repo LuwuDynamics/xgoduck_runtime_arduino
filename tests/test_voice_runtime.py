@@ -162,12 +162,20 @@ class VoiceRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_unbinding_stops_chat_and_withdraws_motion_then_binding_resumes(self):
         previous = self.runtime.app
+        self.runtime.connection_sounds.play = AsyncMock(return_value=True)
+        cached = True
+        snapshot = self.onboarding.snapshot
+        self.onboarding.snapshot = lambda: dict(snapshot(), wifi_connected=True, cached=cached)
         self.onboarding.ready = self.onboarding.bound = False
         self.onboarding.generation += 1
         await eventually(lambda: previous._closing and self.open_sessions == 0
                          and self.runtime.status()['state'] == 'awaiting_binding')
         self.assertEqual(self.runtime.status()['state'], 'awaiting_binding')
         self.assertIn(None, self.beats)
+        await eventually(lambda: 'network' in self.runtime.connection_sounds.completed)
+        self.assertNotIn('binding_required', self.runtime.connection_sounds.completed)
+        cached = False
+        await eventually(lambda: 'binding_required' in self.runtime.connection_sounds.completed)
         self.onboarding.ready = self.onboarding.bound = True
         self.onboarding.generation += 1
         await eventually(lambda: self.runtime.app is not None and self.open_sessions == 1)

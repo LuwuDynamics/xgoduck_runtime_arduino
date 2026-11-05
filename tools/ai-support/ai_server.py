@@ -21,6 +21,10 @@ class HardwareHandler(Handler):
     def do_GET(self):
         if self.path == '/network':
             self.respond(200, wifi_device_status())
+        elif self.path == '/serial-number':
+            # The cockpit proxies /status, so keep the serial on a separate
+            # route on the local Unix socket.
+            self.respond(200, {'serial_number': self.server.manager.setup.peripheral.serial_number})
         else:
             super().do_GET()
 

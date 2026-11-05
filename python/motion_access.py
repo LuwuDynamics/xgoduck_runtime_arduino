@@ -249,7 +249,7 @@ class MotionAccess:
                 self.controller.set_mode('off')
                 return {'status': 'completed', 'message': 'Torque off.'}
             if kind not in ('stand', 'move', 'turn', 'head', 'mouth', 'pick', 'roulade',
-                            'sit', 'left_kick', 'right_kick', 'walking_mode'):
+                            'sit', 'left_kick', 'right_kick', 'walking_mode', 'default_pose'):
                 raise ValueError('unsupported duck action')
             if getattr(self.controller, 'battery_phase', 'normal') != 'normal':
                 raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
@@ -260,6 +260,10 @@ class MotionAccess:
                 raise ValueError('Gamepad owns motion; disable gamepad control first.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration / servo setup first.')
+            if kind == 'default_pose':
+                self._require_feedback(self.controller.status(), required_ids=(), resume_hold=True)
+                result = self.web_mode('hold')
+                return dict(status='completed', mode=result['mode'])
             if kind == 'walking_mode':
                 selected = values.get('walking_mode')
                 if selected not in ('walk', 'roller'):
@@ -627,13 +631,14 @@ class MotionAccess:
                 self.cancel('voice unavailable or motion disabled')
             elif self.controller.mode != 'policy':
                 self.cancel('controller left policy mode')
-            elif (not feedback_ready(status, required_ids) or
+            elif (status.get('fault_hold') or not feedback_ready(status, required_ids) or
                   (not command_link_ready(status) and not
                    (status.get('arming') and self.action and self.action['state'] == 'running'
                     and self.action['kind'] == 'stand'))):
                 if self.action and self.action.get('remote_controller'):
                     self.remember_remote(self.action['remote_controller'], 2**53)
-                self.cancel('Motion feedback / MCU command link lost. ' + feedback_problem(status, required_ids))
+                self.cancel('Motion paused with last targets held.' if status.get('fault_hold') else
+                            'Motion feedback / MCU command link lost. ' + feedback_problem(status, required_ids))
             elif (self.action and self.action['state'] == 'running' and self.action['kind'] != 'stand'
                   and status.get('enabled') is not True):
                 self.cancel('Motor enable feedback lost.')

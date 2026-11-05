@@ -22,13 +22,15 @@ from recovery import Recovery
 
 source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
+hold_reason = next(n for n in source.body if isinstance(n, ast.Assign)
+                   and getattr(n.targets[0], 'id', None) == 'FEEDBACK_HOLD_REASON')
 ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
           DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14, MOUTH_MIN_DEG=-3.,
           FACTORY_ZERO=[2047] * 15, collections=collections,
           EXCLUSIVE_MODES=('calibrate', 'servo_debug'),
           CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4,
           BATTERY_SAMPLE_MAX_AGE_S=.4)
-exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
+exec(compile(ast.Module(body=[hold_reason, cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
 
 
@@ -112,12 +114,40 @@ class WebControlTest(unittest.TestCase):
         self.assertEqual(self.command_mode(), wire.POLICY)
         self.assertEqual(self.c.inferred, 1)
 
-    def test_stale_sensor_feedback_disarms(self):
-        self.c.rx_time -= 1
+    def test_stale_sensor_feedback_holds_last_targets_until_explicit_resume(self):
+        self.c.mode = 'policy'
+        self.c.command(twist=[.1, 0., 0.])
         self.c.step()
-        self.assertEqual(self.c.mode, 'shadow')
+        self.assertEqual(self.command_mode(), wire.POLICY)
+        self.c.bridge.notify.reset_mock()
+        self.c.rx_time -= .16
+        self.c.step()
+        self.assertTrue(self.c.fault_hold)
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.twist, [0., 0., 0.])
+        self.c.bridge.notify.assert_not_called()
+        with self.assertRaisesRegex(ValueError, 'feedback is stale'):
+            self.c.set_mode('policy')
+
+        self.c.rx_time = time.monotonic()
+        self.assertIn('ignored', self.c.command(twist=[.1, 0., 0.]))
+        self.c.step()
+        self.assertTrue(self.c.fault_hold)
+        self.c.bridge.notify.assert_not_called()
+        self.c.set_mode('policy')
+        self.c.step()
+        self.assertFalse(self.c.fault_hold)
+        self.assertEqual(self.c.twist, [0., 0., 0.])
+        self.assertEqual(self.command_mode(), wire.POLICY)
+
+    def test_torque_off_still_disarms_during_stale_feedback(self):
+        self.c.rx_time -= .16
+        self.c.step()
+        self.assertTrue(self.c.fault_hold)
+        self.c.set_mode('off')
+        self.c.step()
+        self.assertFalse(self.c.fault_hold)
         self.assertEqual(self.command_mode(), wire.DISARM)
-        self.assertIn('sensor feedback lost', self.c.last_error)
 
     def test_invalid_imu_disarms(self):
         self.c.feedback.imu_ok = False

@@ -7,6 +7,7 @@ import asyncio
 import binascii
 import hashlib
 import os
+from pathlib import Path
 import re
 import subprocess
 
@@ -14,6 +15,17 @@ CTRL, DATA = 0, 1
 ACK, CONNECT, STATUS, SCAN = 0, 3, 5, 9
 SSID, PASSWORD, WIFI_STATE, WIFI_LIST, ERROR, CUSTOM = 2, 3, 15, 17, 18, 19
 ENCRYPTED, CHECKSUM, DIRECTION, REQUIRE_ACK, FRAGMENT = 1, 2, 4, 8, 16
+
+
+def read_board_serial_number(path=Path('/sys/devices/soc0/serial_number')):
+    """Read the low 24 bits of the UNO Q SoC serial as six uppercase hex digits."""
+    try:
+        serial = int(path.read_text(encoding='ascii'), 10)
+    except (OSError, ValueError):
+        return None
+    if 0 < serial <= 0xFFFFFFFF:
+        return f'{serial & 0xFFFFFF:06X}'
+    return None
 
 
 def identity_bytes(value):
@@ -202,8 +214,12 @@ class Wifi:
 
 
 class Session:
-    def __init__(self, identity, wifi, send, emit=lambda *_: None):
-        self.identity, self.wifi, self.send, self.emit = identity_bytes(identity), wifi, send, emit
+    def __init__(self, identity, wifi, send, emit=lambda *_: None, *, serial_number=None):
+        self.identity_payload = identity_bytes(identity)
+        if isinstance(serial_number, str) and re.fullmatch(r'[0-9A-F]{6}', serial_number):
+            # Version 2 adds six ASCII hex digits after the legacy MAC prefix.
+            self.identity_payload += b'\x02' + serial_number.encode('ascii')
+        self.wifi, self.send, self.emit = wifi, send, emit
         self.tasks = set()
         self.send_lock = asyncio.Lock()
         self.connect_timeout = 24  # The Mini Program/Web configuration timeout is 30 s.
@@ -311,7 +327,7 @@ class Session:
         async with self.send_lock:
             await self.notify_unlocked(DATA, WIFI_STATE, bytes([1, 0 if state['connected'] else 1, 0]))
             if state['connected']:
-                await self.notify_unlocked(DATA, CUSTOM, self.identity)
+                await self.notify_unlocked(DATA, CUSTOM, self.identity_payload)
 
     async def connect(self, ssid, password):
         self.emit('connecting', {})
@@ -327,7 +343,7 @@ class Session:
                     await self.notify_unlocked(DATA, WIFI_STATE, bytes([1, 0 if success else 1, 0]))
                     if success:
                         await asyncio.sleep(.1)
-                        await self.notify_unlocked(DATA, CUSTOM, self.identity)
+                        await self.notify_unlocked(DATA, CUSTOM, self.identity_payload)
             if success:
                 try:
                     await asyncio.wait_for(self.phone_done.wait(), 8)

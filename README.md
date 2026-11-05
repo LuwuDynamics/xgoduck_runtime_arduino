@@ -193,7 +193,9 @@ Later power-ups prepare USB Host and start the cockpit, chat and motion services
 | 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
 | 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
 
-After both sounds, say **“小鸭小鸭” (xiǎo yā, xiǎo yā)** to wake Duck, then speak after its wake-up duck call. You can also listen under **Link AI → Automatic startup & wake**. Examples play on your phone/computer; real startup sounds play through Duck’s speaker.
+If Duck is unpaired, it says “Please open the Duck cockpit to pair your device” three times after the network sound.
+
+After the voice service sound, say **“小鸭小鸭” (xiǎo yā, xiǎo yā)** to wake Duck, then speak after its wake-up duck call. You can also listen under **Link AI → Automatic startup & wake**. Examples play on your phone/computer; real startup sounds play through Duck’s speaker.
 
 ## Everyday use
 

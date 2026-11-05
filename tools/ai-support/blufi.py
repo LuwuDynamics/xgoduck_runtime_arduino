@@ -6,7 +6,7 @@ from pathlib import Path
 from dbus_next import BusType, DBusError
 from dbus_next.aio import MessageBus
 from dbus_next.service import ServiceInterface, method, dbus_property, PropertyAccess
-from provisioning import Session, Wifi, identity_bytes, run_command
+from provisioning import Session, Wifi, identity_bytes, read_board_serial_number, run_command
 
 BLUEZ = 'org.bluez'
 ADAPTER = '/org/bluez/hci0'
@@ -146,6 +146,7 @@ class Peripheral:
     def __init__(self, identity, wifi, emit):
         self.name = 'XGO-Duck' + identity_bytes(identity).hex()[-4:].upper()
         self.identity, self.wifi, self.emit = identity, wifi, emit
+        self.serial_number = read_board_serial_number()
         self.bus = self.adapter = self.session = None
         self.owner = None
         self.paths = []
@@ -169,7 +170,8 @@ class Peripheral:
                 await adapter.set_powered(True)
                 await adapter.set_alias(self.name)  # GAP 0x2A00, used by Web Bluetooth.
                 notify = Notify()
-                self.session = Session(self.identity, self.wifi, notify.send, self.emit)
+                self.session = Session(self.identity, self.wifi, notify.send, self.emit,
+                                       serial_number=self.serial_number)
                 notify.session = self.session
                 for path, obj in [(SERVICE, Service()), (SERVICE + '/write', Write(self.session)),
                                   (SERVICE + '/notify', notify), (AD, Advertisement(self.name))]:

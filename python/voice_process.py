@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import wave
 from voice_application import application_type
 from app_paths import DATA, PRIVATE, VENDOR, private_directory
 from voice_config import VoiceConfig
@@ -82,21 +83,28 @@ class Runtime:
         app = self.app
         if app is not None:
             player = getattr(app, 'duck_sounds', None)
-            if (not self.audio_ready or player is None or getattr(app, '_closing', False)
+            if (event == 'binding_required' or not self.audio_ready or player is None or getattr(app, '_closing', False)
                     or getattr(app, 'state', None) not in ('idle', 'listening')):
                 return False
             await player.play(kind, software_gain=gain)
             return True
-        if event != 'network': return False
-        # First-install networking feedback must work before account binding and
-        # cloud startup. Reuse Quack's PCM renderer and the existing audio gate;
-        # release ALSA completely before the chat codec starts.
+        if event not in ('network', 'binding_required'): return False
+        # The network cue and binding prompt also work with just a USB speaker.
+        # Release ALSA completely before the chat codec starts.
         def offline():
             from duck_sound import sound_pcm, amplify_sound
             cfg = self.config.get()
             output = select_audio(usb_audio_cards(), 'output', cfg['output_device'])
-            pcm = sound_pcm(kind, os.environ.get('DUCK_DEVICE_ID', 'XGO-Duck'), 0, 16000, cfg['output_gain_db'])
-            pcm = amplify_sound(pcm, gain, cfg['output_gain_db'])
+            sample_rate = 16000
+            if event == 'binding_required':
+                prompt = Path(__file__).with_name('assets') / f'bind-device-{cfg["language"]}.wav'
+                with wave.open(str(prompt), 'rb') as wav:
+                    pcm = wav.readframes(wav.getnframes())
+                pause = bytes(sample_rate)  # Half a second of mono PCM16.
+                pcm = pause.join([pcm] * 3)
+            else:
+                pcm = sound_pcm(kind, os.environ.get('DUCK_DEVICE_ID', 'XGO-Duck'), 0, sample_rate, cfg['output_gain_db'])
+                pcm = amplify_sound(pcm, gain, cfg['output_gain_db'])
             token = self.gate.acquire()
             try:
                 with self.bench.lock:
@@ -104,9 +112,9 @@ class Runtime:
                         return False
                     self.volume.apply()
                     subprocess.run(['aplay', '-q', '-D', f'plughw:{output["card"]},0',
-                                    '-t', 'raw', '-f', 'S16_LE', '-r', '16000', '-c', '1', '-'],
+                                    '-t', 'raw', '-f', 'S16_LE', '-r', str(sample_rate), '-c', '1', '-'],
                                    input=self.volume.pcm(pcm), stdout=subprocess.DEVNULL,
-                                   stderr=subprocess.PIPE, check=True, timeout=4)
+                                   stderr=subprocess.PIPE, check=True, timeout=max(4, len(pcm) / (sample_rate * 2) + 2))
                 return True
             finally:
                 self.gate.release(token)
@@ -306,9 +314,12 @@ class Runtime:
                 cloud_connected = bool(self.app is not None and self.app.bound is True
                     and getattr(getattr(self.app, 'protocol', None), '_mqtt_connected', False))
                 if cfg['enabled']:
-                    self.connection_sounds.poll(setup.get('wifi_connected'), cloud_connected)
+                    binding_required = (setup['state'] == 'awaiting_cloud_config'
+                                        or (setup['state'] == 'awaiting_binding' and setup.get('cached') is False))
+                    self.connection_sounds.poll(setup.get('wifi_connected'), cloud_connected,
+                                                binding_required=binding_required)
                 ready = (cfg['enabled'] and not self.gate.busy() and self.onboarding.ready
-                         and not (self.app is None and self.connection_sounds.network_busy))
+                         and not (self.app is None and self.connection_sounds.offline_busy))
                 if not ready and self.session is not None:
                     await self.stop_session()
                 if ready and (self.session is None or self.session.done()) and time.monotonic() >= self.next_attempt:

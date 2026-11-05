@@ -7,6 +7,7 @@ import threading
 from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
+import wave
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python'))
 from connection_sounds import ConnectionSounds
@@ -22,8 +23,8 @@ class ConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
         self.cues = ConnectionSounds(self.play, clock=lambda: self.now)
         self.addAsyncCleanup(self.cues.close)
 
-    async def poll(self, network, voice):
-        self.cues.poll(network, voice)
+    async def poll(self, network, voice, **setup):
+        self.cues.poll(network, voice, **setup)
         if self.cues.task: await self.cues.task
 
     async def test_real_success_is_ordered_once_per_runtime_and_not_repeated_on_poll_or_reconnect(self):
@@ -43,6 +44,18 @@ class ConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
         await self.poll(None, True)
         await self.poll(None, True)
         self.assertEqual([c.args[0] for c in self.play.call_args_list], ['network', 'voice_service'])
+
+    async def test_unbound_prompt_follows_network_and_plays_once_before_voice_ready(self):
+        await self.poll(False, False, binding_required=True)
+        self.play.assert_not_called()
+        await self.poll(True, False, binding_required=True)
+        self.assertEqual(self.cues.status()['completed'], ['network'])
+        await self.poll(True, False, binding_required=True)
+        await self.poll(True, False, binding_required=True)
+        await self.poll(True, True)
+        self.assertEqual(self.play.call_args_list, [unittest.mock.call('network', 'greet', 3.),
+                                                   unittest.mock.call('binding_required', 'speech', 1.),
+                                                   unittest.mock.call('voice_service', 'wheee', 3.)])
 
     async def test_missing_audio_retries_later_without_claiming_success(self):
         self.play.return_value = False
@@ -78,7 +91,7 @@ class ConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
         first = self.cues.task
         for _ in range(10): self.cues.poll(True, True)
         self.assertIs(self.cues.task, first)
-        self.assertTrue(self.cues.network_busy)
+        self.assertTrue(self.cues.offline_busy)
         await self.cues.close()
         self.assertTrue(first.cancelled())
         self.assertEqual(self.cues.status()['completed'], [])
@@ -121,6 +134,24 @@ class OfflineConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
                 await self.runtime.play_connection_sound('network', 'greet', 3.)
             run.assert_not_called()
         self.runtime.gate.acquire.assert_not_called()
+
+    async def test_binding_prompt_plays_three_times_in_configured_language_with_a_speaker_only(self):
+        self.runtime.config.update({'cloud_region': 'cn'})
+        for language in ('cn', 'en'):
+            with self.subTest(language=language):
+                self.runtime.config.update({'language': language})
+                path = Path(__file__).resolve().parents[1] / 'python/assets' / f'bind-device-{language}.wav'
+                with wave.open(str(path), 'rb') as wav:
+                    self.assertEqual((wav.getnchannels(), wav.getsampwidth(), wav.getframerate()), (1, 2, 16000))
+                    self.assertGreater(wav.getnframes(), 16000)
+                    pcm = wav.readframes(wav.getnframes())
+                with patch('voice_process.usb_audio_cards', return_value=self.cards), \
+                     patch('voice_process.subprocess.run') as run:
+                    self.assertTrue(await self.runtime.play_connection_sound('binding_required', 'speech', 1.))
+                pause = bytes(16000)
+                expected = pcm + pause + pcm + pause + pcm
+                self.assertEqual(run.call_args.kwargs['input'], expected)
+                self.assertGreater(run.call_args.kwargs['timeout'], len(expected) / 32000)
 
     async def test_voice_success_does_not_start_an_offline_stream(self):
         with patch('voice_process.subprocess.run') as run:

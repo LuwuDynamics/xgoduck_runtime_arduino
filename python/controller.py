@@ -24,6 +24,7 @@ LOW_BATTERY_CONFIRM_S = 1.
 BATTERY_REARM_CONFIRM_S = 2.
 BATTERY_WARNING_TIMEOUT_S = 12.0
 LEG_FEEDBACK_MASK = 0x3ff  # The first ten bits of the hardware servo order.
+FEEDBACK_HOLD_REASON = 'STM32 feedback timed out; motion paused, holding last targets'
 
 class Controller:
     def __init__(self, bridge):
@@ -105,6 +106,7 @@ class Controller:
         self.battery_warning = None
         self.battery_warning_done = threading.Event()
         self.mode = 'shadow'
+        self.fault_hold = False
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
         self.web_time = 0.0
@@ -198,6 +200,11 @@ class Controller:
     def _require_battery(self):
         if self.battery_phase != 'normal':
             raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
+
+    def _require_motion_available(self):
+        self._require_battery()
+        if self.fault_hold:
+            raise ValueError(FEEDBACK_HOLD_REASON)
 
     def _battery_step_locked(self, now):
         voltage = self._battery_voltage(now)
@@ -316,7 +323,7 @@ class Controller:
                 raise ValueError('stand up before switching to walk')
             if mode == 'policy' and self.kick_until:
                 raise ValueError('wait for kick to finish before switching to walk')
-            if mode == self.mode and mode != 'calibrate':
+            if mode == self.mode and mode != 'calibrate' and not self.fault_hold:
                 self.web_time = time.monotonic()
                 return {'mode': self.mode}
             if mode in ('hold', 'policy') and self.mode in EXCLUSIVE_MODES:
@@ -328,6 +335,7 @@ class Controller:
                 fb = self._require_feedback(0)
             previous = self.mode
             self.generation += 1; self.mode = mode
+            self.fault_hold = False
             self.recovery.reset(); self.policy_needs_reset = True
             self._stop_pick_locked(); self._stop_roulade_locked()
             self._stop_sitstand_locked()
@@ -470,7 +478,7 @@ class Controller:
         if side not in self.kick_policies:
             raise ValueError('kick side must be left or right')
         with self.lock:
-            self._require_battery()
+            self._require_motion_available()
             now = time.monotonic()
             if self.mode not in ('shadow', 'policy'):
                 raise ValueError('kick requires shadow/policy mode')
@@ -505,7 +513,7 @@ class Controller:
         if action not in ('sit', 'stand'):
             raise ValueError('sitstand action must be sit or stand')
         with self.lock:
-            self._require_battery()
+            self._require_motion_available()
             now = time.monotonic()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before sit/stand')
@@ -536,7 +544,7 @@ class Controller:
 
     def start_pick(self):
         with self.lock:
-            self._require_battery()
+            self._require_motion_available()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before pick')
             if self.sitstand_phase != 'idle':
@@ -558,7 +566,7 @@ class Controller:
 
     def start_roulade(self):
         with self.lock:
-            self._require_battery()
+            self._require_motion_available()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before roulade')
             if self.sitstand_phase != 'idle':
@@ -596,6 +604,8 @@ class Controller:
         with self.lock:
             if self.battery_phase != 'normal':
                 return {'ok': True, 'ignored': 'low battery protection'}
+            if self.fault_hold:
+                return {'ok': True, 'ignored': FEEDBACK_HOLD_REASON}
             if source != self.input_source:
                 return {'ok': True, 'ignored': 'inactive input source'}
             if self.mode in EXCLUSIVE_MODES:
@@ -742,9 +752,25 @@ class Controller:
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
             if mode in ('hold','policy'):
+                if not fb or age > .15:
+                    if not self.fault_hold:
+                        self.fault_hold = True
+                        self.arm_pending = False
+                        self.last_error = FEEDBACK_HOLD_REASON
+                        self.twist = [0.0]*3
+                        self._stop_pick_locked(); self._stop_roulade_locked()
+                        self._stop_sitstand_locked(); self._stop_kick_locked()
+                        print(f'[motion] {FEEDBACK_HOLD_REASON}; feedback age={age*1000:.0f} ms', flush=True)
+                    # In normal mode the MCU keeps the last target until it
+                    # receives another one or its own IMU/Bridge guard trips.
+                    return
                 lost = None
-                if not fb or age>.15 or not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
+                if not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
                     lost = 'sensor feedback lost; disarmed'
+                elif self.fault_hold:
+                    if fb.enabled:
+                        return
+                    lost = 'MCU released torque during the feedback pause'
                 elif time.monotonic()-self.web_time > 1.0:
                     # Browser inactivity stops travel without releasing torque.
                     self.twist = [0.0]*3
@@ -770,6 +796,8 @@ class Controller:
                     else:
                         self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
                     self._disarm_now()
+            if mode not in ('hold', 'policy'):
+                self.fault_hold = False
             twist, head, mouth = list(self.twist), list(self.head), self.mouth
             valid = bool(fb and age < .15 and fb.imu_ok and filt
                          and filt['imu_fusion_ready']
@@ -973,6 +1001,7 @@ class Controller:
                 inference_ms=summary(self.infer_ms), receive_interval_ms=summary(self.rx_intervals),
                 feedback_age_ms=(now-self.rx_time)*1000 if fb else None,
                 uptime_s=now-self.started, last_error=self.last_error, command=self.twist, input_source=self.input_source,
+                fault_hold=self.fault_hold and self.mode in ('hold', 'policy'), fault_hold_supported=True,
                 head=self.head, mouth=self.mouth, policy_targets=self.last_action, motors=MOTOR_IDS, boot_pd=self.boot_pd,
                 full_robot_ready=bool(fb and fb.imu_ok and fb.mask==ALL_MASK and now-self.rx_time<.15),
                 raw_pos=list(self.raw_pos), encoder_center=SERVO_CENTER_POS,

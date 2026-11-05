@@ -113,6 +113,22 @@
     "generator": "tools/build-speaker-test.py",
     "source": "Existing Apache-2.0 vendor/microduck_voice synthesizer; no network or additional runtime gain."
   },
+  "binding_prompt": {
+    "source": "Alibaba Cloud Model Studio speech synthesis.",
+    "model": "qwen-audio-3.1-tts-flash",
+    "voice": "XGO Duck custom voice",
+    "format": "16 kHz mono PCM16",
+    "cn": {
+      "asset": "python/assets/bind-device-cn.wav",
+      "text": "请打开小鸭驾驶舱，完成设备绑定。",
+      "sha256": "41632677a6dcf57d9a9823ff66c36135ce48a4e34a0133b3d49b8a28e329afbd"
+    },
+    "en": {
+      "asset": "python/assets/bind-device-en.wav",
+      "text": "Please open the Duck cockpit to pair your device.",
+      "sha256": "c25164881ea6765646577be0eaec63c94ed0b23cf72a6bbdba8ea7480fcc7478"
+    }
+  },
   "startup_previews": {
     "description": "Browser-local examples of the existing startup connection sounds; no playback, network-status or binding changes on Duck.",
     "generator": "tools/build-startup-previews.py",

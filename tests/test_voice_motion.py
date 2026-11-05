@@ -274,7 +274,61 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertLess(len(payload) + 512, 16000)  # Reserve topic, QoS and header.
         self.assertLessEqual(len(reply['result']['tools']), 60)
         self.assertIn('Duck.Stand', {t['name'] for t in reply['result']['tools']})
+        self.assertIn('Duck.DefaultPose', {t['name'] for t in reply['result']['tools']})
         self.assertIn('Duck.Quack', {t['name'] for t in reply['result']['tools']})
+
+    def test_mcp_default_pose_cancels_movement_and_selects_dashboard_hold_mode(self):
+        self.access.remote_allowed = lambda: True
+        remote = dict(remote=True, duration=.7, controller_id='phone-pose-01', sequence=1)
+        self.move(**remote)
+        self.c.rx_time = self.now
+        with patch.dict(fixture.ns, time=SimpleNamespace(monotonic=lambda: self.now)):
+            reply, data = self.call_mcp(self.mcp(), 'Duck.DefaultPose')
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(data['execution'], {'status': 'completed', 'mode': 'hold'})
+        self.assertEqual(self.c.mode, 'hold')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.access.action['state'], 'cancelled')
+        with self.assertRaisesRegex(ValueError, 'retired'):
+            self.move(**(remote | {'sequence': 2}))
+
+    def test_mcp_default_pose_requires_motion_permission_and_live_command_link(self):
+        self.c.mode, self.c.feedback.enabled = 'off', False
+        mcp = self.mcp()
+        self.allowed = False
+        reply, _ = self.call_mcp(mcp, 'Duck.DefaultPose')
+        self.assertTrue(reply['isError'])
+        self.assertIn('Voice motion disabled', reply['error'])
+        self.allowed = True
+        self.motion_status['mcu_watchdog'] = True
+        reply, _ = self.call_mcp(mcp, 'Duck.DefaultPose')
+        self.assertTrue(reply['isError'])
+        self.assertIn('MCU command link is stale', reply['error'])
+        self.assertEqual(self.c.mode, 'off')
+        self.assertFalse(self.c.arm_pending)
+        self.motion_status['mcu_watchdog'] = False
+        self.c.rx_time = self.now
+        with patch.dict(fixture.ns, time=SimpleNamespace(monotonic=lambda: self.now)):
+            reply, data = self.call_mcp(mcp, 'Duck.DefaultPose')
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(data['execution']['mode'], 'hold')
+        self.assertTrue(self.c.arm_pending)
+
+    def test_feedback_hold_cancels_active_motion_and_default_pose_resumes_explicitly(self):
+        self.move()
+        self.c.fault_hold = True
+        self.c.feedback.flags |= 32
+        self.access.tick()
+        self.assertEqual(self.access.action['state'], 'cancelled')
+        self.assertIn('last targets held', self.access.action['reason'])
+        self.motion_status['mcu_command_age_us'] = 500000
+        self.c.rx_time = self.now
+        with patch.dict(fixture.ns, time=SimpleNamespace(monotonic=lambda: self.now)):
+            reply, data = self.call_mcp(self.mcp(), 'Duck.DefaultPose')
+        self.assertFalse(reply['isError'], reply)
+        self.assertEqual(data['execution']['mode'], 'hold')
+        self.assertFalse(self.c.fault_hold)
+        self.assertEqual(self.c.twist, [0., 0., 0.])
 
     def test_mcp_status_reports_stale_command_link_and_actual_error(self):
         self.motion_status.update(mcu_watchdog=True, mcu_command_age_us=1000000)

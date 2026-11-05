@@ -46,6 +46,8 @@ class DuckThing(Thing):
         self.add_method('GetStatus', '查询当前/排队/最近动作、模型及避障；接受不等于完成。按action_feedback_ready/head_feedback_ready判断所需关节；feedback_warning不阻止所有动作', [], lambda _: self.state())
         self.add_method('Stand', '站起来/起立/站稳：进入零速平衡；坐下后通过坐站模型起立。先查GetStatus；权限关闭时请用户开启EnableVoiceMotion',
                         [], lambda _: self.action(kind='stand'))
+        self.add_method('DefaultPose', '仅在明确要求默认姿势时使用：使能并保持预设关节角（hold），需要运动权限和有效反馈',
+                        [], lambda _: self.action(kind='default_pose'))
         self.add_method('Forward', '普通前进/往前走用normal，默认0.1 m/s；用户明确快点/大点步/最快时用fast，最高0.15 m/s，不能用0.2/0.4。'
                         '明确慢走或指定数值用Move。默认3秒，最长10秒；accepted只代表接受，需GetStatus查结果，'
                         'ToF可减速或正常拦停，不自动重试；起立用Stand',

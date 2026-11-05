@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 import httpx
@@ -37,6 +38,18 @@ class HardwareClient:
             raise ValueError('Install the updated host hardware support.')
         return value
 
+    async def serial_number(self):
+        try:
+            response = await self.client.get('/serial-number')
+            response.raise_for_status()
+            value = response.json()
+        except (httpx.HTTPError, ValueError):
+            return None
+        serial = value.get('serial_number') if isinstance(value, dict) else None
+        if isinstance(serial, str) and re.fullmatch(r'[0-9A-F]{6}', serial):
+            return serial
+        return None
+
     async def advertise(self, enabled):
         response = await self.client.post('/provision', json={'enabled': enabled})
         response.raise_for_status()
@@ -46,7 +59,8 @@ class HardwareClient:
 
 
 class CloudProbe:
-    def __init__(self):
+    def __init__(self, hardware=None):
+        self.hardware = hardware
         self.client = httpx.AsyncClient(timeout=httpx.Timeout(8, connect=4), trust_env=False,
                                        follow_redirects=True)
 
@@ -63,10 +77,18 @@ class CloudProbe:
         body = dict(version=2, mac_address=device, uuid=client, chip_model_name='Arduino UNO Q',
             application=dict(name='xgoduck-ai', version=_read_app_version()),
             board=dict(type='XGO-Duck', name='XGO-Duck', mac=device))
+        serial = await self.hardware.serial_number() if self.hardware and url.startswith('https://') else None
+        if serial:
+            body['serial_number'] = serial
         async with asyncio.timeout(12):
             headers = dict(OtaManager(url)._headers())
             headers['Device-Id'] = device
-            response = await self.client.post(url, headers=headers, json=body)
+            # Keep the serial on the configured HTTPS endpoint. Redirected
+            # or plain HTTP requests use the legacy body.
+            response = await self.client.post(url, headers=headers, json=body, follow_redirects=not serial)
+            if serial and response.has_redirect_location:
+                del body['serial_number']
+                response = await self.client.post(url, headers=headers, json=body)
             response.raise_for_status()
             data = response.json()
         if not isinstance(data, dict) or data.get('code', 0) != 0 or data.get('msg'):
@@ -86,7 +108,8 @@ class CloudProbe:
 class Onboarding:
     def __init__(self, config, hardware=None, probe=None, state_dir=PRIVATE, clock=time.monotonic):
         self.config = config
-        self.hardware, self.probe = hardware or HardwareClient(), probe or CloudProbe()
+        self.hardware = hardware or HardwareClient()
+        self.probe = probe or CloudProbe(self.hardware)
         self.directory, self.clock = Path(state_dir), clock
         self.stop = asyncio.Event()
         self.context = None
@@ -114,7 +137,7 @@ class Onboarding:
                     return
                 self.bound = data['bound']
                 self.mqtt = mqtt if self.bound else {}
-                self.info['cached'] = self.bound
+                self.info['cached'] = True
         except (OSError, ValueError, KeyError, TypeError):
             pass
 
@@ -196,7 +219,7 @@ class Onboarding:
             except (OSError, ValueError, KeyError, TypeError, httpx.HTTPError, asyncio.TimeoutError) as exc:
                 # Preserve last known binding on connectivity errors. None is
                 # unknown, never evidence of either binding or an unbind.
-                self.info.update(cloud_error=type(exc).__name__, cached=self.bound is True)
+                self.info.update(cloud_error=type(exc).__name__, cached=self.bound is not None)
             self.probe_task = None
             self.next_probe = now + (30 if self.bound is True else 3)
         if connected is False or not url:
