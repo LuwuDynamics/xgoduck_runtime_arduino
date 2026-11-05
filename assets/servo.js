@@ -40,7 +40,7 @@ async function enter(signal){
   const deadline=Date.now()+1500;
   while(Date.now()<deadline){
     const s=await api('status',undefined,signal);
-    if(s.mode==='servo_debug'&&s.mcu_servo_debug&&s.feedback_age_ms!=null&&s.feedback_age_ms<500){
+    if(s.mode==='servo_debug'&&s.mcu_servo_debug&&s.enabled===false&&s.feedback_age_ms!=null&&s.feedback_age_ms<500){
       active=true;
       return;
     }
@@ -200,4 +200,13 @@ setInterval(async()=>{
   }catch(_){}
   finally{statusBusy=false;}
 },1000);
-lock(false);
+async function initialize(){
+  lock(true);
+  show('Entering servo setup and unloading all servos…');
+  try{
+    await enter();
+    show('All servos are unloaded. Scan for servos, then select an ID.');
+  }catch(e){show(e.message);}
+  finally{lock(false);}
+}
+initialize();

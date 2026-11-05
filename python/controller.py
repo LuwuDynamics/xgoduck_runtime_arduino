@@ -408,8 +408,6 @@ class Controller:
                 return {'mode': self.mode}
             if mode in ('hold', 'policy') and self.mode in EXCLUSIVE_MODES:
                 raise ValueError('exit calibrate/servo_debug first')
-            if mode == 'servo_debug' and self.mode in ('hold', 'policy'):
-                raise ValueError('disarm before calibrate/servo_debug')
             fb = None
             if mode in ('hold', 'policy'):
                 fb = self._require_feedback(0)
@@ -435,6 +433,7 @@ class Controller:
                 self.cal_reply_event.set()
                 self.bridge.notify('duck_cal', encode_cal(CAL_ENTER))
             elif mode == 'servo_debug':
+                # Opening setup stops motion before the MCU takes the servo bus.
                 self._disarm_now()
                 self.bridge.notify('duck_servo', encode_servo(SERVO_ENTER, 10))
             elif previous in EXCLUSIVE_MODES:

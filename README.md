@@ -37,6 +37,8 @@ reconnection leaves the robot unloaded until motion is explicitly enabled again.
 
 Connect **one servo at a time** when changing IDs.
 
+Opening **Servo setup** automatically unloads all servos, including from Default pose or Walk / get up. Scanning waits for the board to confirm setup mode with torque off. Leaving the page keeps the servos unloaded; enable motion again from Control when ready.
+
 1. Open **Servo setup**, click **Scan all IDs**, and select a result. **Stop scan** ends the scan early.
 2. To change its ID, enter the new number in **Change ID to** and click **Change ID**. Scan again to select the new ID.
 3. To view its settings, click **Read**.
