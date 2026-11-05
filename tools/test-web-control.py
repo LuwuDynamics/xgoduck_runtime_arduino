@@ -23,7 +23,7 @@ from recovery import Recovery
 source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
 ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
-          DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14,
+          DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14, MOUTH_MIN_DEG=-3.,
           FACTORY_ZERO=[2047] * 15, collections=collections,
           EXCLUSIVE_MODES=('calibrate', 'servo_debug'),
           CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4,

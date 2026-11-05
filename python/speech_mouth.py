@@ -5,67 +5,117 @@ import math
 import threading
 import time
 from motion_feedback import MOUTH_ID, feedback_ready, feedback_problem
+from rl_core import MOUTH_MIN_DEG
 
-MAX_DEGREES = 12.
+MAX_DEGREES = 30.
+MIN_DEGREES = MOUTH_MIN_DEG
+MAX_SPEED_DPS = 150.
+ANALYSIS_HZ = 100
+OUTPUT_HZ = 50
+WINDOWS_MS = (25, 120, 300)
+ONSET_GAIN = .7
+MEDIUM_GAIN = .35
+MOUTH_ADVANCE_S = .100
 
 
 class MouthEnvelope:
     def __init__(self):
-        self.angle = 0.
+        self.angle = MIN_DEGREES
         self.elapsed = 0.
-        self.energy = deque()
+        # Five-ms blocks retain exact samples at window edges, including the
+        # 25-ms window between 10-ms analysis ticks. No audio-callback work.
+        self.energy = deque(maxlen=61)
         self.windows = [0., 0., 0.]
-        self.rhythm = self.target = 0.
+        self.base = self.onset = self.medium_change = self.voice = 0.
+        self.target = MIN_DEGREES
+        self.rate = None
+        self.pending = array.array('h')
+        self.received = self.processed = self.bins = self.last_analysis = 0
+        self.analysis_updates = self.output_points = 0
 
     def _window_rms(self, seconds):
-        start = self.elapsed - seconds
-        power = duration = 0.
-        for end, dt, value in self.energy:
-            overlap = max(0., end - max(start, end - dt))
-            power += value * overlap
-            duration += overlap
-        return math.sqrt(power / duration) if duration else 0.
+        remaining = int(self.rate * seconds)
+        total = power = count = 0
+        for block, block_total, block_power in reversed(self.energy):
+            take = min(remaining, len(block))
+            if take < len(block):
+                tail = block[-take:]
+                block_total = sum(tail)
+                block_power = sum(v * v for v in tail)
+            total += block_total
+            power += block_power
+            count += take
+            remaining -= take
+            if not remaining:
+                break
+        # Keep the existing DC rejection; startup uses the available history.
+        variance = max(0., power / count - (total / count) ** 2) if count else 0.
+        return math.sqrt(variance) / 32768.
 
     def analyse(self, pcm, rate):
+        if not isinstance(rate, int) or isinstance(rate, bool) or rate < 200:
+            raise ValueError('invalid mouth PCM sample rate')
+        if self.rate != rate:
+            self.rate = rate
+            self.pending = array.array('h')
+            self.energy.clear()
+            self.received = self.processed = self.bins = self.last_analysis = 0
         samples = array.array('h', pcm)
-        window = max(1, int(rate * .02))
+        start = self.received
+        self.received += len(samples)
+        self.pending.extend(samples)
+        consumed = 0
         result = []
-        for offset in range(0, len(samples), window):
-            block = samples[offset:offset + window]
-            mean = sum(block) / len(block)
-            rms = math.sqrt(sum((x - mean) ** 2 for x in block) / len(block))
-            dt = len(block) / rate
+        while True:
+            size = (self.bins + 1) * rate // 200 - self.processed
+            if len(self.pending) - consumed < size:
+                break
+            block = self.pending[consumed:consumed + size]
+            consumed += size
+            self.processed += size
+            self.bins += 1
+            self.energy.append((block, sum(block), sum(v * v for v in block)))
+            if self.bins % 2:
+                continue
+            dt = (self.processed - self.last_analysis) / rate
+            self.last_analysis = self.processed
             self.elapsed += dt
-            self.energy.append((self.elapsed, dt, rms * rms))
-            while self.energy and self.energy[0][0] <= self.elapsed - .32:
-                self.energy.popleft()
-            medium, long = self._window_rms(.08), self._window_rms(.32)
-            self.windows = [rms, medium, long]
-            mixed = math.sqrt(.6 * rms * rms + .3 * medium * medium + .1 * long * long)
-            level = max(0., min(1., (20 * math.log10(max(1., mixed) / 32768) + 48) / 36))
-            # Relative energy changes retain syllable contrast even when loud
-            # TTS saturates the absolute level. Two gentle speech-rate rhythms
-            # prevent steady vowels from becoming a fixed open-mouth pose.
-            contrast = max(-1., min(1., (.75 * (rms - medium) + .25 * (medium - long)) / max(300., long)))
-            rhythm = .65 * math.sin(2 * math.pi * 3.2 * self.elapsed)
-            rhythm += .35 * math.sin(2 * math.pi * 5.1 * self.elapsed + .8)
-            self.rhythm = .62 + .38 * rhythm
-            crossings = sum((a >= mean) != (b >= mean) for a, b in zip(block, block[1:]))
-            brightness = min(1., crossings / max(1, len(block)) / .35)
-            target = (MAX_DEGREES * level ** .65 * (.9 + .1 * brightness) * self.rhythm
-                      + 2.8 * contrast * level + 2. * level) if rms >= 160 else 0.
-            self.target = target = max(0., min(MAX_DEGREES, target))
-            alpha = 1 - math.exp(-dt / (.035 if target > self.angle else .06))
-            change = max(-90 * dt, min(90 * dt, (target - self.angle) * alpha))
-            self.angle = max(0., min(MAX_DEGREES, self.angle + change))
-            if target == 0 and self.angle < .5:
-                self.angle = 0.
-            result.append((offset / rate, round(self.angle, 3)))
+            short, medium, long = (self._window_rms(ms / 1000) for ms in WINDOWS_MS)
+            self.windows = [short, medium, long]
+            self.base = min(1., medium / max(long, .015))
+            self.onset = max(0., min(1., (short - medium) / (.7 * max(medium, .015))))
+            self.medium_change = max(-1., min(1., (medium - long) / max(long, .015)))
+            self.voice = max(0., min(1., (short - .006) / .012))
+            opening = self.voice * max(0., min(1., .08 + .27 * self.base
+                + ONSET_GAIN * self.onset + MEDIUM_GAIN * self.medium_change))
+            self.target = target = MIN_DEGREES + (MAX_DEGREES - MIN_DEGREES) * opening
+            alpha = 1 - math.exp(-dt / (.025 if target > self.angle else .070))
+            limit = MAX_SPEED_DPS * dt
+            change = max(-limit, min(limit, (target - self.angle) * alpha))
+            self.angle = max(MIN_DEGREES, min(MAX_DEGREES, self.angle + change))
+            if target == MIN_DEGREES and self.angle - MIN_DEGREES < .5:
+                self.angle = MIN_DEGREES
+            self.analysis_updates += 1
+            if not self.bins % 4:
+                # End-of-window timestamps keep arbitrary PCM splits aligned
+                # with the DAC clock. Two analysis ticks form one output point.
+                result.append(((self.processed - start) / rate, round(self.angle, 3)))
+                self.output_points += 1
+        if consumed:
+            del self.pending[:consumed]
         return result
 
     def status(self):
-        return dict(windows_ms=[20, 80, 320], rms=[round(v, 1) for v in self.windows],
-                    rhythm=round(self.rhythm, 3), target_degrees=round(self.target, 3),
+        return dict(algorithm='three_rms', windows_ms=list(WINDOWS_MS),
+                    rms=[round(v * 32768, 1) for v in self.windows],
+                    rms_normalized=[round(v, 6) for v in self.windows],
+                    components=dict(base=round(self.base, 4), onset=round(self.onset, 4),
+                                    medium_change=round(self.medium_change, 4), voice=round(self.voice, 4)),
+                    analysis_hz=ANALYSIS_HZ, output_hz=OUTPUT_HZ, onset_gain=ONSET_GAIN,
+                    medium_gain=MEDIUM_GAIN,
+                    analysis_updates=self.analysis_updates, output_points=self.output_points,
+                    min_degrees=MIN_DEGREES, max_degrees=MAX_DEGREES, speed_limit_dps=MAX_SPEED_DPS,
+                    attack_ms=25, release_ms=70, target_degrees=round(self.target, 3),
                     angle_degrees=round(self.angle, 3))
 
 
@@ -122,8 +172,7 @@ class SpeechMouthPublisher:
         if self.controls:
             self._publish(self.controls.popleft(), [])
             return
-        # Board HTTP round trips can exceed one 60 ms audio frame. Coalesce
-        # adjacent frames and keep recent playback, never replay a stale backlog.
+        # Coalesce recent audio callbacks; never replay a stale backlog.
         while len(self.frames) > 2:
             self.frames.popleft()
             self.dropped += 1
@@ -142,11 +191,16 @@ class SpeechMouthPublisher:
                 self.envelope = MouthEnvelope()
                 self.analysis_context = context
             self.analysis_until = until
-            points.extend([audible_at + offset, angle] for offset, angle in self.envelope.analyse(pcm, rate))
+            points.extend([audible_at + offset - MOUTH_ADVANCE_S, angle]
+                          for offset, angle in self.envelope.analyse(pcm, rate))
         # Only the scheduled portion still ahead of actual playback is useful.
-        points = [p for p in points if p[0] >= self.clock()][-8:]
-        if points and context == self.context:
-            self._publish(context, points)
+        for offset in range(0, len(points), 8):
+            if context != self.context:
+                break
+            now = self.clock()
+            fresh = [p for p in points[offset:offset + 8] if p[0] >= now]
+            if fresh:
+                self._publish(context, fresh)
 
     def start(self):
         def run():
@@ -164,7 +218,8 @@ class SpeechMouthPublisher:
         return dict(speaking=self.context is not None, queued_frames=len(self.frames),
                     published_packets=self.published, ipc_errors=self.errors,
                     dropped_frames=self.dropped, last_error=self.last_error,
-                    last_lead_ms=list(self.last_lead_ms), motion=self.last_result,
+                    last_lead_ms=list(self.last_lead_ms), advance_ms=MOUTH_ADVANCE_S * 1000,
+                    motion=self.last_result,
                     envelope=self.envelope.status())
 
     def close(self):
@@ -189,7 +244,7 @@ class SpeechMouthMotion:
         c = self.controller
         if (restore and self.baseline is not None and not c.pick_active
                 and c.mouth == self.applied):
-            c.mouth = self.baseline
+            c.mouth = MIN_DEGREES if self.baseline == 0. else self.baseline
         self.baseline = self.applied = None
         self.pending.clear()
         self.deadline = 0.
@@ -218,7 +273,7 @@ class SpeechMouthMotion:
                 raise ValueError('invalid speech mouth point')
             at, degrees = point
             if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v)
-                   for v in point) or not 0 <= degrees <= MAX_DEGREES or not now - .2 <= at <= now + 1.2:
+                   for v in point) or not MIN_DEGREES <= degrees <= MAX_DEGREES or not now - .2 <= at <= now + 1.2:
                 raise ValueError('speech mouth point out of bounds')
             if checked and at < checked[-1][0]:
                 raise ValueError('speech mouth points out of order')

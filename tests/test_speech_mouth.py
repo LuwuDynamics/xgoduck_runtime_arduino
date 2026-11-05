@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
-from speech_mouth import MAX_DEGREES, MouthEnvelope, SpeechMouthPublisher
+from speech_mouth import MIN_DEGREES, MAX_DEGREES, MouthEnvelope, SpeechMouthPublisher
 from local_ipc import JsonServer, request
 from voice_application import application_type
 import test_voice_motion as motion_fixture
@@ -25,72 +25,124 @@ def tone(amplitude=6000, seconds=.6, frequency=300, rate=16000):
 class MouthEnvelopeTest(unittest.TestCase):
     def test_silence_dc_and_low_noise_stay_closed(self):
         for pcm in (bytes(1920), array.array('h', [12000] * 960).tobytes(), tone(100)):
-            self.assertTrue(all(angle == 0 for _, angle in MouthEnvelope().analyse(pcm, 16000)))
+            self.assertTrue(all(angle == MIN_DEGREES for _, angle in MouthEnvelope().analyse(pcm, 16000)))
 
-    def test_loudness_brightness_and_slew_are_bounded(self):
+    def test_loudness_and_slew_are_bounded_without_artificial_frequency_motion(self):
         quiet = MouthEnvelope().analyse(tone(500), 16000)
         loud = MouthEnvelope().analyse(tone(20000), 16000)
         bright = MouthEnvelope().analyse(tone(20000, frequency=3000), 16000)
         self.assertGreater(loud[-1][1], quiet[-1][1])
-        self.assertGreater(bright[-1][1], loud[-1][1])
-        angles = [0.] + [angle for _, angle in bright]
-        self.assertTrue(all(0 <= v <= MAX_DEGREES for v in angles))
-        self.assertLessEqual(max(abs(b - a) for a, b in zip(angles, angles[1:])), 1.801)
+        self.assertAlmostEqual(bright[-1][1], loud[-1][1], delta=.05)
+        angles = [MIN_DEGREES] + [angle for _, angle in loud]
+        self.assertTrue(all(MIN_DEGREES <= v <= MAX_DEGREES for v in angles))
+        changes = [abs(b-a) for a,b in zip(angles, angles[1:])]
+        self.assertAlmostEqual(max(changes), 3., places=3)
+        self.assertLessEqual(max(changes), 3.001)
 
     def test_silence_releases_smoothly_to_closed(self):
         envelope = MouthEnvelope()
         before = envelope.analyse(tone(), 16000)[-1][1]
         decay = [v for _, v in envelope.analyse(bytes(32000), 16000)]
-        self.assertLess(decay[0], before)
-        self.assertEqual(decay[-1], 0)
-        self.assertEqual(decay, sorted(decay, reverse=True))
+        self.assertLessEqual(decay[0], before + .001)
+        self.assertEqual(decay[-1], MIN_DEGREES)
+        self.assertEqual(decay[2:], sorted(decay[2:], reverse=True))
 
-    def test_sustained_loud_speech_keeps_visible_open_close_motion_after_attack(self):
+    def test_sustained_voice_returns_to_35_percent_without_a_fixed_rhythm(self):
         for amplitude in (6000, 20000):
             with self.subTest(amplitude=amplitude):
-                points = MouthEnvelope().analyse(tone(amplitude, seconds=5.), 16000)
+                points = MouthEnvelope().analyse(tone(amplitude, seconds=2.), 16000)
                 steady = [v for t, v in points if t >= .5]
-                self.assertGreater(max(steady) - min(steady), 4.)
-                self.assertLess(min(steady), 7.5)
-                self.assertGreater(sum(steady) / len(steady), 7.5)
-                self.assertGreater(max(steady), 10.)
-                self.assertLessEqual(max(steady), MAX_DEGREES)
-                self.assertLessEqual(max(abs(b-a) for a,b in zip(steady, steady[1:])), 1.801)
+                self.assertLess(max(steady) - min(steady), .05)
+                self.assertAlmostEqual(sum(steady)/len(steady), 8.55, delta=.05)
 
-    def test_short_medium_long_energy_detect_syllable_edges_but_silence_closes(self):
+    def test_syllable_onset_opens_more_and_silence_does_not_use_long_window_energy(self):
         envelope = MouthEnvelope()
         envelope.analyse(tone(1500, seconds=.32), 16000)
-        envelope.analyse(tone(12000, seconds=.02), 16000)
+        baseline = envelope.angle
+        envelope.analyse(tone(12000, seconds=.03), 16000)
         short, medium, long = envelope.windows
         self.assertGreater(short, medium)
         self.assertGreater(medium, long)
-        self.assertEqual(envelope.status()['windows_ms'], [20, 80, 320])
-        envelope.analyse(bytes(640), 16000)
+        self.assertGreater(envelope.onset, 0)
+        self.assertGreater(envelope.target, baseline)
+        self.assertEqual(envelope.status()['windows_ms'], [25, 120, 300])
+        envelope.analyse(bytes(1280), 16000)
         self.assertEqual(envelope.windows[0], 0)
         self.assertGreater(envelope.windows[2], 0)
-        self.assertEqual(envelope.target, 0)  # Long energy cannot keep a pause open.
+        self.assertEqual(envelope.target, MIN_DEGREES)
         closed = envelope.analyse(bytes(32000), 16000)
-        self.assertEqual(closed[-1][1], 0)
-        self.assertLessEqual(len(envelope.energy), 17)
+        self.assertEqual(closed[-1][1], MIN_DEGREES)
+        self.assertLessEqual(len(envelope.energy), 61)
 
-    def test_audio_frame_boundaries_preserve_energy_and_rhythm_continuity(self):
-        pcm = tone(6000, seconds=3.)
-        whole = [v for _,v in MouthEnvelope().analyse(pcm, 16000)]
+    def test_arbitrary_pcm_splits_preserve_exact_angles_and_dac_offsets(self):
+        pcm = tone(6000, seconds=1.)
+        whole = MouthEnvelope().analyse(pcm, 16000)
         envelope = MouthEnvelope()
-        streamed = []
-        for offset in range(0,len(pcm),1920):
-            streamed.extend(v for _,v in envelope.analyse(pcm[offset:offset+1920],16000))
-        self.assertEqual(streamed, whole)
+        streamed, offset, index = [], 0, 0
+        sizes = [34, 286, 802, 38, 1920, 126]
+        while offset < len(pcm):
+            part = pcm[offset:offset + sizes[index % len(sizes)]]
+            streamed.extend((offset/32000+t, v) for t,v in envelope.analyse(part, 16000))
+            offset += len(part); index += 1
+        self.assertEqual([v for _,v in streamed], [v for _,v in whole])
+        for (a,_),(b,_) in zip(whole,streamed): self.assertAlmostEqual(a,b,places=10)
+        self.assertEqual(envelope.analysis_updates, 100)
+        self.assertEqual(envelope.output_points, 50)
+        self.assertEqual(len(envelope.pending), 0)
 
-    def test_supported_pcm_rates_have_same_speech_timing_and_bounded_motion(self):
+    def test_supported_pcm_rates_analyse_at_100hz_and_output_at_50hz(self):
         shapes = []
-        for rate in (8000,16000,24000,48000):
-            points = MouthEnvelope().analyse(tone(6000,seconds=2.,rate=rate),rate)
+        for rate in (8000,16000,24000,44100,48000):
+            envelope = MouthEnvelope()
+            points = envelope.analyse(tone(6000,seconds=2.,rate=rate),rate)
             self.assertEqual(len(points),100)
-            self.assertTrue(all(0<=v<=MAX_DEGREES for _,v in points))
+            self.assertEqual(envelope.analysis_updates,200)
+            self.assertAlmostEqual(points[0][0],.02)
+            self.assertAlmostEqual(points[-1][0],2.)
+            self.assertTrue(all(MIN_DEGREES<=v<=MAX_DEGREES for _,v in points))
             shapes.append([v for _,v in points])
         for other in shapes[1:]:
-            self.assertLess(max(abs(a-b) for a,b in zip(shapes[0],other)),.25)
+            self.assertLess(max(abs(a-b) for a,b in zip(shapes[0],other)),.05)
+
+    def test_windows_match_sample_accurate_dc_removed_rms(self):
+        rate=44100
+        values=array.array('h',(int(500+(.2 if n<11025 else .5)*9000*math.sin(2*math.pi*237*n/rate)) for n in range(22050)))
+        envelope=MouthEnvelope()
+        for start in range(0,len(values),441):
+            block=values[start:start+441]; envelope.analyse(block.tobytes(),rate)
+            for ms,actual in zip((25,120,300),envelope.windows):
+                tail=values[max(0,start+len(block)-int(rate*ms/1000)):start+len(block)]
+                mean=sum(tail)/len(tail)
+                expected=math.sqrt(sum((v-mean)**2 for v in tail)/len(tail))/32768
+                self.assertAlmostEqual(actual,expected,places=12)
+
+    def test_normalized_voice_gate_and_base_coefficients(self):
+        for rms in (.004,.012,.024):
+            sample=round(rms*32768)
+            pcm=array.array('h',[sample,-sample]*8000).tobytes()
+            envelope=MouthEnvelope();envelope.analyse(pcm,16000)
+            energy=sample/32768
+            voice=max(0,min(1,(energy-.006)/.012))
+            base=min(1,energy/max(energy,.015))
+            expected=MIN_DEGREES+(MAX_DEGREES-MIN_DEGREES)*voice*(.08+.27*base)
+            self.assertAlmostEqual(envelope.target,expected,places=10)
+            self.assertAlmostEqual(envelope.angle,expected,delta=.02)
+            self.assertEqual(envelope.onset,0)
+
+    def test_manual_negative_close_target_is_allowed_only_for_the_mouth(self):
+        f=motion_fixture.VoiceMotionTest();f.setUp()
+        before=list(f.c.head),list(f.c.twist)
+        f.c.command(mouth=-3.)
+        self.assertEqual(f.c.mouth,-3.)
+        self.assertEqual((f.c.head,f.c.twist),before)
+        with self.assertRaises(ValueError):f.c.command(mouth=-3.01)
+
+    def test_sample_rate_change_discards_partial_pcm_without_angle_jumps(self):
+        envelope=MouthEnvelope();envelope.analyse(tone(seconds=.061),16000)
+        previous=envelope.angle
+        points=envelope.analyse(tone(seconds=.02,rate=48000),48000)
+        self.assertEqual(len(points),1)
+        self.assertLessEqual(abs(points[0][1]-previous),3.001)
 
 
 class MouthPublisherTest(unittest.TestCase):
@@ -106,8 +158,27 @@ class MouthPublisherTest(unittest.TestCase):
         self.p.process_once()
         body = self.send.call_args.args[0]
         self.assertEqual((body['session'], body['utterance']), (101, 1))
-        self.assertEqual([round(t, 2) for t, _ in body['points']], [100.54, 100.56, 100.58])
+        self.assertEqual([round(t, 2) for t, _ in body['points']], [100.46, 100.48, 100.50])
         self.assertGreater(body['points'][-1][1], 0)
+
+    def test_large_audio_callbacks_split_ipc_packets_without_discarding_points(self):
+        self.p.begin(101)
+        self.p.observe(tone(seconds=.18),16000,100.54)
+        self.p.process_once()
+        bodies=[call.args[0] for call in self.send.call_args_list]
+        self.assertEqual([len(b['points']) for b in bodies],[8,1])
+        points=[point for b in bodies for point in b['points']]
+        self.assertEqual(len(points),9)
+        self.assertEqual([round(t,2) for t,_ in points],[round(100.46+i*.02,2) for i in range(9)])
+
+    def test_partial_pcm_callbacks_share_the_same_output_clock(self):
+        self.p.begin(101)
+        pcm=tone(seconds=.06)
+        self.p.observe(pcm[:224],16000,100.54)
+        self.p.process_once();self.send.assert_not_called()
+        self.p.observe(pcm[224:],16000,100.547)
+        self.p.process_once()
+        self.assertEqual([round(t,3) for t,_ in self.send.call_args.args[0]['points']],[100.46,100.48,100.50])
 
     def test_idle_audio_is_ignored_and_pending_audio_is_bounded(self):
         self.p.observe(tone(), 16000, 100.)
@@ -133,6 +204,7 @@ class MouthPublisherTest(unittest.TestCase):
         self.p.begin(101)
         self.p.observe(tone(), 16000, 100.)
         self.p.process_once()
+        previous_sequence = self.p.sequence
         self.p.begin(101)
         self.p.observe(tone(seconds=.06), 16000, 101.)
         self.p.process_once()
@@ -140,13 +212,13 @@ class MouthPublisherTest(unittest.TestCase):
         self.p.process_once()
         body = self.send.call_args.args[0]
         self.assertEqual(body['utterance'], 2)
-        self.assertEqual(body['sequence'], 3)
-        self.assertLessEqual(body['points'][0][1], 1.8)
+        self.assertEqual(body['sequence'], previous_sequence + 2)
+        self.assertLessEqual(body['points'][0][1], 3.0)
 
     def test_failed_ipc_does_not_escape_audio_path(self):
         self.p.begin(101)
         self.send.side_effect = OSError('motion unavailable')
-        self.p.observe(tone(seconds=.06), 16000, 100.)
+        self.p.observe(tone(seconds=.06), 16000, 100.2)
         self.p.process_once()
         self.assertEqual(self.p.status()['ipc_errors'], 1)
         self.assertEqual(self.p.status()['last_error'], 'motion unavailable')
@@ -161,7 +233,7 @@ class MouthPublisherTest(unittest.TestCase):
         self.p.process_once()
         body = self.send.call_args.args[0]
         self.assertEqual(len(body['points']), 6)
-        self.assertAlmostEqual(body['points'][0][0], 100.36)
+        self.assertAlmostEqual(body['points'][0][0], 100.28)
         self.assertEqual(self.p.dropped, 6)
         self.p.observe(tone(seconds=.06), 16000, 99.9)
         self.p.process_once()
@@ -208,6 +280,19 @@ class MouthMotionTest(unittest.TestCase):
         self.sequence += 1
         return self.access.speech(session, utterance, self.sequence,
                                   [[self.f.now + .1, 6.]] if points is None else points)
+
+    def test_50hz_consumer_compensates_its_processing_time(self):
+        self.access.tick=Mock()
+        self.access.tick_speech=Mock()
+        self.access.stop_event=Mock()
+        self.access.stop_event.is_set.return_value=False
+        self.access.stop_event.wait.side_effect=[False,False,True]
+        with patch('motion_access.threading.Thread') as thread, patch('motion_access.time.monotonic',side_effect=[100.,100.003,100.023,100.043]):
+            self.access.start()
+            thread.call_args.kwargs['target']()
+        self.assertEqual(self.access.tick_speech.call_count,3)
+        self.access.tick.assert_not_called()
+        for call in self.access.stop_event.wait.call_args_list:self.assertAlmostEqual(call.args[0],.017,places=9)
 
     def test_future_dac_points_apply_at_due_time_and_restore_previous_target(self):
         self.c.mouth = 2.
@@ -284,7 +369,7 @@ class MouthMotionTest(unittest.TestCase):
         self.assertEqual(self.c.input_source, 'voice')
         self.assertEqual(before, (self.access.action, self.access.pending))
         self.submit([])
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
         self.assertEqual(self.c.twist, [.2, 0, 0])
         self.assertEqual(before, (self.access.action, self.access.pending))
 
@@ -299,7 +384,7 @@ class MouthMotionTest(unittest.TestCase):
         self.assertFalse(self.c.arm_pending)
         self.f.motion_status['missing_joint_ids'] = [34]
         self.f.advance(.05)
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
         self.assertIn('34 号舵机', self.access.speech_mouth.status()['reason'])
         self.assertFalse(self.access.speech_mouth.status()['active'])
 
@@ -355,19 +440,19 @@ class MouthMotionTest(unittest.TestCase):
         self.submit()
         self.f.advance(.15)
         self.submit([])
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
         self.assertFalse(self.submit()['ok'])
         with self.assertRaisesRegex(ValueError, 'retired'):
             self.access.speech(101, 1, 1, [[self.f.now, 12.]])
         self.f.advance(.1)
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
 
     def test_missing_heartbeat_and_new_session_restore_mouth_and_reject_old_audio(self):
         self.submit()
         self.f.advance(.15)
         self.f.now += 1.
         self.access.tick()
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
         with self.assertRaisesRegex(ValueError, 'heartbeat'):
             self.submit()
         self.access.heartbeat(102)
@@ -378,11 +463,11 @@ class MouthMotionTest(unittest.TestCase):
         self.access.tick()
         self.assertEqual(self.c.mouth, 6.)
         self.access.close()
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
 
     def test_bad_point_packets_are_rejected_atomically(self):
         now = self.f.now
-        invalid = [None, {}, [[now, True]], [[now, -1]], [[now, 12.01]], [[now, float('nan')]],
+        invalid = [None, {}, [[now, True]], [[now, MIN_DEGREES-.01]], [[now, MAX_DEGREES + .01]], [[now, float('nan')]],
                    [[float('inf'), 1]], [[now + 1.21, 1]], [[now - .21, 1]],
                    [[now, 1, 2]], [[now + .1, 2], [now, 1]], [[now, 1]] * 9]
         for points in invalid:
@@ -394,6 +479,13 @@ class MouthMotionTest(unittest.TestCase):
         for utterance, sequence in ((True, 1), (1, True), (0, 1), (1, 0), (1., 1), (1, 2**53)):
             with self.assertRaises(ValueError):
                 self.access.speech(101, utterance, sequence, [[now, 1]])
+
+    def test_full_speech_mouth_range_applies_without_enabling_the_body(self):
+        for angle in (MIN_DEGREES, 0., 15., 30.):
+            self.submit([[self.f.now + .05, angle]])
+            self.f.advance(.06)
+            self.assertEqual(self.c.mouth, angle)
+            self.assertFalse(self.c.arm_pending)
 
     def test_authenticated_ipc_drives_timing_without_body_action(self):
         server = JsonServer(0, 'fixture', lambda method, path, body: self.access.speech(**body))
@@ -408,7 +500,7 @@ class MouthMotionTest(unittest.TestCase):
         self.assertEqual(self.c.mouth, 7.)
         body.update(sequence=2, points=[])
         request(port, 'fixture', '/speech-mouth', body)
-        self.assertEqual(self.c.mouth, 0.)
+        self.assertEqual(self.c.mouth, MIN_DEGREES)
         self.assertIsNone(self.access.action)
 
 

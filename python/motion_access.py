@@ -7,7 +7,7 @@ import threading
 import time
 import uuid
 from recovery import Recovery
-from speech_mouth import SpeechMouthMotion
+from speech_mouth import OUTPUT_HZ, SpeechMouthMotion
 from motion_feedback import (LEG_IDS, HEAD_IDS, MOUTH_ID, SERVO_IDS,
                              feedback_ready, feedback_problem)
 
@@ -52,6 +52,7 @@ class MotionAccess:
         self.cancelled_at = float('-inf')
         self.stop_event = threading.Event()
         self.thread = None
+        self.speech_thread = None
         self.speech_mouth = SpeechMouthMotion(controller, command_link_ready, clock)
         self.standing_since = None
         self.standing_observed = float('-inf')
@@ -589,19 +590,28 @@ class MotionAccess:
             # release a standing biped's torque. Explicit TorqueOff still does.
             return {'ok': True}
 
-    def tick(self):
+    def _tick_speech_locked(self, status):
+        if self.voice_session is None or self.clock() - self.voice_seen > .8:
+            self.speech_mouth.override('voice unavailable')
+        elif (self.action and self.action['state'] == 'running'
+              and self.action['kind'] in ('mouth', 'pick', 'roulade', 'stand', 'sit', 'left_kick', 'right_kick')):
+            self.speech_mouth.override('explicit action owns mouth')
+        else:
+            self.speech_mouth.tick(status)
+
+    def tick_speech(self):
+        with self.lock:
+            if self.speech_mouth.deadline:
+                self._tick_speech_locked(self.controller.status())
+
+    def tick(self, *, speech=True):
         with self.lock:
             status = self.controller.status()
             self._interrupt_obstructed_forward(status)
             running = self.action and self.action['state'] == 'running'
             required_ids = self.action.get('required_joint_ids', LEG_IDS) if running else ()
-            if self.voice_session is None or self.clock() - self.voice_seen > .8:
-                self.speech_mouth.override('voice unavailable')
-            elif (self.action and self.action['state'] == 'running'
-                  and self.action['kind'] in ('mouth', 'pick', 'roulade', 'stand', 'sit', 'left_kick', 'right_kick')):
-                self.speech_mouth.override('explicit action owns mouth')
-            else:
-                self.speech_mouth.tick(status)
+            if speech:
+                self._tick_speech_locked(status)
             movement = self.movement_state(status, ongoing=self._locomotion_running())
             if self.controller.input_source != 'voice':
                 if self.pending or (self.action and self.action['state'] == 'running'):
@@ -657,17 +667,38 @@ class MotionAccess:
         def run():
             while not self.stop_event.wait(.05):
                 try:
-                    self.tick()
+                    self.tick(speech=False)
                 except Exception as exc:
                     print('[motion-access]', exc, flush=True)
                     self.cancel('motion control failed')
+
+        def run_speech():
+            period = 1. / OUTPUT_HZ
+            deadline = time.monotonic()
+            while not self.stop_event.is_set():
+                try:
+                    self.tick_speech()
+                except Exception as exc:
+                    print('[speech-mouth]', exc, flush=True)
+                    with self.lock:
+                        self.speech_mouth.override('mouth update failed')
+                deadline += period
+                now = time.monotonic()
+                if deadline <= now:
+                    deadline = now + period
+                if self.stop_event.wait(deadline - now):
+                    break
         self.thread = threading.Thread(target=run, name='voice-motion-lease', daemon=True)
+        self.speech_thread = threading.Thread(target=run_speech, name='speech-mouth50', daemon=True)
         self.thread.start()
+        self.speech_thread.start()
 
     def close(self):
         self.stop_event.set()
         if self.thread:
             self.thread.join(timeout=2)
+        if self.speech_thread:
+            self.speech_thread.join(timeout=2)
         self.cancel('app stopped')
         with self.lock:
             self.speech_mouth.reset()

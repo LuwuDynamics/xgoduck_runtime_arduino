@@ -53,17 +53,17 @@
     "assets/servo.html": "5c7c6893eae4eb7cca4f37d7703c692186577ecd5c1394e86314242baf0e6eb2",
     "assets/servo.js": "5f9e5071a173ae8d27263173361bbf7bbf564490a49dc33f6603c00470873104",
     "assets/style.css": "45cace22f84a3e0b2465a81dd3e4e9fac0da2cb9f3869ae50bad1810d0652f98",
-    "python/controller.py": "4ebb2838397ff7fa7531b9d2ba3698f30ff3a6ebd86c05d28fb33aea22f8aac5",
+    "python/controller.py": "89f5856101b332e5e6e8c5ac0823a6c9b5223ccf0b006e5a15a1323f7a9ce229",
     "python/duck_thing.py": "e8ed555cbafba101d321f735902db3bcc63d8d445017138da0fb217bc60b7953",
     "python/gamepad.py": "232f679043d8cf76d5844db40e866b9962e224ecad58b1fcfaba40ad1227c525",
     "python/main.py": "be53e51f23cdac062da6cd9e00ddba81ce3a0ea4e57524f56d18d7f36d643ce5",
-    "python/motion_access.py": "fd812cb8109477860ad3e784437c86b348a0ca802e26e9eb72aa07930bfb0e11",
+    "python/motion_access.py": "6177a7914e96611ba76734efe384567c0b2a27184c1ee7a66f8b02399c47bae5",
     "python/motion_calibration.py": "9253d9caf0b84fdc2f65839545a26abd2f73116146b6c355b2f2408a966226b8",
     "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
     "python/proc.py": "54a89a001dc2c66030a3741978779f0095921812ea3f47e3be9fcdf4edc115ba",
     "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
-    "python/rl_core.py": "6710b0a7fd791cf5c4879f20f47df3771629dd0093158f2200a9964990aafa6c",
-    "python/speech_mouth.py": "48b84890281956e0f4d0626ca327ddffba4f10040c3c0c693de602d024f7b4ee",
+    "python/rl_core.py": "03c0cd010a341aa5023252e1b693c003e0844340b6a0720340247d98650eb854",
+    "python/speech_mouth.py": "813c62ff56ed9262f57104ddb6fe8833d96d0dea88e97e0f54b81c9c54c17daa",
     "python/wire.py": "a8f1508578b73fae3d3e55cfd4a60169221a99d3c7bb5e7ec723222910d7926b",
     "python/xgoduck_ballkick_left.onnx": "a64d35e9eef18a8b4851c0ae64323c0aabf9f26c8e64100b9a5100e01417f8c9",
     "python/xgoduck_ballkick_right.onnx": "c173b2f076552a9a1d6672cdcc627e5a153804ff3aca1a07b23b481f83b319b1",
@@ -101,7 +101,6 @@
     "python/policy.py",
     "python/proc.py",
     "python/recovery.py",
-    "python/rl_core.py",
     "python/xgoduck_ballkick_left.onnx",
     "python/xgoduck_ballkick_right.onnx",
     "python/xgoduck_getup.onnx",
@@ -471,6 +470,21 @@
         "text": "My battery is low. Please turn me off and charge me. Remember to turn me off before charging. I’m about to release my joints.",
         "sha256": "88eab74bbbd9a9eba7d333f56df4bbd2e219a89fe2c58940988da6bea9374487"
       }
+    }
+  },
+  "speech_mouth_overlay": {
+    "description": "Speech-mouth RMS updates, 100 Hz analysis and 50 Hz output, -3 to 30 degree range, 150 degrees/s limit and 100 ms DAC advance. Walking model calculations remain pinned to the upstream source after removing only the declared mouth overlays.",
+    "source_overlays": {
+      "python/rl_core.py": [
+        {
+          "integrated": "MOUTH_MIN_DEG = -3.0\n",
+          "upstream": ""
+        },
+        {
+          "integrated": "np.clip(mouth_deg, MOUTH_MIN_DEG, MOUTH_MAX_DEG)",
+          "upstream": "np.clip(mouth_deg, 0.0, MOUTH_MAX_DEG)"
+        }
+      ]
     }
   }
 }

@@ -62,6 +62,14 @@ class BaselineTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(),
                                  manifest['source']['sha256'][name])
+        for name, overlays in manifest.get('speech_mouth_overlay', {}).get('source_overlays', {}).items():
+            with self.subTest(mouth_overlay=name):
+                source = (ROOT / name).read_text()
+                for overlay in overlays:
+                    self.assertEqual(source.count(overlay['integrated']), 1)
+                    source = source.replace(overlay['integrated'], overlay['upstream'])
+                self.assertEqual(hashlib.sha256(source.encode()).hexdigest(),
+                                 manifest['source']['sha256'][name])
         node = next(n for n in ast.parse((ROOT / 'python/controller.py').read_text()).body
                     if isinstance(n, ast.ClassDef) and n.name == 'Controller')
         actual = {n.name: method_sha256(n)

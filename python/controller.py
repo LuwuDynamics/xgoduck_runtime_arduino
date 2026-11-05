@@ -6,7 +6,7 @@ import time
 from policy import Policy
 from recovery import Recovery
 from proc import SignalFilter
-from rl_core import MOTOR_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG
+from rl_core import MOTOR_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG, MOUTH_MIN_DEG
 from wire import *
 
 EXCLUSIVE_MODES = ('calibrate', 'servo_debug')
@@ -591,7 +591,7 @@ class Controller:
         m = None
         if mouth is not None:
             m = float(mouth)
-            if not math.isfinite(m) or not 0 <= m <= MOUTH_MAX_DEG:
+            if not math.isfinite(m) or not MOUTH_MIN_DEG <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
             if self.battery_phase != 'normal':

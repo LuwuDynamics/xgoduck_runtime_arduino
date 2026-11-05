@@ -50,6 +50,7 @@ HOME_DEG = np.array(DEFAULT_DEG, dtype=np.float32)[POLICY_INDEX]
 MOUTH_INDEX = MOTOR_IDS.index(34)
 
 MOUTH_MAX_DEG = 30.0
+MOUTH_MIN_DEG = -3.0
 
 OBS_DIM = 61
 
@@ -178,5 +179,5 @@ def action_to_deg(action: np.ndarray, mouth_deg: float = 0.0, *, home_deg=HOME_D
     q_deg = home_deg + np.rad2deg(action_scale * action)
     targets = np.zeros(len(MOTOR_IDS), dtype=np.float32)
     targets[POLICY_INDEX] = q_deg
-    targets[MOUTH_INDEX] = float(np.clip(mouth_deg, 0.0, MOUTH_MAX_DEG))
+    targets[MOUTH_INDEX] = float(np.clip(mouth_deg, MOUTH_MIN_DEG, MOUTH_MAX_DEG))
     return targets.tolist()

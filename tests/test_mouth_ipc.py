@@ -40,7 +40,7 @@ class MouthIPCTest(unittest.TestCase):
                 self.assertEqual(f.c.input_source, 'web')
                 sender.send(dict(body, sequence=2, points=[]))
                 self.wait(lambda: server.accepted == 2)
-                self.assertEqual(f.c.mouth, 0.)
+                self.assertEqual(f.c.mouth, -3.)
             finally:
                 sender.close(); server.close()
             self.assertFalse(path.exists())
