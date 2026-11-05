@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>XGO Duck</title><link rel="stylesheet" href="style.css?v=20261103-voltage2">
+<title>XGO Duck</title><link rel="stylesheet" href="style.css?v=20261105-imu-calibration2">
 <main>
 <header><div><small>ARDUINO UNO Q</small><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html">Servo setup</a></nav><button class="stop" id="stop">Torque off</button></div></header>
 <p id="message">Connecting…</p>
@@ -34,10 +34,17 @@
   <p class="hint">After a fall, the robot gets up and returns to walking.</p>
 </section>
 <section class="telemetry"><h2>IMU and servos</h2><div class="telemetry-grid"><div class="imu-lines"><div><b>acc</b><span id="acc-values">—</span></div><div><b>gyro</b><span id="gyro-values">—</span></div><div><b>grav</b><span id="gravity-values">—</span></div><div><b>acc raw</b><span id="acc-raw-values">—</span></div><div><b>gyro raw</b><span id="gyro-raw-values">—</span></div></div><div class="table"><table><thead><tr><th>ID</th><th>°</th><th>Target</th></tr></thead><tbody id="joints"></tbody></table></div></div><p class="hint" id="command-health">Waiting for feedback…</p>
-  <h3>IMU calibration</h3>
-  <div class="buttons"><button id="imu-calibrate" disabled>Calibrate IMU</button><button id="imu-reset" disabled>Reset IMU calibration</button></div>
-  <p class="hint">Hold the Arduino board upright with the battery connector pointing straight up. Keep its bottom edge firmly against a level tabletop. Keep it still for 2 seconds during calibration.</p>
-  <progress id="imu-calibration-progress" max="1" value="0" hidden></progress>
-  <p id="imu-calibration-status" role="status" aria-live="polite">Reading calibration status…</p>
+  <div class="imu-calibration">
+    <div>
+      <h3>IMU calibration</h3>
+      <div class="buttons"><button id="imu-calibrate" disabled>Calibrate IMU</button><button id="imu-reset" disabled>Reset IMU calibration</button></div>
+      <p class="hint">Keep Arduino upright, with its bottom edge firmly against the tabletop. Hold still for 1.5 seconds.</p>
+      <progress id="imu-calibration-progress" max="1" value="0" hidden></progress>
+      <p id="imu-calibration-status" role="status" aria-live="polite">Reading calibration status…</p>
+    </div>
+    <figure class="imu-calibration-pose">
+      <img src="imu-calibration-pose.png" width="910" height="1155" alt="IMU calibration posture: Arduino upright with its bottom edge resting on the tabletop.">
+    </figure>
+  </div>
 </section>
-</main><script src="app.js?v=20261105-imu-calibration1"></script></html>
+</main><script src="app.js?v=20261105-imu-calibration2"></script></html>

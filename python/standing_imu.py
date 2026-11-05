@@ -1,4 +1,4 @@
-"""Two-second standing reference: fixed additive accelerometer and gyro offsets."""
+"""Standing reference: fixed additive accelerometer and gyro offsets."""
 from datetime import datetime, timezone
 import json
 import math
@@ -7,8 +7,8 @@ from pathlib import Path
 import tempfile
 
 CALIBRATION_PATH = Path(__file__).resolve().parents[1] / '.cache' / 'imu-calibration.json'
-SAMPLE_SECONDS = 2.0
-MIN_SAMPLES = 120
+SAMPLE_SECONDS = 1.5
+MIN_SAMPLES = 90
 REFERENCE_G = 9.8
 FRAME = 'qmi-policy-body-offset-v2'
 
@@ -41,7 +41,7 @@ class ImuCorrection:
         if max(abs(v) for v in self.offset) > 15:
             raise ValueError('Invalid accelerometer offset')
         self.zero = vector(record['gyro_zero_dps'])
-        if max(abs(v) for v in self.zero) > 8:
+        if max(abs(v) for v in self.zero) > 12:
             raise ValueError('Invalid stationary gyro zero')
 
     def apply(self, acc, gyro):
@@ -64,8 +64,8 @@ def estimate(rows):
     gyro_std = [math.sqrt(math.fsum((row[i]-mean_gyro[i])**2 for row in gyro)/n) for i in range(3)]
     acc_peak = max(math.dist(row, mean_acc) for row in acc)
     gyro_peak = max(math.dist(row, mean_gyro) for row in gyro)
-    if (math.hypot(*acc_std) > .30 or math.hypot(*gyro_std) > .75
-            or acc_peak > 1.0 or gyro_peak > 3 or max(map(abs, mean_gyro)) > 8):
+    if (math.hypot(*acc_std) > .30 or math.hypot(*gyro_std) > 1.125
+            or acc_peak > 1.0 or gyro_peak > 4.5 or max(map(abs, mean_gyro)) > 12):
         raise ValueError('Movement detected. Hold the board still and try again.')
     check_standing(mean_acc)
     reference = [0., 0., -REFERENCE_G]

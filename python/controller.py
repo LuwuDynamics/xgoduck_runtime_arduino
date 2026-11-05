@@ -26,7 +26,7 @@ CONTROL_PERIOD = 1.0 / 50.0
 ACTION_PREPARE_S = 0.2
 ACTION_PREPARE_TIMEOUT_S = 0.5
 ROLLER_YAW_LIMIT = 0.45  # rad/s, symmetric in Roller mode.
-COMMAND_ACC_X_BIAS_MS2 = -1.5  # Temporary IMU trim; set to 0 to disable.
+COMMAND_ACC_X_BIAS_MS2 = 1.5  # Temporary IMU trim magnitude; set to 0 to disable.
 VOLTAGE_TIMEOUT_S = 3.0
 
 class Controller:
@@ -258,9 +258,11 @@ class Controller:
                 else:
                     self._imu_source_time += imu_step / 1e6
             self._imu_source_us = fb.imu_us
-            self.filter.command_acc_x_bias_ms2 = COMMAND_ACC_X_BIAS_MS2 if (
+            command_acc_x_bias = (COMMAND_ACC_X_BIAS_MS2 if self.twist[0] > 0.0 else
+                                  -COMMAND_ACC_X_BIAS_MS2 if self.twist[0] < 0.0 or self.twist[2] != 0.0 else 0.)
+            self.filter.command_acc_x_bias_ms2 = command_acc_x_bias if (
                 self._imu_record is not None and self.mode in ('shadow', 'policy')
-                and not self.roller_mode and (self.twist[0] < 0.0 or self.twist[2] != 0.0)
+                and not self.roller_mode
                 and self.recovery.phase == 'walk' and not self.pick_active
                 and not (self._roulade_on(now) and self.action_preparation is None)
                 and self.sitstand_phase == 'idle'

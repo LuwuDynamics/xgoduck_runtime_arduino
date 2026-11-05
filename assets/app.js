@@ -166,7 +166,9 @@ function showImuCalibration(){
   $('imu-calibrate').textContent=imuCalibrationActive?`Calibrating… ${Math.round((imuState.progress||0)*100)}%`:'Calibrate IMU';
   $('imu-calibration-progress').hidden=!imuCalibrationActive;
   $('imu-calibration-progress').value=imuState?.progress||0;
-  $('imu-calibration-status').textContent=imuCalibrationError||imuState?.message||'Reading calibration status…';
+  const failed=!!imuCalibrationError||imuState?.state==='error';
+  $('imu-calibration-status').classList.toggle('error',failed);
+  $('imu-calibration-status').textContent=failed?'Error: Slight movement. Please recalibrate.':imuState?.message||'Reading calibration status…';
   document.querySelector('[data-mode="shadow"]').disabled=busy;
   if(busy){
     document.querySelectorAll('[data-mode]').forEach(b=>b.disabled=true);

@@ -168,7 +168,7 @@ Release a slider to apply its value. Restarting the app restores defaults. Get-u
 Open **Calibration** and find **IMU calibration** above **Joints**. Hold the Arduino
 board upright with the battery connector pointing straight up and its bottom edge
 firmly against a level tabletop. Click **Calibrate IMU** and keep the board still
-for 2 seconds. Walking and other actions are unavailable while
+for 1.5 seconds. Walking and other actions are unavailable while
 sampling; **Exit** cancels sampling and preserves the previous calibration.
 The button never enables torque by itself.
 
@@ -180,7 +180,7 @@ policy observations, fall/get-up detection and telemetry. Corrected `acc`/`gyro`
 are displayed with separate `acc raw`/`gyro raw` lines; the API's existing `acc`
 and `gyro` fields remain raw and `acc_corrected`/`gyro_corrected` are added.
 
-At least 120 unique MCU IMU samples over 2 seconds are required. Movement,
+At least 90 unique MCU IMU samples over 1.5 seconds are required. Movement,
 interrupted feedback and a reference more than 45° from upright are rejected.
 Failed or cancelled sampling retains the previous record. Successful results
 are saved atomically in `.cache/imu-calibration.json`, loaded on restart, and the
@@ -188,7 +188,7 @@ previous record is backed up. **Reset IMU calibration** disables the saved corre
 keeps a backup. No MCU flash is needed.
 
 Saved records use version 2. Earlier rotation/scale records remain backed up but
-are not applied; run the 2-second calibration again to obtain additive offsets.
+are not applied; run the 1.5-second calibration again to obtain additive offsets.
 
 ## Supply voltage
 

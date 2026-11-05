@@ -9,3 +9,5 @@
 @media(max-width:720px){.cal-row{grid-template-columns:1fr;}.cal-actions{justify-content:space-between}.servo-row{grid-template-columns:80px 1fr auto;}.servo-row .hint{grid-column:1/-1}}
 .page-calibrate .cal-row{grid-template-columns:minmax(120px,1fr) auto}.page-calibrate .cal-actions span{min-width:100px}@media(max-width:620px){.page-calibrate .cal-row{grid-template-columns:1fr}.page-calibrate .cal-actions{flex-wrap:wrap}}
 .mode-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #3c5b78;border-radius:8px;cursor:pointer}.mode-toggle input{width:20px;height:20px;margin:0;accent-color:#6de1c4}.mode-toggle span{color:#8ce2cc;min-width:1em}
+.imu-calibration{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:24px;align-items:start;margin-top:24px}.imu-calibration h3{margin:0 0 12px}.imu-calibration-pose{margin:0}.imu-calibration-pose img{display:block;width:100%;height:auto;border:1px solid #3c5b78;border-radius:10px}@media(max-width:620px){.imu-calibration{grid-template-columns:minmax(0,1fr);gap:16px}.imu-calibration-pose{width:200px;max-width:100%;justify-self:center}}
+#imu-calibration-status.error{color:#ff6b6b}
