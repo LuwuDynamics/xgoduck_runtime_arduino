@@ -39,8 +39,8 @@ DEFAULT_DEG = [
 
 # Fixed Roller leg home, keyed by motor ID. Neck/head retain the model's home.
 ROLLER_LEG_DEFAULT_DEG = {
-    10: 0.0, 11: 2.0, 12: -10.0, 13: 10.0, 14: 20.0,
-    20: 0.0, 21: -2.0, 22: 10.0, 23: -10.0, 24: -20.0,
+    10: 0.0, 11: 2.0, 12: -8.5, 13: 8.5, 14: 17.0,
+    20: 0.0, 21: -2.0, 22: 8.5, 23: -8.5, 24: -17.0,
 }
 
 POLICY_IDS = [

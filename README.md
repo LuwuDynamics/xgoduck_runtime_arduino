@@ -127,9 +127,9 @@ Skating uses `python/xgoduck_roller.onnx`. Its leg home is fixed in `ROLLER_LEG_
 | --- | --- | --- |
 | hip_yaw | 0° | 0° |
 | hip_roll | +2° | −2° |
-| hip_pitch | −10° | +10° |
-| knee | +10° | −10° |
-| ankle | +20° | −20° |
+| hip_pitch | −8.5° | +8.5° |
+| knee | +8.5° | −8.5° |
+| ankle | +17° | −17° |
 
 Default pose, relative joint observations and action offsets use this same home. Neck/head values continue to come from the model's `default_joint_pos` metadata. Replacing the skating model does not change the fixed leg home; restart the app after changing the model or the constants.
 

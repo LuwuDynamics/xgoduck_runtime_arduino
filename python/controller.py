@@ -472,6 +472,8 @@ class Controller:
                     self.policy_needs_reset = True
                 self.twist = [0.0]*3
                 self.web_time = time.monotonic()
+            if enabled:
+                self.filter.command_acc_x_bias_ms2 = 0.0
             return dict(enabled=self.roller_mode, model=self.policy.file,
                         action_scale=self.policy.action_scale, action_alpha=self.policy.action_alpha,
                         action_alpha_head=self.policy.action_alpha_head)
@@ -999,6 +1001,8 @@ class Controller:
                 selected = self.pick_policy
             else:
                 selected = self.policy if phase == 'walk' else self.getup_policy
+                if selected is self.roller_policy:
+                    head = [0.0]*4
             reset_policy = self.policy_needs_reset
             inferring = mode in ('shadow','policy') and valid
             if inferring:
