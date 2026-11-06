@@ -1,15 +1,17 @@
-"""Walk-only, unwrapped gyro heading and translation heading hold."""
+"""Unwrapped gyro heading and translation heading hold for walking/skating."""
 import math
 
 
 class HeadingHold:
     KP = 1.5  # rad/s per radian of heading error.
+    SKATE_KP = 1.0
     MAX_WZ = 0.3  # rad/s.
     DEADBAND = math.radians(3.0)
     LEVEL_COS = math.cos(math.radians(5.0))
 
     def __init__(self):
         self.enabled = True
+        self.kp = self.KP
         self.reset()
 
     def release(self):
@@ -46,7 +48,7 @@ class HeadingHold:
         if self.target is None:
             self.target = self.yaw
         error = self.target - self.yaw
-        self.correction = (max(-self.MAX_WZ, min(self.MAX_WZ, self.KP*error))
+        self.correction = (max(-self.MAX_WZ, min(self.MAX_WZ, self.kp*error))
                            if abs(error) > self.DEADBAND else 0.0)
         return self.correction
 
@@ -56,5 +58,5 @@ class HeadingHold:
                     yaw_deg=math.degrees(self.yaw) if self.yaw is not None else None,
                     target_deg=math.degrees(self.target) if self.target is not None else None,
                     error_deg=math.degrees(self.target-self.yaw) if self.target is not None else 0.0,
-                    correction_wz=self.correction, kp=self.KP, max_wz=self.MAX_WZ,
+                    correction_wz=self.correction, kp=self.kp, max_wz=self.MAX_WZ,
                     deadband_deg=3.0, init_tilt_deg=5.0)

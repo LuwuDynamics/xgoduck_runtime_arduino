@@ -135,6 +135,8 @@ Default pose, relative joint observations and action offsets use this same home.
 
 Recovery uses the get-up policy and then returns to skating. Turn **Skating mode** **Off** to select ordinary walking. Switching modes clears the motion controls; Skating mode starts **Off** after an app restart.
 
+**Heading hold**, next to **Zero motion**, works in both walking and skating. Heading starts at zero once tilt is within 5° and accumulates across full turns. Translation without a yaw command locks the current heading; stopping or turning releases it, and the next translation locks a new heading. Walking uses Kp 1.5 and skating uses Kp 1.0, with a 3° deadband and compensation limited to ±0.3 rad/s. Switching modes resets the heading estimate. Turning the switch off disables compensation in both modes.
+
 | Joystick range | Ordinary walking | Skating |
 | --- | --- | --- |
 | Forward / backward | -0.2 to +0.2 | -0.4 to +0.4 |
@@ -153,7 +155,7 @@ The Action settings sliders follow the Skating mode switch. Each group keeps its
 
 | Default setting | Ordinary walking / other models | Skating |
 | --- | --- | --- |
-| Action scale | 1.0 | 0.7 |
+| Action scale | 1.0 | 0.8 |
 | Leg α | 0.35 | 0.4 |
 | Head α | 0.45 | 0.5 |
 
