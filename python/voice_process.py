@@ -194,11 +194,10 @@ class Runtime:
         USBVision = vision_type()
         (private_directory() / 'language.ini').write_text(cfg['language'])
         self.capture_channels = CaptureChannels(channels, cfg['input_channel_mode'])
-        wakeword = dict(device=input_index, input_channels=channels, input_latency=.32,
-                        input_transform=lambda x: capture_gain.floats(self.capture_channels.floats(x)))
+        wakeword = dict(shared_capture=True)
         if cfg['language'] == 'cn':
             wakeword.update(model_path=str(Path(__file__).with_name('models') / 'xiaoya.onnx'),
-                            threshold=.8, input_scale=1., stride_duration=.08, cooldown_sec=2.)
+                            threshold=.5, input_scale=1., stride_duration=.08, cooldown_sec=2.)
         app = DuckApplication(dict(ota_url=ota_url(cfg), enable_wakeword=cfg['enable_wakeword'] and self.audio_ready,
             enable_aec=cfg['enable_aec'], enable_camera=cfg['enable_camera'], enable_robot=True,
             audio_available=self.audio_ready, provisioned_mqtt=dict(self.onboarding.mqtt),

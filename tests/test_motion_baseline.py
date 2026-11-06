@@ -338,18 +338,22 @@ class BaselineTest(unittest.TestCase):
             self.c.step()
             self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
 
-    def test_new_actions_preserve_voice_ownership_and_movement_gate(self):
-        self.make_motion(enabled=True)
-        self.c.input_source = 'voice'
-        for action in (lambda: self.access.web_sitstand('sit'), lambda: self.access.web_action('kick', 'left')):
-            with self.assertRaisesRegex(ValueError, 'take over voice'):
-                action()
-        self.c.input_source = 'web'
+    def test_web_sit_can_follow_voice_motion_without_a_mode_change(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
         self.c.set_mode('policy')
-        self.c.step()
+        for _ in range(23):
+            self.now += .05
+            self.feedback()
+            self.c.step()
+            self.access.heartbeat(101)
+            self.access.tick()
+        self.access.start_action(kind='move', twist=[.1, 0., 0.], session=101)
         self.access.web_sitstand('sit')
-        with self.assertRaisesRegex(ValueError, '坐站或踢腿'):
-            self.access.start_action(kind='move', twist=[.1, 0., 0.], session=101)
+        self.assertEqual(self.c.twist, [0., 0., 0.])
+        self.assertEqual(self.c.input_source, 'web')
+        self.assertEqual(self.access.action['state'], 'cancelled')
+        self.c.step()
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
 
 
 class HardwareCenterMigrationTest(unittest.TestCase):

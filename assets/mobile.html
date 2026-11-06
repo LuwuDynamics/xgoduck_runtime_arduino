@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=battery1">
-<link rel="stylesheet" href="mobile-tof.css?v=20261030-tof1">
+<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=motion1">
+<link rel="stylesheet" href="mobile-tof.css?v=motion1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 </head>
 <body>
@@ -66,8 +66,43 @@
   </aside>
   <button id="restoreHud" data-i18n="showControls" hidden>显示控件</button>
   <div class="hud bottom">
+    <div class="motion-sticks">
+      <div class="motion-stick">
+        <div id="moveStick" class="stick-pad" role="group" aria-labelledby="moveStickLabel" aria-disabled="true">
+          <span class="stick-arrow up" aria-hidden="true">↑</span><span class="stick-arrow down" aria-hidden="true">↓</span>
+          <span class="stick-arrow left" aria-hidden="true">←</span><span class="stick-arrow right" aria-hidden="true">→</span>
+          <span class="stick-knob" aria-hidden="true"></span>
+        </div>
+        <span class="stick-label" id="moveStickLabel" data-i18n="moveStick">前后 / 侧移</span>
+      </div>
+      <div class="motion-stick">
+        <div id="turnStick" class="stick-pad yaw-pad" role="group" aria-labelledby="turnStickLabel" aria-disabled="true">
+          <span class="stick-arrow left" aria-hidden="true">↶</span><span class="stick-arrow right" aria-hidden="true">↷</span>
+          <span class="stick-knob" aria-hidden="true"></span>
+        </div>
+        <span class="stick-label" id="turnStickLabel" data-i18n="turnStick">原地转向</span>
+      </div>
+    </div>
+    <div class="motion-toolbar">
+      <p id="motionStatus" role="status" data-i18n="waitingFeedback">等待反馈</p>
+      <div class="motion-actions" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
+        <button type="button" class="stand-action" data-motion="stand" data-i18n="actionStand" disabled>站起来</button>
+        <button type="button" data-motion="sit" data-i18n="actionSit" disabled>坐下</button>
+        <button type="button" data-motion="pick" data-i18n="actionPick" disabled>叼东西</button>
+        <button type="button" data-motion="roulade" data-i18n="actionRoll" disabled>翻滚</button>
+        <button type="button" data-motion="left_kick" data-i18n="actionKickLeft" disabled>左脚踢球</button>
+        <button type="button" data-motion="right_kick" data-i18n="actionKickRight" disabled>右脚踢球</button>
+        <button type="button" class="stop-action" data-motion="stop" data-i18n="actionStop" disabled>停止移动</button>
+      </div>
+    </div>
     <div class="flight-state"><span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span><button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button></div>
-    <div class="intercom"><div class="intercom-heading"><span class="eyebrow" data-i18n="liveAudio">实时音频</span></div><div class="intercom-actions"><button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><span><b id="speakerLabel">测试扬声器</b><small id="speakerHint">播放几声合成鸭叫</small></span></button><button id="listen" class="talk-button secondary listen-only" aria-pressed="false"><span class="button-icon" aria-hidden="true">↓</span><span><b id="listenLabel">实时监听</b><small id="listenHint">点击收听小鸭麦克风</small></span></button></div><div class="voice-line"><span id="voiceState" role="status">点击实时监听，收听小鸭周围的声音</span></div></div>
+    <div class="intercom" role="group" aria-label="实时音频" data-i18n-aria-label="liveAudio">
+      <div class="intercom-actions">
+        <button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><b id="speakerLabel">测试扬声器</b></button>
+        <button id="listen" class="talk-button secondary listen-only" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">↓</span><b id="listenLabel">实时监听</b></button>
+      </div>
+      <div class="voice-line"><span id="voiceState" role="status"></span></div>
+    </div>
   </div>
   <div id="notice" class="toast" role="status" hidden></div>
 </main>
@@ -108,5 +143,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=battery1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile.js?v=battery1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=motion2"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion2"></script><script src="mobile.js?v=motion1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

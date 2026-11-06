@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 
 from audio_codec import AudioCodec, AudioConfig
@@ -38,6 +39,11 @@ VERSION_INI = Path(LUWU_ROOT) / "version.txt"
 # 会话提示音 (非打断模式即 AEC 关闭时播放; 唤醒反馈音不分模式)
 DING_WAV = str(Path(LUWU_ROOT) / "assets/music/ding.wav")  # 唤醒反馈 / 回答完成
 SEND_WAV = str(Path(LUWU_ROOT) / "assets/music/send.wav")  # 进入思考 (LLM 已收到)
+
+# Duck uses 60 ms Opus frames. Keep 360 ms before wake and enough space
+# for the existing MQTT reconnect and hello retry windows.
+WAKE_PREROLL_FRAMES = 6
+WAKE_BUFFER_FRAMES = 270
 
 # 复用 apps/ai 的唤醒词检测
 AI_APP_DIR = str(Path(LUWU_ROOT) / "apps/ai")
@@ -90,6 +96,12 @@ class Application:
         self._closing = False
         self._tasks = set()
         self._tts_generation = 0
+        self._shared_wake_capture = bool(config.get("wakeword", {}).get("shared_capture"))
+        self._wake_audio_lock = threading.Lock()
+        self._wake_history = deque(maxlen=WAKE_PREROLL_FRAMES)
+        self._wake_buffer = None
+        self._wake_buffer_full = False
+        self._chat_start_lock = asyncio.Lock()
 
     def _spawn(self, coroutine):
         if self._closing:
@@ -135,6 +147,7 @@ class Application:
             _active_app = self
 
         self._stop_ambient()
+        self._discard_wake_audio()
 
         # 同实例重复 start: 先停旧 protocol 的 MQTT (幂等, 防孤儿连接)
         if self.protocol is not None:
@@ -274,13 +287,23 @@ class Application:
             cooldown_sec=ww_cfg.get("cooldown_sec"),
             input_channels=ww_cfg.get('input_channels', 1),
             input_latency=ww_cfg.get('input_latency', .32),
+            shared_input=self._shared_wake_capture,
         )
         if self.wakeword.is_available():
-            self.wakeword.start()
+            self._resume_wakeword()
             print("[app] 唤醒词检测已启动")
         else:
             print("[app] 唤醒词模型不可用")
             self.wakeword = None
+
+    def _resume_wakeword(self):
+        if self.wakeword is None:
+            return
+        if self._shared_wake_capture:
+            self.audio.on_idle_audio = self.wakeword.feed_pcm
+            self.audio.open_input()
+        if not self.wakeword._running:
+            self.wakeword.start()
 
     # ================= 待机声音分类 =================
     def _init_ambient(self):
@@ -401,32 +424,98 @@ class Application:
         """IDLE → CONNECTING → LISTENING"""
         if self._closing or self.state != DeviceState.IDLE or self.protocol is None:
             return
+        if self._chat_start_lock.locked():
+            self._resume_wakeword()
+            return
+        async with self._chat_start_lock:
+            try:
+                await self._connect_chat(wake_word)
+            finally:
+                if not self._closing and (self.state == DeviceState.CONNECTING or self._wake_buffer is not None):
+                    try:
+                        if self.protocol.is_audio_channel_opened():
+                            await self.protocol.close_audio_channel()
+                    finally:
+                        if self.state != DeviceState.IDLE:
+                            self._back_to_idle()
+                    self._notify_status(DeviceState.IDLE, "连接失败")
+
+    async def _connect_chat(self, wake_word):
+        frames = None
+        if wake_word and self._shared_wake_capture and self.wakeword is not None:
+            with self._wake_audio_lock:
+                preroll = len(self._wake_history)
+                frames = self._wake_buffer = deque(self._wake_history)
+                self._wake_history.clear()
+            # Keep any PCM already queued behind the last scored wake window.
+            self.audio.set_capture_enabled(True, keep_pending=True)
         self._set_state(DeviceState.CONNECTING)
         if self.wakeword:
-            self.wakeword.stop()   # 会话期间暂停唤醒词, 释放麦克风
+            self.wakeword.stop()
 
         if wake_word and self.audio is not None:
-            # 无屏设备先用本地声音确认唤醒，再等待云端握手。麦克风保持
-            # 关闭，待提示音排空后才进 LISTENING，避免清队列截断提示音。
             self._play_wake_sound()
-            await asyncio.to_thread(self.audio.wait_playback_done, 2.0)
-            if self._closing or self.state != DeviceState.CONNECTING:
-                return
+            if frames is None:
+                await asyncio.to_thread(self.audio.wait_playback_done, 2.0)
+                if self._closing or self.state != DeviceState.CONNECTING:
+                    return
 
-        if not self.protocol.is_audio_channel_opened():
-            ok = await self.protocol.open_audio_channel()
-            if not ok:
-                self._notify_status(DeviceState.IDLE, "连接失败")
-                self._back_to_idle()
-                return
+        protocol = self.protocol
+        if not protocol.is_audio_channel_opened() and not await protocol.open_audio_channel():
+            return
+        if self._closing or self.state != DeviceState.CONNECTING:
+            await protocol.close_audio_channel()
+            return
 
         if wake_word and self.config.get("send_wake_word_data", False):
             # 同 Omni CONFIG_SEND_WAKE_WORD_DATA: 关闭时不上报唤醒词,
             # 直接进倾听 (服务端不回开场问候)
-            await self.protocol.send_wake_word_detected(wake_word)
+            await protocol.send_wake_word_detected(wake_word)
+            if self._closing or self.state != DeviceState.CONNECTING:
+                return
         self.keep_listening = True
-        await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+        if frames is None:
+            await protocol.send_start_listening(ListeningMode.AUTO_STOP)
+        else:
+            if not await protocol.send_start_listening(ListeningMode.AUTO_STOP, wait_published=True):
+                return
+            # MQTT control and UDP audio travel separately. Give the published
+            # listen command a short lead before replaying the first Opus frame.
+            await asyncio.sleep(.06)
+        if self._closing or self.state != DeviceState.CONNECTING:
+            return
         self._set_state(DeviceState.LISTENING)
+        if frames is not None:
+            await self._send_wake_audio(protocol, frames, preroll)
+
+    async def _send_wake_audio(self, protocol, frames, preroll):
+        sent = 0
+        while not self._closing and self.state == DeviceState.LISTENING:
+            with self._wake_audio_lock:
+                if self._wake_buffer is not frames:
+                    return
+                if self._wake_buffer_full:
+                    print("[app] 唤醒后建连过慢，丢弃首句缓存", flush=True)
+                    return
+                if not frames:
+                    # Release live sending only after the last cached frame.
+                    self._wake_buffer = None
+                    break
+                frame = frames.popleft()
+            if not await protocol.send_audio(frame, 0):
+                await protocol.close_audio_channel()
+                return
+            sent += 1
+            # Catch up at three times real time without a burst of UDP packets.
+            await asyncio.sleep(.02)
+        if sent:
+            print(f"[app] 唤醒收音已补传 {sent} 帧，含预录 {preroll} 帧", flush=True)
+
+    def _discard_wake_audio(self):
+        with self._wake_audio_lock:
+            self._wake_history.clear()
+            self._wake_buffer = None
+            self._wake_buffer_full = False
 
     async def toggle_chat(self):
         """手动触发 (按键/外部命令, 同 Omni ToggleChatState):
@@ -449,12 +538,15 @@ class Application:
         if self._closing:
             return
         self._tts_generation += 1
-        self._set_state(DeviceState.IDLE)
+        preserve_cue = self.state == DeviceState.CONNECTING and self._wake_buffer is not None
         self.audio.set_capture_enabled(False)
-        self.audio.close_input()          # 释放麦克风
-        self.audio.clear_play_queue()
-        if self.wakeword and not self.wakeword._running:
-            self.wakeword.start()         # 恢复唤醒词
+        self._discard_wake_audio()
+        self._set_state(DeviceState.IDLE)
+        if not (self._shared_wake_capture and self.wakeword is not None):
+            self.audio.close_input()
+        if not preserve_cue:
+            self.audio.clear_play_queue()
+        self._resume_wakeword()
         self._resume_ambient()
         self._notify_status(DeviceState.IDLE, "待命")
 
@@ -484,6 +576,8 @@ class Application:
         self.state = state
         if state != DeviceState.IDLE:
             self._pause_ambient()
+            if self._shared_wake_capture:
+                self.audio.on_idle_audio = None
         print(f"[app] 状态: {state}")
         self._cancel_listen_timeout()
         if state == DeviceState.LISTENING:
@@ -494,13 +588,17 @@ class Application:
             preserve_reference = (previous_state == DeviceState.SPEAKING
                                   and self.audio.aec_enabled
                                   and self.audio.is_playback_idle())
-            self.audio.clear_play_queue(reset_aec=not preserve_reference)
+            if previous_state == DeviceState.CONNECTING and self._wake_buffer is not None:
+                self.audio.clear_play_queue(clear_pcm=False, reset_aec=False)
+            else:
+                self.audio.clear_play_queue(reset_aec=not preserve_reference)
             self.audio.open_input()
             self.audio.set_capture_enabled(True)
             self._emit_emotion("listen")          # 同 Omni: LISTENING → listen
             # 倾听超过 60s 无结果 → 自动回待机 (服务端 VAD 失效/无人说话的兜底)
             self._listen_timeout_task = self._spawn(self._listen_timeout())
         elif state == DeviceState.SPEAKING:
+            self._discard_wake_audio()
             if self.audio.aec_enabled:
                 # 端侧 AEC: 播放期保持采集上送, 支持语音实时打断
                 self.audio.open_input()
@@ -554,12 +652,32 @@ class Application:
         """
         if self._closing:
             return
-        if self.state != DeviceState.LISTENING and \
-                not (self.state == DeviceState.SPEAKING and self.audio.aec_enabled):
-            return
-        if self.protocol and self.protocol.is_audio_channel_opened():
+        if self._shared_wake_capture and self.wakeword is not None:
+            with self._wake_audio_lock:
+                if self._closing:
+                    return
+                if self._wake_buffer is not None:
+                    if len(self._wake_buffer) < WAKE_BUFFER_FRAMES:
+                        self._wake_buffer.append(opus_bytes)
+                    else:
+                        self._wake_buffer_full = True
+                    return
+                if self.state == DeviceState.IDLE:
+                    self._wake_history.append(opus_bytes)
+                    return
+        protocol = self.protocol
+        if self._capture_can_send() and protocol and protocol.is_audio_channel_opened():
             asyncio.run_coroutine_threadsafe(
-                self.protocol.send_audio(opus_bytes, 0), self.loop)
+                self._send_live_audio(protocol, protocol.session_id, opus_bytes), self.loop)
+
+    def _capture_can_send(self):
+        return not self._closing and (self.state == DeviceState.LISTENING or
+                                     (self.state == DeviceState.SPEAKING and self.audio.aec_enabled))
+
+    async def _send_live_audio(self, protocol, session_id, opus_bytes):
+        if (self._capture_can_send() and self.protocol is protocol
+                and protocol.session_id == session_id and protocol.is_audio_channel_opened()):
+            await protocol.send_audio(opus_bytes, 0)
 
     # ================= 协议回调 =================
     async def _on_audio_channel_opened(self):
@@ -1034,6 +1152,7 @@ class Application:
     async def shutdown(self):
         global _active_app
         self._closing = True
+        self._discard_wake_audio()
         self._ota_stop.set()
         self._cancel_listen_timeout()
         tasks = list(self._tasks)

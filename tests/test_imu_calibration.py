@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 import sys
 import tempfile
+from threading import RLock
 import unittest
 from unittest.mock import Mock, patch
 
@@ -116,6 +117,7 @@ class ImuCalibrationTest(unittest.TestCase):
             (Path(directory) / 'imu-calibration.json').write_text('{broken')
             with patch('motion_calibration.Controller.__init__', return_value=None):
                 app = AppController(Mock(), data_dir=directory)
+            app.lock = RLock()
             for mode in ['hold', 'policy']:
                 with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'): app.set_mode(mode)
             with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'): app.set_sitstand('sit')

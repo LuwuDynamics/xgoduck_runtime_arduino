@@ -305,7 +305,7 @@ class SpeechMouthMotion:
         if (c.mode not in ('policy', 'hold') or status.get('enabled') is not True
                 or status.get('fault_hold')
                 or not feedback_ready(status, (MOUTH_ID,)) or not self.link_ready(status)
-                or c.input_source == 'gamepad' or c.pick_active or bool(c.roulade_until)
+                or c.pick_active or bool(c.roulade_until)
                 or any((status.get(name) or {}).get('active') for name in ('sitstand', 'left_kick', 'right_kick'))
                 or (status.get('recovery') or {}).get('phase') != 'walk'):
             self.override(feedback_problem(status, (MOUTH_ID,)) or 'body unavailable or special action owns mouth')

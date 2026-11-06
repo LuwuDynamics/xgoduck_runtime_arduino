@@ -421,7 +421,7 @@ class AudioCodec:
 
     # ---------- 流管理 ----------
     def start(self):
-        """启动播放链; 输入流惰性打开 (open_input), 避免与唤醒词抢麦克风"""
+        """启动音频工作线程。由应用决定何时打开输入流。"""
         if self._running:
             return
         self._running = True
@@ -468,8 +468,7 @@ class AudioCodec:
                         pass
 
     def close_input(self):
-        """关闭采集流释放麦克风 (回 IDLE 时调用, 交给唤醒词检测)。
-        回调模式下无阻塞读线程, stop() 会等回调跑完再返回, 无并发风险"""
+        """停止采集并释放设备。PortAudio 等当前回调结束后才返回。"""
         with self._lock:
             stream, self.input_stream = self.input_stream, None
             self._capture_generation += 1
@@ -506,18 +505,19 @@ class AudioCodec:
         self._dump_files = {}
 
     # ---------- 采集 ----------
-    def set_capture_enabled(self, enabled: bool):
-        was = self._capture_enabled
-        self._capture_enabled = enabled
-        if enabled != was:
-            self._capture_generation += 1
-        if not enabled:
-            with self._near_q_lock:
+    def set_capture_enabled(self, enabled: bool, *, keep_pending=False):
+        with self._near_q_lock:
+            was = self._capture_enabled
+            self._capture_enabled = enabled
+            if enabled != was and not keep_pending:
+                self._capture_generation += 1
+            if not enabled:
                 self._near_q.clear()  # 停捕即丢弃已攒近端 (过时数据)
         # The worker recalibrates after draining this generation's far watermark.
         # Calibrating here would race queued reference work from the old turn.
 
     on_audio_frame = None  # 回调: (opus_bytes) 由 Application 设置
+    on_idle_audio = None   # Optional wake detector feed on the same input stream.
 
     def _input_callback(self, indata, frames, t, status):
         """Copy one block and its far watermark; no AEC, resampling or file I/O."""
@@ -529,9 +529,9 @@ class AudioCodec:
             self._max_input_gap_ms = max(self._max_input_gap_ms, (started - self._last_input_at) * 1000)
         self._last_input_at = started
         self._input_callbacks += 1
-        generation, far_seq = self._capture_generation, self._far_seq
-        pcm = bytes(indata) if self._capture_enabled else None
         with self._near_q_lock:
+            generation, far_seq = self._capture_generation, self._far_seq
+            pcm = bytes(indata) if self._capture_enabled or self.on_idle_audio is not None else None
             if len(self._near_q) == self._near_q.maxlen:
                 self._capture_queue_drops += 1
             self._near_q.append((generation, pcm, far_seq, started,
@@ -547,6 +547,8 @@ class AudioCodec:
                 continue
             with self._near_q_lock:
                 block = self._near_q.popleft() if self._near_q else None
+                capturing = self._capture_enabled
+                idle_sink = self.on_idle_audio if not capturing else None
             if block is None:
                 time.sleep(0.005)
                 continue
@@ -556,7 +558,7 @@ class AudioCodec:
             started = time.monotonic()
             try:
                 self._drain_far(through=far_seq)
-                if (pcm is None or not self._capture_enabled or self.on_audio_frame is None
+                if (pcm is None or (not capturing and idle_sink is None) or self.on_audio_frame is None
                         or generation != self._capture_generation):
                     continue
                 self._max_capture_age_ms = max(self._max_capture_age_ms, (started - captured_at) * 1000)
@@ -568,27 +570,30 @@ class AudioCodec:
                     pcm = self.input_downmix(pcm)
                     if len(pcm) != self.input_frame_size * 2:
                         raise ValueError('mono selector returned an invalid frame')
-                self._dump("near", pcm)
-                sync = (generation, overflows)
-                skipped = previous is not None and sequence != previous + 1
-                if self.aec.available and (sync != self._capture_sync or skipped):
-                    # Hardware/software drops break the time axis. Re-anchor
-                    # only after the matching far history has reached the worker.
-                    self.aec.calibrate()
-                    self._capture_sync = sync
-                if self.aec.available and self.aec_enabled:
-                    # 取同长的参考 (回调内已按设备时间轴配对) 消回声
-                    n_sub = self.input_frame_size // self.aec.sub_frame_size
-                    far = self.aec.pop_reference(max(1, n_sub))
-                    pcm = self.aec.process(pcm, far)
-                    self._aec_frames += 1
-                    self._dump("aec_out", pcm)
+                if capturing:
+                    self._dump("near", pcm)
+                    sync = (generation, overflows)
+                    skipped = previous is not None and sequence != previous + 1
+                    if self.aec.available and (sync != self._capture_sync or skipped):
+                        # Re-anchor after the far history for this block has arrived.
+                        self.aec.calibrate()
+                        self._capture_sync = sync
+                    if self.aec.available and self.aec_enabled:
+                        n_sub = self.input_frame_size // self.aec.sub_frame_size
+                        far = self.aec.pop_reference(max(1, n_sub))
+                        pcm = self.aec.process(pcm, far)
+                        self._aec_frames += 1
+                        self._dump("aec_out", pcm)
                 # Product capture gain runs once in this worker, after AEC,
                 # without changing its near/far levels or the real-time callback.
                 pcm = self.input_transform(pcm)
+                if idle_sink is not None:
+                    idle_sink(pcm, captured_at, overflows, sequence)
+                # Use the same encoder for the short wake history and live frames.
                 opus = self.opus_encoder.encode(pcm, self.input_frame_size)
-                if (self._running and self._capture_enabled and self.input_stream is not None
-                        and generation == self._capture_generation):
+                if (self._running and self.input_stream is not None
+                        and generation == self._capture_generation
+                        and (self._capture_enabled or self.on_idle_audio is not None)):
                     self.on_audio_frame(opus)
             except Exception as e:
                 self._capture_sync = None

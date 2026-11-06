@@ -30,3 +30,166 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   .status-row .chip{padding-inline:6px}
   #batteryLabel,#bindingRegionChip{display:none}
 }
+
+#cockpit{--stick-size:clamp(78px,min(20vw,23dvh),220px)}
+.bottom{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  grid-template-areas:"sticks sticks sticks" "robot actions audio";
+  align-items:end;
+  gap:12px 16px;
+  padding-top:8px;
+  pointer-events:none;
+}
+.flight-state{grid-area:robot;pointer-events:auto;justify-self:start}
+.motion-sticks{
+  grid-area:sticks;
+  display:flex;
+  justify-content:space-between;
+  padding-inline:clamp(0px,11vw,210px);
+}
+.motion-stick{display:grid;justify-items:center;gap:5px}
+.stick-pad{
+  position:relative;
+  display:grid;
+  place-items:center;
+  width:var(--stick-size);
+  aspect-ratio:1;
+  border:1px solid #a2ddce73;
+  border-radius:50%;
+  background:radial-gradient(circle,#10262c66 25%,#0a1922ce 100%);
+  box-shadow:inset 0 0 0 5px #d1f8e60c,0 7px 24px #0004;
+  color:#d6ebe6;
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+  pointer-events:auto;
+}
+.stick-pad[aria-disabled=true]{opacity:.55;cursor:default}
+.stick-pad.is-held{border-color:var(--mint);cursor:grabbing}
+.stick-arrow{position:absolute;font-size:clamp(12px,2vw,19px);line-height:1;pointer-events:none}
+.stick-arrow.up{top:12%;left:50%;transform:translateX(-50%)}
+.stick-arrow.down{bottom:12%;left:50%;transform:translateX(-50%)}
+.stick-arrow.left{left:12%;top:50%;transform:translateY(-50%)}
+.stick-arrow.right{right:12%;top:50%;transform:translateY(-50%)}
+.roller-pad .stick-arrow.left,.roller-pad .stick-arrow.right{display:none}
+.stick-knob{
+  width:36%;
+  aspect-ratio:1;
+  border:1px solid #a5efd3ae;
+  border-radius:50%;
+  background:radial-gradient(circle at 37% 28%,#6aad9a,#2f5d55 75%);
+  box-shadow:0 4px 12px #0005;
+  pointer-events:none;
+}
+.stick-label{
+  padding:3px 8px;
+  border-radius:20px;
+  background:#0b171cd9;
+  color:#deeceb;
+  font-size:11px;
+  white-space:nowrap;
+}
+.motion-toolbar{grid-area:actions;min-width:0;max-width:100%;justify-self:center}
+#motionStatus{
+  min-height:1.3em;
+  margin:0 0 6px;
+  overflow:hidden;
+  text-align:center;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#d0e6df;
+  font-size:11px;
+  pointer-events:auto;
+}
+#motionStatus[data-warning]{color:#ffd6a3}
+.motion-actions{
+  display:flex;
+  justify-content:safe center;
+  gap:5px;
+  overflow-x:auto;
+  scrollbar-width:thin;
+  padding:3px;
+  pointer-events:auto;
+}
+.motion-actions button{
+  flex:none;
+  min-width:42px;
+  min-height:42px;
+  border-radius:10px;
+  padding:7px 11px;
+  background:#0d202aef;
+  border-color:#a5d9cb40;
+  font-size:12px;
+  white-space:nowrap;
+}
+.motion-actions .stand-action,.motion-actions button[data-active]{
+  color:#b5f5d4;
+  background:#1a3b33f5;
+  border-color:#8cdecf65;
+}
+.motion-actions .stop-action{color:#ffd4c0;border-color:#d0a18d61}
+.bottom .intercom{grid-area:audio;width:auto;min-width:0;max-width:100%;justify-self:end;pointer-events:auto}
+.bottom .intercom-actions{display:flex;gap:6px;justify-content:end;flex-wrap:wrap}
+.bottom .intercom-actions .talk-button{
+  display:inline-flex;
+  gap:6px;
+  width:auto;
+  min-height:42px;
+  padding:6px 9px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.bottom .talk-button .button-icon{font-size:17px}
+.bottom .talk-button b{font-size:11px}
+.bottom .voice-line{min-height:0;margin:0;text-align:right}
+.voice-line>span:empty{display:none}
+.voice-line>span:not(:empty){padding-top:4px}
+@media(max-width:1080px){
+  .bottom{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"sticks sticks" "actions actions" "robot audio"}
+}
+@media(orientation:portrait){
+  #cockpit{--stick-size:clamp(66px,20vw,116px)}
+  .bottom{
+    grid-template-columns:auto minmax(0,1fr);
+    gap:6px;
+    padding:8px max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  }
+  .motion-sticks{padding-inline:9vw}
+  .stick-label{font-size:10px}
+  .motion-toolbar{width:100%}
+  .motion-actions{gap:3px}
+  .motion-actions button{min-width:38px;padding-inline:5px;font-size:11px}
+  .bottom .flight-state{display:flex}
+  .flight-state .stop{align-self:start;margin:2px 0 0}
+  .bottom .flight-state .eyebrow{display:none}
+}
+@media(orientation:portrait) and (max-height:670px){
+  .bottom{row-gap:4px}
+  .flight-state strong,#telemetry{display:none}
+  .flight-state .stop{min-height:42px;margin:0;padding-inline:9px}
+  .bottom .intercom-actions .talk-button{padding-inline:6px;gap:4px}
+  .bottom .voice-line{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+}
+@media(orientation:landscape) and (max-height:500px){
+  #cockpit{--stick-size:clamp(66px,21dvh,100px)}
+  .bottom{grid-template-areas:"sticks sticks" "robot audio";grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
+  .motion-sticks{padding-inline:0}
+  .motion-toolbar{
+    grid-area:sticks;
+    align-self:end;
+    max-width:calc(100% - 2 * var(--stick-size) - 16px);
+  }
+  .motion-actions button{padding-inline:8px}
+  .bottom .flight-state{
+    display:grid;
+    grid-template-columns:auto auto;
+    align-items:center;
+    column-gap:8px;
+  }
+  .flight-state .eyebrow{display:none}
+  .flight-state strong{grid-column:1;font-size:15px}
+  .flight-state>span:last-of-type{grid-column:1}
+  .flight-state .stop{grid-column:2;grid-row:1/3;align-self:center;margin:0}
+}

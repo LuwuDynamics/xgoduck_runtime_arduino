@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+import time
 
 from app_paths import DATA
 from controller import Controller
@@ -20,6 +21,8 @@ from imu_calibration import CalibratedSignalFilter, load as load_imu_calibration
 from runtime_gains import RuntimeGainsReader
 from forward_avoidance import GuardedWalkingPolicy
 
+ARM_CONFIRM_S = 1.
+
 
 class AppController(Controller):
     def __init__(self, bridge, *, data_dir=None):
@@ -27,6 +30,8 @@ class AppController(Controller):
         self.run_gains = RuntimeGainsReader(self)
         self.forward_avoidance = None
         self._forward_release = set()
+        self._arm_deadline = None
+        self._arm_failed = False
         self._imu_path = Path(DATA if data_dir is None else data_dir) / 'imu-calibration.json'
         self._imu_record, self._imu_error = None, ''
         try:
@@ -82,11 +87,50 @@ class AppController(Controller):
                 + ', '.join(map(str, remaining)) + '。原零位文件已保留，不会自动套用。')
 
     def set_mode(self, mode):
-        if mode in ('hold', 'policy') and self._imu_error:
-            raise ValueError(self._imu_error)
-        if mode in ('hold', 'policy') and self._needs_centering:
-            raise ValueError(self._center_message())
-        return super().set_mode(mode)
+        with self.lock:
+            active = mode in ('hold', 'policy')
+            if active and self._imu_error:
+                raise ValueError(self._imu_error)
+            if active and self._needs_centering:
+                raise ValueError(self._center_message())
+            same_mode = mode == self.mode
+            needs_arm = active and (self.feedback is None or not self.feedback.enabled)
+            if same_mode and needs_arm:
+                self._require_feedback(0)
+            result = super().set_mode(mode)
+            self._arm_failed = False
+            if needs_arm:
+                if self._arm_deadline is None or not same_mode:
+                    self._arm_deadline = time.monotonic() + ARM_CONFIRM_S
+                    if same_mode:
+                        self.generation += 1
+                        self.twist, self.head, self.mouth = [0.] * 3, [0.] * 4, 0.
+                    self.arm_pending = True
+            else:
+                self._arm_deadline = None
+            return result
+
+    def cancel_arming(self):
+        with self.lock:
+            if self._arm_deadline is not None and (not self.feedback or not self.feedback.enabled):
+                self.set_mode('shadow')
+                self._disarm_now()
+
+    def _confirm_arm_locked(self):
+        if self._arm_deadline is None:
+            return
+        if (self.mode not in ('hold', 'policy') or self.fault_hold or self.battery_phase != 'normal'
+                or self.feedback and self.feedback.enabled):
+            self._arm_deadline = None
+            self.arm_pending = False
+        elif time.monotonic() >= self._arm_deadline:
+            self.cancel_arming()
+            self._arm_failed = True
+            self.last_error = 'STM32 未确认舵机使能，请重新点击「站起来」。'
+        else:
+            # Keep sending the existing measured-position ARM until feedback
+            # confirms it. A following POLICY packet could replace a lost ARM.
+            self.arm_pending = True
 
     def set_sitstand(self, action):
         if self._imu_error:
@@ -173,6 +217,7 @@ class AppController(Controller):
 
     def step(self):
         with self.lock:
+            self._confirm_arm_locked()
             guard = self.forward_avoidance
             if guard is not None and self.mode == 'policy' and self.twist[0] > 0:
                 decision = guard.preview(self.twist[0])
@@ -182,7 +227,10 @@ class AppController(Controller):
         return super().step()
 
     def status(self):
-        result = super().status()
+        with self.lock:
+            result = super().status()
+            result['arming'] = self._arm_deadline is not None and result.get('enabled') is not True
+            result['arm_failed'] = self._arm_failed
         result['runtime_gains'] = self.run_gains.status()
         if self.forward_avoidance is not None:
             result['obstacle_avoidance'] = self.forward_avoidance.status()

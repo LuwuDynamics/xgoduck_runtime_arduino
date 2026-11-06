@@ -17,6 +17,7 @@ import time
 import math
 import threading
 from collections import deque
+from contextlib import nullcontext
 
 import numpy as np
 
@@ -44,7 +45,7 @@ class WakeWordManager:
 
     def __init__(self, on_wakeup=None, on_ready=None, model_path=None, threshold=None, device=None,
                  on_audio=None, input_transform=None, input_scale=None, stride_duration=None,
-                 cooldown_sec=None, input_channels=1, input_latency=.32):
+                 cooldown_sec=None, input_channels=1, input_latency=.32, shared_input=False):
         """
         Args:
             on_wakeup: 检测到唤醒词后的回调
@@ -57,6 +58,7 @@ class WakeWordManager:
             input_scale: 32768 为原 PCM16 幅值模型；1 为归一化音频训练的模型
             stride_duration: 推理间隔秒数，默认 0.5；新模型可指定 0.08
             cooldown_sec: 触发间隔秒数，默认 1.5
+            shared_input: 由聊天采集流通过 feed_pcm 提供单声道 PCM16
         """
         self._on_wakeup = on_wakeup
         self._on_ready = on_ready
@@ -71,6 +73,8 @@ class WakeWordManager:
         self._input_channels, self._input_latency = input_channels, input_latency
         self._capture_stats = dict(callbacks=0, input_overflows=0, queue_drops=0,
                                    stale_blocks=0, discontinuities=0, input_latency_ms=None)
+        self._shared_input = shared_input
+        self._feed_queue = None
         self._on_audio = on_audio
         self._input_transform = input_transform or (lambda samples: samples[:, 0] if samples.ndim == 2 else samples)
         self._input_scale = 32768. if input_scale is None else input_scale
@@ -243,13 +247,14 @@ class WakeWordManager:
         return float(outputs[0][0, 0])
 
     def _listen_loop(self):
-        """后台线程：按 inference.py 方式采集音频，2秒窗口每0.5秒滑动推理"""
-        try:
-            import sounddevice as sd
-        except ImportError:
-            print("[WakeWord] sounddevice 未安装，无法监听", flush=True)
-            self._running = False
-            return
+        """后台线程用配置的步长检测 2 秒音频窗口。"""
+        if not self._shared_input:
+            try:
+                import sounddevice as sd
+            except ImportError:
+                print("[WakeWord] sounddevice 未安装，无法监听", flush=True)
+                self._running = False
+                return
 
         if not self._load_model() or not self._running:
             self._running = False
@@ -257,15 +262,15 @@ class WakeWordManager:
 
         # Hard memory bound plus a worker-side age limit. Dropped blocks reset
         # the two-second window instead of stitching discontinuous speech.
-        audio_queue = deque(maxlen=max(4, math.ceil(CLIP_DURATION / self._stride_duration) + 2))
+        queue_stride = min(self._stride_duration, .06) if self._shared_input else self._stride_duration
+        audio_queue = deque(maxlen=max(4, math.ceil(CLIP_DURATION / queue_stride) + 2))
         stats = self._capture_stats
         sequence = 0
-        previous_sequence = None
-        previous_overflows = 0
         last_trigger = 0.0
         peak_score = 0.0
         chunk_count = 0
         last_diag = time.time()
+        woke = False
 
         def audio_callback(indata, frames, time_info, status):
             nonlocal sequence
@@ -279,14 +284,6 @@ class WakeWordManager:
             audio_queue.append((sequence, time.monotonic(), stats['input_overflows'], samples.copy()))
 
         try:
-            try:
-                default_input = self._device if self._device is not None else (sd.default.device[0] if sd.default.device else None)
-                dev_info = sd.query_devices(default_input) if default_input is not None else None
-                if dev_info:
-                    print(f"[WakeWord] 音频设备: [{default_input}] {dev_info['name']}", flush=True)
-            except Exception:
-                pass
-
             print(
                 f"[WakeWord] 监听参数: threshold={self._threshold} "
                 f"sample_rate={SAMPLE_RATE} window={CLIP_DURATION:.1f}s "
@@ -294,15 +291,22 @@ class WakeWordManager:
                 flush=True,
             )
 
-            with sd.InputStream(
-                samplerate=SAMPLE_RATE,
-                channels=self._input_channels,
-                dtype="float32",
-                blocksize=self._stride_samples,
-                latency=self._input_latency,
-                device=self._device,
-                callback=audio_callback,
-            ) as stream:
+            if self._shared_input:
+                self._feed_queue = audio_queue
+                stream_context = nullcontext()
+            else:
+                try:
+                    default_input = self._device if self._device is not None else sd.default.device[0]
+                    dev_info = sd.query_devices(default_input)
+                    if dev_info:
+                        print(f"[WakeWord] 音频设备: [{default_input}] {dev_info['name']}", flush=True)
+                except Exception:
+                    pass
+                stream_context = sd.InputStream(
+                    samplerate=SAMPLE_RATE, channels=self._input_channels, dtype="float32",
+                    blocksize=self._stride_samples, latency=self._input_latency,
+                    device=self._device, callback=audio_callback)
+            with stream_context as stream:
                 actual_latency = getattr(stream, 'latency', None)
                 if isinstance(actual_latency, (float, int)):
                     stats['input_latency_ms'] = round(actual_latency * 1000, 1)
@@ -316,23 +320,10 @@ class WakeWordManager:
                 ring = np.zeros(CLIP_SAMPLES, dtype=np.float32)
                 filled_samples = 0  # 已写入 ring 的真实音频样本数（warmup 防止零数据误触发）
 
-                while self._running:
-                    if not audio_queue:
-                        time.sleep(0.02)
-                        continue
-
-                    seq, captured_at, overflows, samples = audio_queue.popleft()
-                    if time.monotonic() - captured_at > .5:
-                        stats['stale_blocks'] += 1
-                        continue
-                    if ((previous_sequence is not None and seq != previous_sequence + 1)
-                            or overflows != previous_overflows):
+                for new_audio, reset in self._capture_chunks(audio_queue):
+                    if reset:
                         ring.fill(0)
                         filled_samples = 0
-                        stats['discontinuities'] += 1
-                    previous_sequence, previous_overflows = seq, overflows
-                    new_audio = samples.astype(np.float32)
-                    new_audio = self._input_transform(new_audio)
                     if self._on_audio is not None:
                         try:
                             self._on_audio(new_audio)
@@ -387,13 +378,60 @@ class WakeWordManager:
                             f"时间={time.strftime('%H:%M:%S')}",
                             flush=True,
                         )
-                        self._running = False
-                        if self._on_wakeup:
-                            self._on_wakeup()
-                        return
+                        woke = True
+                        break
 
         except Exception as e:
             print(f"[WakeWord] 监听异常: {e}", flush=True)
         finally:
+            self._feed_queue = None
             self._running = False
             print("[WakeWord] 监听线程退出", flush=True)
+        if woke and self._on_wakeup:
+            try:
+                self._on_wakeup()
+            except Exception as e:
+                print(f"[WakeWord] 唤醒回调失败: {e}", flush=True)
+
+    def feed_pcm(self, pcm, captured_at, overflows, sequence):
+        """Accept an immutable mono frame from the codec worker."""
+        audio_queue = self._feed_queue
+        if audio_queue is not None and self._running:
+            stats = self._capture_stats
+            stats['callbacks'] += 1
+            stats['input_overflows'] = overflows
+            if len(audio_queue) == audio_queue.maxlen:
+                stats['queue_drops'] += 1
+            audio_queue.append((sequence, captured_at, overflows, pcm))
+
+    def _capture_chunks(self, audio_queue):
+        """Keep model stride independent of the shared stream's Opus frame size."""
+        stats = self._capture_stats
+        previous_sequence = None
+        previous_overflows = 0
+        stride_bytes = self._stride_samples * 2
+        pending = b""
+        reset = False
+        while self._running:
+            if not audio_queue:
+                time.sleep(.02)
+                continue
+            sequence, captured_at, overflows, samples = audio_queue.popleft()
+            if time.monotonic() - captured_at > .5:
+                stats['stale_blocks'] += 1
+                continue
+            if ((previous_sequence is not None and sequence != previous_sequence + 1)
+                    or overflows != previous_overflows):
+                pending = b""
+                reset = True
+                stats['discontinuities'] += 1
+            previous_sequence, previous_overflows = sequence, overflows
+            if self._shared_input:
+                pending += samples
+                while self._running and len(pending) >= stride_bytes:
+                    chunk, pending = pending[:stride_bytes], pending[stride_bytes:]
+                    yield np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768, reset
+                    reset = False
+            else:
+                yield self._input_transform(samples.astype(np.float32)), reset
+                reset = False

@@ -129,10 +129,10 @@ class XiaoyaModelTest(unittest.TestCase):
     def test_xiaoya_stream_uses_80ms_blocks_and_waits_for_two_seconds_before_scoring(self):
         import numpy as np
         woke = Mock()
-        m = self.manager_type(model_path=str(MODEL), input_scale=1., threshold=.8,
+        m = self.manager_type(model_path=str(MODEL), input_scale=1., threshold=.5,
                               stride_duration=.08, cooldown_sec=2., on_wakeup=woke)
         m._load_model = Mock(return_value=True)
-        m._predict = Mock(side_effect=[.79, .81])
+        m._predict = Mock(side_effect=[.49, .50])
         m._running = True
         def stream(**cfg):
             self.assertEqual(cfg['blocksize'], 1280)
@@ -193,6 +193,164 @@ class XiaoyaProductTest(unittest.TestCase):
                                env=env, capture_output=True, text=True, timeout=20)
             self.assertEqual(r.returncode, 0, r.stdout+r.stderr)
 
+    def test_shared_microphone_sends_preroll_and_live_audio_in_order_while_cue_is_queued(self):
+        self.check('''
+import asyncio
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
+import numpy as np
+from application import Application, WakeWordManager
+from voice_application import application_type
+
+async def until(condition):
+    async with asyncio.timeout(3):
+        while not condition():
+            await asyncio.sleep(.004)
+
+async def check():
+    runtime = SimpleNamespace(mouth=None)
+    app = application_type(Application, runtime)(dict(
+        enable_robot=False, enable_camera=False, ambient_sound={'enabled':False},
+        provisioned_mqtt={'endpoint':'test'}, wakeword={'shared_capture':True,'stride_duration':.08},
+        input_transform=lambda pcm: (np.frombuffer(pcm, dtype='<i2') * 2).tobytes()))
+    protocol = Mock(session_id='test-session')
+    protocol.start, protocol.shutdown = AsyncMock(), AsyncMock()
+    opened = False
+    protocol.is_audio_channel_opened.side_effect = lambda: opened
+    connecting, connect, starting, start = (asyncio.Event() for _ in range(4))
+    replaying, replay = asyncio.Event(), asyncio.Event()
+    sent = []
+
+    async def open_channel():
+        nonlocal opened
+        connecting.set()
+        await connect.wait()
+        opened = True
+        return True
+
+    async def start_listening(mode, *, wait_published):
+        assert opened and mode == 'auto' and wait_published
+        starting.set()
+        await start.wait()
+        return True
+
+    async def send(frame, timestamp):
+        assert app.state == 'listening' and start.is_set() and timestamp == 0
+        if not sent:
+            replaying.set()
+            await replay.wait()
+        sent.append(int.from_bytes(frame, 'little') // 2)
+        return True
+
+    protocol.open_audio_channel = AsyncMock(side_effect=open_channel)
+    protocol.send_start_listening = AsyncMock(side_effect=start_listening)
+    protocol.send_audio = AsyncMock(side_effect=send)
+    with (
+        patch('application.MqttUdpProtocol', return_value=protocol),
+        patch('audio_codec.sd.RawOutputStream'),
+        patch('audio_codec.sd.RawInputStream') as capture,
+        patch('sounddevice.InputStream') as separate_capture,
+        patch('audio_codec.opuslib.Encoder') as encoder,
+        patch.object(WakeWordManager, '_load_model', return_value=True),
+        patch.object(WakeWordManager, '_predict', return_value=.95) as predict,
+    ):
+        encode = encoder.return_value.encode
+        encode.side_effect = lambda pcm, size: pcm[:2]
+        try:
+            assert await app.start()
+            await until(lambda: app.wakeword._feed_queue is not None)
+            callback = capture.call_args.kwargs['callback']
+
+            async def feed(first, last):
+                for value in range(first, last + 1):
+                    callback(value.to_bytes(2, 'little') * 960, 960, None, None)
+                    await until(lambda: encode.call_count == value)
+
+            await feed(1, 34)
+            await asyncio.wait_for(connecting.wait(), 3)
+            assert app.state == 'connecting' and not app.audio.is_playback_idle()
+            waveform = np.repeat(np.arange(1, 35, dtype=np.float32), 960)[:32000] / 16384
+            np.testing.assert_array_equal(predict.call_args.args[0], waveform)
+            await feed(35, 40)
+            protocol.send_audio.assert_not_awaited()
+            connect.set()
+            await asyncio.wait_for(starting.wait(), 3)
+            await feed(41, 43)
+            protocol.send_audio.assert_not_awaited()
+            start.set()
+            await asyncio.wait_for(replaying.wait(), 3)
+            await feed(44, 47)
+            assert not app.audio.is_playback_idle()  # Listening did not clear the wake cue.
+            replay.set()
+            await until(lambda: app._wake_buffer is None)
+            await feed(48, 49)
+            await until(lambda: sent[-1] == 49)
+            assert sent[0] in (28, 29), sent
+            assert sent == list(range(sent[0], 50)), sent
+            app._back_to_idle()
+            capture.assert_called_once()
+            capture.return_value.close.assert_not_called()
+            separate_capture.assert_not_called()
+        finally:
+            await app.shutdown()
+asyncio.run(check())
+''')
+
+    def test_unsent_wake_audio_is_discarded_on_publish_failure_overflow_and_shutdown(self):
+        self.check('''
+import asyncio
+from unittest.mock import AsyncMock, Mock
+from application import Application, WAKE_BUFFER_FRAMES
+
+async def check(scenario):
+    app = Application({'wakeword':{'shared_capture':True}})
+    app.loop = asyncio.get_running_loop()
+    app.audio = Mock(aec_enabled=False)
+    app.wakeword = Mock(_running=False)
+    starting, release = asyncio.Event(), asyncio.Event()
+    protocol = app.protocol = Mock()
+    protocol.is_audio_channel_opened.return_value = True
+    protocol.close_audio_channel = AsyncMock(side_effect=app._on_audio_channel_closed)
+    protocol.shutdown = AsyncMock()
+    protocol.send_audio = AsyncMock()
+
+    async def start_listening(*args, **kwargs):
+        starting.set()
+        await release.wait()
+        return scenario == 'overflow'
+
+    protocol.send_start_listening = AsyncMock(side_effect=start_listening)
+    app._on_capture_frame(b'preroll')
+    task = app._spawn(app._handle_wakeword())
+    try:
+        await asyncio.wait_for(starting.wait(), 1)
+        app._on_capture_frame(b'while-connecting')
+        if scenario == 'overflow':
+            for _ in range(WAKE_BUFFER_FRAMES + 1):
+                app._on_capture_frame(b'overflow')
+            assert len(app._wake_buffer) == WAKE_BUFFER_FRAMES
+        if scenario == 'shutdown':
+            await app.shutdown()
+            assert task.cancelled()
+        else:
+            release.set()
+            await task
+            assert app.state == 'idle'
+            if scenario == 'publish-failed':
+                app.audio.clear_play_queue.assert_not_called()  # Keep the wake acknowledgement.
+            app.wakeword.start.assert_called_once()
+        assert app._wake_buffer is None and not app._wake_history
+        protocol.send_audio.assert_not_awaited()
+    finally:
+        if not app._closing:
+            await app.shutdown()
+
+async def main():
+    for scenario in ('publish-failed', 'overflow', 'shutdown'):
+        await check(scenario)
+asyncio.run(main())
+''')
+
     def test_product_wake_profile_follows_language_without_changing_cloud(self):
         self.check('''
 import asyncio, os
@@ -212,7 +370,7 @@ async def check():
                     profile = app.config['wakeword']
                     if language == 'cn':
                         assert Path(profile['model_path']).name == 'xiaoya.onnx'
-                        assert (profile['threshold'],profile['input_scale'],profile['stride_duration'],profile['cooldown_sec']) == (.8,1.,.08,2.)
+                        assert (profile['threshold'],profile['input_scale'],profile['stride_duration'],profile['cooldown_sec']) == (.5,1.,.08,2.)
                         assert app._wake_word() == '小鸭小鸭'
                     else:
                         assert 'model_path' not in profile and 'input_scale' not in profile

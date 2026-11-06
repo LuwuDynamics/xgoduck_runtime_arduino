@@ -60,15 +60,15 @@
     $('speakerTest').disabled=busy||!a?.available||(!speakerTesting&&a.state!=='idle');
     $('speakerTest').classList.toggle('active',!!speakerPlaying);$('speakerTest').setAttribute('aria-pressed',String(!!speakerPlaying));
     $('speakerLabel').textContent=t(speakerTesting&&mediaBusy?'speakerPreparing':speakerPlaying?'stopSpeakerTest':'testSpeaker');
-    $('speakerHint').textContent=t(speakerPlaying?'speakerPlayingHint':'speakerTestHint');
+    $('speakerTest').title=t(speakerPlaying?'speakerPlayingHint':'speakerTestHint');
     $('applyVolume').disabled=busy||!a?.available||!volumeDirty;
     $('testSpeaker').disabled=$('testMic').disabled=busy||!a?.available||a.state!=='idle';
     $('volume').disabled=busy||!a?.available;$('voiceFile').disabled=busy||!a?.available||a.state!=='idle';
     $('stopAudio').disabled=mediaBusy||(!live&&(!a?.available||a.state==='idle'));
     $('listen').disabled=!live&&(mediaBusy||!a?.available||a.state!=='idle');
     $('listen').classList.toggle('active',!!live);$('listen').setAttribute('aria-pressed',String(!!live));
-    $('listenLabel').textContent=t(live?'stopListening':'listen');$('listenHint').textContent=t(live?'stopListenHint':'listenHint');
-    $('voiceState').textContent=t(audioState,audioValues);
+    $('listenLabel').textContent=t(live?'stopListening':'listen');$('listen').title=t(live?'stopListenHint':'listenHint');
+    $('voiceState').textContent=audioState==='listenIdle'?'':t(audioState,audioValues);
     const usb=gamepad?.usb;
     $('usbHost').disabled=usbBusy||!usb?.available;$('usbHost').setAttribute('aria-checked',String(!!usb?.host));
     $('usbHost').textContent=t(usbBusy?'usbSwitching':usb?.host?'usbOn':'usbOff');
@@ -103,7 +103,6 @@
     const response=await fetch('/api/media/camera/frame');if(!response.ok)throw Error(t('photoMissing'));
     const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download='duck-'+Date.now()+'.jpg';link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
   }catch(error){notify(message(error));}};
-  $('torqueOff').onclick=async()=>{try{await api('mode',{mode:'off'});notify(t('torqueOff'));}catch(error){notify(message(error),true);}};
   function panel(name){
     activePanel=name;
     document.querySelectorAll('[data-panel]').forEach(button=>{if(button.dataset.panel===name)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
@@ -204,6 +203,7 @@
       robot=results[0].status==='fulfilled'?results[0].value:null;
       if(revision===mediaRevision&&!cameraBusy&&!lightBusy&&!mediaBusy)media=results[1].status==='fulfilled'?results[1].value:null;
       if(!usbBusy)gamepad=results[2].status==='fulfilled'?results[2].value:null;
+      window.DuckMotion?.update(robot,gamepad?.control?.enabled===true);
       render();
     }finally{setTimeout(poll,1500);}
   }

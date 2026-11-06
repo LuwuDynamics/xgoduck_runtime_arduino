@@ -174,6 +174,19 @@ def main():
                         raise AssertionError('Orphan test failed to kill the simulated motion process')
                     assert client.post('/api/mode', json={'mode': 'off'}).status_code == 200
                     assert client.post('/api/mode', json={'mode': 'shadow'}).status_code == 200
+                    cockpit = '/api/cockpit/motion'
+                    start = dict(controller_id='a'*24, sequence=1, kind='stand')
+                    headers = {'X-Duck-Cockpit': '1', 'Origin': 'http://testserver'}
+                    assert client.post(cockpit, json=start).status_code == 403
+                    assert client.post(cockpit, json=start, headers=headers | {'Origin': 'http://elsewhere'}).status_code == 403
+                    drive = dict(start, kind='begin', twist=[.1, 0, 0])
+                    assert client.post(cockpit, json=drive, headers=headers).status_code == 400
+                    assert client.get('/api/status').json()['mode'] == 'shadow'
+                    off = dict(start, sequence=2, kind='torque_off')
+                    assert client.post(cockpit, json=off, headers=headers).json()['mode'] == 'off'
+                    assert client.post(cockpit, json=start, headers=headers).status_code == 400
+                    assert client.get('/api/status').json()['mode'] == 'off'
+                    assert client.post('/api/mode', json={'mode': 'shadow'}).status_code == 200
                     # Exercise the stable ZIP's buttons through the real App
                     # routes and matching MCU ABI, still with no physical I/O.
                     roller = client.post('/api/roller', json={'enabled': True})

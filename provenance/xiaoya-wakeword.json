@@ -14,7 +14,7 @@
     "sample_rate": 16000,
     "window_seconds": 2,
     "input_scale": 1.0,
-    "threshold": 0.8,
+    "threshold": 0.5,
     "stride_seconds": 0.08,
     "cooldown_seconds": 2,
     "reference": "esp-voice-1/livekit-wakeword/src/livekit/wakeword/inference/model.py",

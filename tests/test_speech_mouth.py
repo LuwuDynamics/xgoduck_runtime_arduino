@@ -331,7 +331,7 @@ class MouthMotionTest(unittest.TestCase):
 
     def test_speech_never_arms_or_takes_over_disabled_or_special_body_states(self):
         changes = [dict(mode='shadow'), dict(mode='off'), dict(mode='calibrate'),
-                   dict(mode='servo_debug'), dict(enabled=False), dict(source='gamepad'),
+                   dict(mode='servo_debug'), dict(enabled=False),
                    dict(phase='getup'), dict(phase='default_pose'), dict(pick=True),
                    dict(roll=1000), dict(sitstand='sit'), dict(kick='left'), dict(kick='right'),
                    dict(ready=False), dict(watchdog=True)]
@@ -372,6 +372,15 @@ class MouthMotionTest(unittest.TestCase):
         self.assertEqual(self.c.mouth, MIN_DEGREES)
         self.assertEqual(self.c.twist, [.2, 0, 0])
         self.assertEqual(before, (self.access.action, self.access.pending))
+
+    def test_talking_uses_mouth_while_gamepad_keeps_leg_control(self):
+        self.c.input_source = 'gamepad'
+        self.c.command(twist=[.1, 0., 0.], source='gamepad')
+        self.submit()
+        self.f.advance(.15)
+        self.assertEqual(self.c.mouth, 6.)
+        self.assertEqual(self.c.twist, [.1, 0., 0.])
+        self.assertEqual(self.c.input_source, 'gamepad')
 
     def test_tts_mouth_ignores_other_joint_failure_and_stops_only_if_34_feedback_is_lost(self):
         self.f.motion_status.update(full_robot_ready=False, imu_ok=True,

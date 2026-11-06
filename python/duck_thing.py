@@ -72,12 +72,12 @@ class DuckThing(Thing):
                         lambda a: self.action(kind='head', head=[a['head'+str(i)].get_value() for i in range(1, 5)], duration=1))
         self.add_method('SetMouth', '设置嘴部开合角度', [p('degrees', '0–30 度')],
                         lambda a: self.action(kind='mouth', mouth=a['degrees'].get_value(), duration=1))
-        self.add_method('Pick', '运行一次四秒抓取策略，需机器人已就绪', [], lambda _: self.action(kind='pick'))
-        self.add_method('Roulade', '翻滚/滚一圈：站稳后运行原翻滚模型约1.9秒；后续动作等重新站稳，查GetStatus', [], lambda _: self.action(kind='roulade'))
-        self.add_method('Sit', '站稳后运行坐站ONNX并保持坐姿和扭矩；起立用Stand，查GetStatus并以实际姿态验收',
+        self.add_method('Pick', '抓取约4秒；若处于坐姿，板端会先起立再抓取', [], lambda _: self.action(kind='pick'))
+        self.add_method('Roulade', '翻滚约1.9秒；若处于坐姿会先起立，后续动作等重新站稳，查GetStatus', [], lambda _: self.action(kind='roulade'))
+        self.add_method('Sit', '站稳后坐下并保持扭矩，支持默认姿态保持；起立用Stand',
                         [], lambda _: self.action(kind='sit'))
-        self.add_method('LeftKick', '左脚踢球：站稳后运行左踢ONNX约0.4秒，回到行走平衡；留出脚前空间，不代表踢中', [], lambda _: self.action(kind='left_kick'))
-        self.add_method('RightKick', '右脚踢球：站稳后运行右踢ONNX约0.4秒，回到行走平衡；留出脚前空间，不代表踢中', [], lambda _: self.action(kind='right_kick'))
+        self.add_method('LeftKick', '左脚踢球约0.4秒；若处于坐姿会先起立，站稳后踢，查GetStatus', [], lambda _: self.action(kind='left_kick'))
+        self.add_method('RightKick', '右脚踢球约0.4秒；若处于坐姿会先起立，站稳后踢，查GetStatus', [], lambda _: self.action(kind='right_kick'))
         self.add_method('SetWalkingMode', '选择walk普通脚或roller滚轮脚；roller需用户确认有滚轮。停移动并清队列，不启动舵机；再用Stand/Forward/Move/Turn。语音线速度≤0.15；Roller转向±0.25，不侧移；坐站/踢腿时不能切换',
                         [p('mode', 'walk 普通脚；roller 滚轮脚', ValueType.STRING)],
                         lambda a: self.action(kind='walking_mode', walking_mode=a['mode'].get_value()))
@@ -130,7 +130,7 @@ class DuckThing(Thing):
 
     def action(self, **body):
         result = request(self.port, self.token, '/action', dict(body, session=self.session, issued_at=self.clock()))
-        if result.get('status') == 'blocked':
+        if result.get('reason'):
             return dict(status='success', execution=result, message=result['reason'])
         return {'status': 'success', 'execution': result,
                 'message': 'Queued; not started yet. Use GetStatus for completion.' if result.get('status') == 'queued' else

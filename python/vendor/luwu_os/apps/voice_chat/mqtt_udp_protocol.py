@@ -448,14 +448,23 @@ class MqttUdpProtocol:
             await self.on_audio_channel_closed()
 
     # ================= 数据收发 =================
-    async def send_text(self, message: str) -> bool:
+    async def send_text(self, message: str, *, wait_published=False) -> bool:
         topic = self.settings.get("publish_topic", "device-server")
-        if not self._mqtt or not self._mqtt_connected:
+        client = self._mqtt
+        if not client or not self._mqtt_connected:
             return False
-        try:
-            await self.loop.run_in_executor(
-                None, lambda: self._mqtt.publish(topic, message))
+
+        def publish():
+            info = client.publish(topic, message)
+            if info.rc != mqtt.MQTT_ERR_SUCCESS:
+                return False
+            if wait_published:
+                info.wait_for_publish(timeout=1.)
+                return info.is_published()
             return True
+
+        try:
+            return await self.loop.run_in_executor(None, publish)
         except Exception as e:
             print(f"[protocol] 发送文本失败: {e}")
             return False
@@ -542,10 +551,10 @@ class MqttUdpProtocol:
             "session_id": self.session_id, "type": "listen",
             "state": "detect", "text": wake_word}))
 
-    async def send_start_listening(self, mode: str):
-        await self.send_text(json.dumps({
+    async def send_start_listening(self, mode: str, *, wait_published=False):
+        return await self.send_text(json.dumps({
             "session_id": self.session_id, "type": "listen",
-            "state": "start", "mode": mode}))
+            "state": "start", "mode": mode}), wait_published=wait_published)
 
     async def send_stop_listening(self):
         await self.send_text(json.dumps({

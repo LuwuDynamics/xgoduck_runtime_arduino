@@ -27,6 +27,7 @@ class GamepadControl:
     def __init__(self, controller, client, bindings_path=None):
         self.controller, self.client = controller, client
         self.enabled = False
+        self.wait_for_neutral = False
         self.identity = None
         self.buttons = {}
         self.error = ''
@@ -147,10 +148,11 @@ class GamepadControl:
         with self.controller.lock:
             active = self.enabled
             self.enabled = False
-            self.controller.input_source = 'web'
             self.error = reason
-            if active and stop:
-                self.controller.set_mode('off')
+            if self.controller.input_source == 'gamepad':
+                self.controller.input_source = 'web'
+                if active and stop:
+                    self.controller.set_mode('off')
 
     def enable(self, enabled):
         if not isinstance(enabled, bool):
@@ -170,8 +172,11 @@ class GamepadControl:
                 raise ValueError('Finish or cancel button binding first.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration or servo setup first.')
-            self.controller.set_mode('off')
-            self.controller.input_source = 'gamepad'
+            if self.controller.input_source == 'web':
+                self.controller.twist = [0.] * 3
+                self.controller.generation += 1
+                self.controller.input_source = 'gamepad'
+            self.wait_for_neutral = False
             self.identity, self.buttons = data['id'], dict(data['buttons'])
             self.enabled, self.error = True, ''
 
@@ -194,6 +199,7 @@ class GamepadControl:
             try:
                 if buttons.get(self.bindings['off']):
                     self.controller.set_mode('off')
+                    self.controller.input_source = 'gamepad'
                 else:
                     for action in ('walk', 'hold', 'pick', 'roulade'):
                         if self.bindings[action] not in pressed:
@@ -204,9 +210,19 @@ class GamepadControl:
                             self.controller.start_pick()
                         else:
                             self.controller.start_roulade()
+                        if self.controller.input_source != 'gamepad':
+                            self.controller.twist = [0.] * 3
+                            self.controller.generation += 1
+                            self.controller.input_source = 'gamepad'
                         break
-                self.controller.command(twist=motion_from_input(
-                    data, roller=getattr(self.controller, 'roller_mode', False) is True), source='gamepad')
+                twist = motion_from_input(data, roller=self.controller.roller_mode)
+                if self.wait_for_neutral:
+                    if any(twist):
+                        return
+                    self.wait_for_neutral = False
+                if self.controller.input_source == 'web' and any(twist):
+                    self.controller.input_source = 'gamepad'
+                self.controller.command(twist=twist, source='gamepad')
                 self.error = ''
             except ValueError as e:
                 self.error = str(e)

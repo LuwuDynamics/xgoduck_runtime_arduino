@@ -8,14 +8,16 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 (async()=>{
   const browser=await chromium.launch({headless:true,channel:'chrome'});
   try{
-    const context=await browser.newContext({locale:'zh-CN',viewport:{width:390,height:844}});
+    const context=await browser.newContext({locale:'zh-CN',viewport:{width:390,height:844},hasTouch:true});
     const page=await context.newPage(),errors=[],writes=[];
     page.on('pageerror',error=>errors.push(error.message));
     const media={camera:{available:true,running:false,ready:false,device:'/dev/video2',frames:0,fps:0,error:'',light:{supported:true,enabled:false,error:''}},audio:{available:true,volume:100,state:'idle'}};
     const battery={voltage_v:7.8,low:false};
+    const robot={mode:'shadow',enabled:false,feedback_hz:100,control_ready:true,battery,
+      recovery:{phase:'walk',angle_deg:0},input_source:'web'};
     const tof={state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
-    let tofHTTP=200,tofDelay=0;
+    let tofHTTP=200,tofDelay=0,blockForward=false;
     let holdNext=false,releaseStatus,capturedStatus;
     await page.addInitScript(()=>{
       window.__phoneMicCalls=0;window.__liveOpened=0;window.__liveClosed=0;
@@ -38,12 +40,18 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       if(url.pathname.startsWith('/api/')){
         if(request.method()==='POST'){
           const body=request.postDataJSON();writes.push({path:url.pathname,body});
+          if(url.pathname==='/api/cockpit/motion'){
+            assert.equal(request.headers()['x-duck-cockpit'],'1');
+            if(body.kind==='stand')Object.assign(robot,{mode:'policy',enabled:false,arming:true,arm_failed:false});
+            if(body.kind==='torque_off')Object.assign(robot,{mode:'off',enabled:false});
+            return route.fulfill({json:{ok:true,forward_blocked:blockForward&&body.twist?.[0]>0}});
+          }
           if(url.pathname==='/api/media/camera/light')media.camera.light.enabled=body.enabled;
           else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:true,fps:30});
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
           return route.fulfill({json:media});
         }
-        if(url.pathname==='/api/status')return route.fulfill({json:{mode:'shadow',enabled:false,feedback_hz:100,battery}});
+        if(url.pathname==='/api/status')return route.fulfill({json:robot});
         if(url.pathname==='/api/tof/status'){
           const snapshot={...tof,seq:++tof.seq};
           if(tofDelay)await new Promise(resolve=>setTimeout(resolve,tofDelay));
@@ -137,12 +145,68 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.locator('#clean').click();assert.equal(await page.locator('.tof-layer').isVisible(),false);
     await page.locator('#restoreHud').click();assert.equal(await page.locator('.tof-layer').isVisible(),true);
 
+    Object.assign(battery,{voltage_v:8.1,low:false});
+    Object.assign(robot,{mode:'policy',enabled:false,recovery:{phase:'getup',angle_deg:110}});
+    const motionText=fragment=>page.waitForFunction(fragment=>
+      document.getElementById('motionStatus').textContent.includes(fragment),fragment);
+    await motionText('The servos are off');
+    await page.locator('[data-motion=stand]:enabled').waitFor();
+    assert.equal(await page.locator('#moveStick').getAttribute('aria-disabled'),'true');
+    await page.locator('[data-motion=stand]').click();
+    await motionText('Enabling the servos');
+    Object.assign(robot,{mode:'shadow',arming:false,arm_failed:true});
+    await motionText('The servos are off');
+    await page.locator('[data-motion=stand]').click();
+    await motionText('Enabling the servos');
+    Object.assign(robot,{enabled:true,arming:false});
+    await motionText('Duck is getting up');
+    assert.equal(await page.locator('#moveStick').getAttribute('aria-disabled'),'true');
+    robot.recovery={phase:'walk',angle_deg:0};
+    await page.locator('#moveStick[aria-disabled=false]').waitFor();
+    assert.equal(writes.at(-1).body.kind,'stand');
+    const cdp=await context.newCDPSession(page);
+    const touch=(type,touchPoints=[])=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
+    const move=await page.locator('#moveStick').boundingBox(),turn=await page.locator('#turnStick').boundingBox();
+    const left={x:move.x+move.width*.31,y:move.y+move.height*.31,id:1};
+    const right={x:turn.x+turn.width*.74,y:turn.y+turn.height*.5,id:2};
+    const waitMotion=predicate=>new Promise((resolve,reject)=>{
+      const deadline=Date.now()+3500;
+      const timer=setInterval(()=>{
+        if(predicate(writes.at(-1)?.body)){clearInterval(timer);resolve();}
+        else if(Date.now()>=deadline){clearInterval(timer);reject(Error('No matching cockpit command'));}
+      },15);
+    });
+    await touch('touchStart',[left,right]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>0&&body.twist[1]>0&&body.twist[2]<0);
+    blockForward=true;
+    await page.waitForFunction(()=>document.getElementById('motionStatus').textContent.includes('Forward paused by ToF'));
+    await touch('touchEnd');
+    await waitMotion(body=>body?.kind==='release');
+    assert.equal(await page.locator('.stick-pad.is-held').count(),0);
+    const released=writes.length;
+    await page.waitForTimeout(200);
+    assert.equal(writes.length,released);
+    blockForward=false;
+    await touch('touchStart',[right]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[2]<0);
+    await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+    await waitMotion(body=>body?.kind==='release');
+    await touch('touchEnd');
+    await cdp.detach();
+    await page.locator('[data-motion=pick]').click();
+    await waitMotion(body=>body?.kind==='pick');
+    await page.locator('[data-motion=stop]').click();
+    await waitMotion(body=>body?.kind==='stop');
+    await page.locator('#torqueOff').click();
+    await waitMotion(body=>body?.kind==='torque_off');
+    await page.locator('#moveStick[aria-disabled=true]').waitFor();
+
     if(output)fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh','en']){
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
       for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
-        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','torqueOff','batteryVoltage'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
+        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
         const bounds=await page.evaluate(()=>({panel:document.getElementById('tofPanel').getBoundingClientRect().toJSON(),top:document.querySelector('.top').getBoundingClientRect().bottom,bottom:document.querySelector('.bottom').getBoundingClientRect().top,values:['tofCenter','tofNearest'].map(id=>document.getElementById(id).getBoundingClientRect().toJSON())}));
         assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);
@@ -152,7 +216,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       }
     }
     assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en and persistence; camera/light; live audio cleanup; fullscreen; 64-zone ToF, live/stale/absent/RPC/network recovery, collapse/clean view; eight viewport/language layouts.');
+    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and eight layouts; stand, simultaneous touch sticks, ToF feedback, release/blur, Pick, Stop and Torque off.');
     await context.close();
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

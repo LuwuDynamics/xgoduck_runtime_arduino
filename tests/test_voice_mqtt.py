@@ -1,4 +1,5 @@
 import asyncio
+import json
 from pathlib import Path
 import sys
 import threading
@@ -54,6 +55,22 @@ class MQTTLifecycleTest(unittest.TestCase):
 
 
 class MQTTAsyncLifecycleTest(unittest.IsolatedAsyncioTestCase):
+    async def test_wake_listen_waits_for_publish_without_changing_wire_message(self):
+        protocol = MqttUdpProtocol({}, asyncio.get_running_loop())
+        protocol._mqtt = Mock()
+        protocol._mqtt_connected = True
+        protocol.session_id = 'wake-session'
+        info = protocol._mqtt.publish.return_value
+        info.rc = 0
+        info.is_published.side_effect = [False, True]
+        self.assertFalse(await protocol.send_start_listening('auto', wait_published=True))
+        self.assertTrue(await protocol.send_start_listening('auto', wait_published=True))
+        self.assertEqual(info.wait_for_publish.call_count, 2)
+        self.assertEqual(protocol._mqtt.publish.call_args.args[0], 'device-server')
+        self.assertEqual(json.loads(protocol._mqtt.publish.call_args.args[1]),
+                         {'session_id': 'wake-session', 'type': 'listen', 'state': 'start', 'mode': 'auto'})
+        self.assertEqual(protocol._mqtt.publish.call_args.kwargs, {})
+
     async def test_shutdown_cancels_pending_reconnect(self):
         protocol = MqttUdpProtocol({'endpoint': 'local-test.invalid'}, asyncio.get_running_loop())
         protocol._schedule_reconnect()

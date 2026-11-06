@@ -216,14 +216,11 @@ class VoiceMotionTest(unittest.TestCase):
                     self.assertEqual(self.c.input_source, 'web')
                     self.assertFalse(self.c.arm_pending)
 
-    def test_stand_keeps_permission_ownership_and_remote_guards(self):
+    def test_stand_keeps_permission_calibration_and_remote_guards(self):
         self.allowed = False
         with self.assertRaisesRegex(ValueError, 'disabled'):
             self.access.start_action(kind='stand', session=101)
         self.allowed = True
-        self.c.input_source = 'gamepad'
-        with self.assertRaisesRegex(ValueError, 'Gamepad'):
-            self.access.start_action(kind='stand', session=101)
         self.c.input_source, self.c.mode = 'web', 'calibrate'
         with self.assertRaisesRegex(ValueError, 'calibration'):
             self.access.start_action(kind='stand', session=101)
@@ -397,12 +394,14 @@ class VoiceMotionTest(unittest.TestCase):
         self.ack_arm()
         self.c.recovery.phase, self.c.recovery.angle_deg = 'getup', 65
         self.advance(.2)
-        with self.assertRaisesRegex(ValueError, 'Standing in progress'):
-            self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=1)
+        self.assertEqual(self.move(remote=True, duration=.7, controller_id='phone_session_A',
+                                   sequence=1)['status'], 'paused')
+        self.assertEqual(self.c.twist, [0, 0, 0])
         self.c.recovery.phase, self.c.recovery.angle_deg = 'walk', 5
         self.advance(.5)
-        with self.assertRaisesRegex(ValueError, 'Standing in progress'):
-            self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=2)
+        self.assertEqual(self.move(remote=True, duration=.7, controller_id='phone_session_A',
+                                   sequence=2)['status'], 'paused')
+        self.assertEqual(self.c.twist, [0, 0, 0])
         self.advance(.6)
         self.assertEqual(self.access.action['state'], 'completed')
         self.assertTrue(self.access.state()['movement_ready'])
@@ -733,14 +732,11 @@ class VoiceMotionTest(unittest.TestCase):
             self.access.start_action(**(body | {'sequence': 100}))
         self.assertEqual(self.c.mode, 'hold')
 
-    def test_permission_gamepad_calibration_feedback_and_running_guards(self):
+    def test_permission_calibration_feedback_and_running_guards(self):
         self.allowed = False
         with self.assertRaisesRegex(ValueError, 'disabled'):
             self.move()
         self.allowed = True
-        self.c.input_source = 'gamepad'
-        with self.assertRaisesRegex(ValueError, 'Gamepad'):
-            self.move()
         self.c.input_source, self.c.mode = 'web', 'calibrate'
         with self.assertRaisesRegex(ValueError, 'calibration'):
             self.move()
@@ -751,8 +747,9 @@ class VoiceMotionTest(unittest.TestCase):
         self.motion_status['full_robot_ready'] = True
         self.move()
         self.access.remote_allowed = lambda: True
-        with self.assertRaisesRegex(ValueError, 'running'):
-            self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=1)
+        result = self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=1)
+        self.assertEqual(result['status'], 'paused')
+        self.assertEqual(self.c.twist, [.08, 0, 0])
 
     def test_mcp_ten_second_move_is_one_bounded_action(self):
         reply = self.mcp().handle_message({'id': 1, 'method': 'tools/call', 'params':
@@ -1074,20 +1071,70 @@ class VoiceMotionTest(unittest.TestCase):
                 self.assertEqual(self.c.twist, [0, 0, 0])
                 self.assertEqual(self.access.action['state'], 'cancelled')
 
-    def test_voice_and_remote_commands_cannot_queue_behind_each_other(self):
+    def test_phone_release_advances_voice_queue_without_replaying_old_direction(self):
         self.access.remote_allowed = lambda: True
-        self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=1)
-        with self.assertRaisesRegex(ValueError, 'running|remote|遥控'):
-            self.move()
-        self.access.cancel('test')
-        self.move()
-        self.move()
-        with self.assertRaisesRegex(ValueError, 'running|queue|排队'):
-            self.move(remote=True, duration=.7, controller_id='phone_session_B', sequence=1)
+        phone = dict(remote=True, duration=.7, controller_id='phone_session_A')
+        self.move(**phone, sequence=1)
+        voice = self.move(kind='turn', twist=[0, 0, .5])
+        self.assertEqual(voice['status'], 'queued')
+        self.assertEqual(self.move(**phone, sequence=2)['status'], 'paused')
+        stop = self.access.start_action(kind='stop', session=101, remote=True,
+                                        controller_id=phone['controller_id'], sequence=3)
+        self.assertEqual(stop['status'], 'completed')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.advance(.05)
+        self.assertEqual(self.access.action['id'], voice['action_id'])
+        self.assertEqual(self.c.twist, [0, 0, .5])
+        with self.assertRaisesRegex(ValueError, 'retired'):
+            self.move(**phone, sequence=2)
+        self.advance(2.1)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.move(**phone, sequence=4)['status'], 'accepted')
+
+    def test_phone_renewals_do_not_starve_voice_and_global_stop_retires_paused_direction(self):
+        self.access.remote_allowed = lambda: True
+        phone = dict(remote=True, duration=.7, controller_id='phone_session_A')
+        self.move(**phone, sequence=1)
+        voice = self.move(kind='turn', twist=[0, 0, .5])
+        self.advance(.3)
+        self.assertEqual(self.move(**phone, sequence=2)['status'], 'paused')
+        self.advance(.45)
+        self.assertEqual(self.access.action['id'], voice['action_id'])
+        self.assertEqual(self.move(**phone, sequence=3)['status'], 'paused')
+        self.access.start_action(kind='stop', session=101)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'retired'):
+            self.move(**phone, sequence=4)
         self.access.start_action(kind='stop', session=101, remote=True,
-                                 controller_id='phone_session_B', sequence=2)
-        self.assertEqual(len(self.access.state()['queued_actions']), 1)
+                                 controller_id=phone['controller_id'], sequence=5)
+        self.assertEqual(self.move(**phone, sequence=6)['status'], 'accepted')
+
+    def test_voice_head_keeps_live_phone_direction_and_lease(self):
+        self.access.remote_allowed = lambda: True
+        phone = dict(remote=True, duration=.7, controller_id='phone_session_A')
+        move = self.move(**phone, sequence=1)
+        deadline = self.access.action['deadline']
+        result = self.access.start_action(kind='head', head=[None, None, .3, None], session=101)
+        self.assertEqual(result['status'], 'completed')
+        self.assertEqual(self.c.head, [0., 0., .3, 0.])
         self.assertEqual(self.c.twist, [.08, 0, 0])
+        self.assertEqual(self.access.action['id'], move['action_id'])
+        self.assertEqual(self.access.action['deadline'], deadline)
+        self.advance(.75)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+
+    def test_voice_body_action_returns_control_to_enabled_gamepad(self):
+        self.access.gamepad = SimpleNamespace(enabled=True, wait_for_neutral=False)
+        self.c.input_source = 'gamepad'
+        self.c.command(twist=[.1, 0, 0], source='gamepad')
+        self.access.start_action(kind='left_kick', session=101)
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertIn('ignored', self.c.command(twist=[.1, 0, 0], source='gamepad'))
+        self.advance(.45)
+        self.assertEqual(self.c.input_source, 'gamepad')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.c.command(twist=[.1, 0, 0], source='gamepad')
+        self.assertEqual(self.c.twist, [.1, 0, 0])
 
     def test_parallel_mcp_commands_are_accepted_in_one_serial_queue(self):
         from concurrent.futures import ThreadPoolExecutor
@@ -1280,9 +1327,9 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertNotIn('action', state)
         self.assertEqual(state['motion_action']['kind'], 'roulade')
 
-    def test_roulade_requires_permission_standing_feedback_and_control_ownership(self):
+    def test_roulade_requires_permission_standing_feedback_and_available_model(self):
         faults = ('permission', 'off', 'disabled', 'fallen', 'recovering', 'unknown',
-                  'feedback', 'command', 'watchdog', 'gamepad', 'calibration', 'servo_debug', 'pick')
+                  'feedback', 'command', 'watchdog', 'calibration', 'servo_debug', 'pick')
         for fault in faults:
             with self.subTest(fault=fault):
                 self.allowed = True
@@ -1300,7 +1347,6 @@ class VoiceMotionTest(unittest.TestCase):
                 elif fault == 'feedback': self.motion_status['full_robot_ready'] = False
                 elif fault == 'command': self.motion_status['mcu_command_age_us'] = 150001
                 elif fault == 'watchdog': self.motion_status['mcu_watchdog'] = True
-                elif fault == 'gamepad': self.c.input_source = 'gamepad'
                 elif fault == 'calibration': self.c.mode = 'calibrate'
                 elif fault == 'servo_debug': self.c.mode = 'servo_debug'
                 elif fault == 'pick': self.c.pick_active = True
@@ -1504,6 +1550,70 @@ class VoiceMotionTest(unittest.TestCase):
                 self.assertEqual(self.c.mode, 'policy')
                 self.assertTrue(self.c.feedback.enabled)
                 self.advance(1.1)
+
+    def test_mcp_kick_from_web_sit_starts_only_after_the_stand_transition_and_feedback(self):
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            self.c.rx_time = self.now
+            self.access.web_sitstand('sit')
+            reply, data = self.call_mcp(self.mcp(), 'Duck.RightKick')
+            self.assertFalse(reply['isError'], reply)
+            kick = data['execution']
+            self.assertEqual(kick['status'], 'queued')
+            self.assertEqual(self.c.sitstand_phase, 'stand')
+            self.assertEqual(self.access.action['prepares_action'], kick['action_id'])
+            self.advance(1.)
+            self.assertIsNone(self.c.kick_side)
+            self.c.rx_time = self.now
+            self.c.step()
+            self.assertEqual(self.c.sitstand_phase, 'idle')
+            self.advance(.95)
+            self.assertIsNone(self.c.kick_side)
+            self.c.rx_time = self.now
+            self.advance(.12)
+            self.assertEqual(self.c.kick_side, 'right')
+            self.assertEqual(self.access.action['id'], kick['action_id'])
+            self.c.step()
+            self.c.kick_policies['right'].infer.assert_called()
+
+    def test_stop_during_implicit_stand_discards_requested_kick(self):
+        self.c.sitstand_phase = 'sit'
+        kick = self.access.start_action(kind='left_kick', session=101)
+        self.assertEqual(kick['status'], 'queued')
+        self.access.start_action(kind='stop', session=101)
+        self.c.sitstand_phase = 'idle'
+        self.advance(6.)
+        self.assertIsNone(self.c.kick_side)
+        self.assertFalse(self.access.pending)
+        self.assertTrue(any(a['id'] == kick['action_id'] and a['state'] == 'cancelled'
+                            for a in self.access.state()['recent_actions']))
+
+    def test_sit_from_upright_hold_uses_existing_sit_model_directly(self):
+        self.c.mode = 'hold'
+        self.c.recovery.reset()
+        self.motion_status['gravity'] = [0., 0., -1.]
+        self.advance(1.1)
+        self.assertFalse(self.access.state()['movement_ready'])
+        result = self.access.start_action(kind='sit', session=101)
+        self.assertEqual(result['status'], 'accepted')
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertFalse(self.access.pending)
+
+    def test_released_cockpit_direction_does_not_override_running_voice_command(self):
+        cockpit = self.access.cockpit_motion
+        driver = 'a' * 24
+        cockpit(driver, 1, 'begin', [.1, 0., 0.])
+        action = self.move(kind='turn', twist=[0., 0., .5])
+        self.assertTrue(cockpit(driver, 2, 'drive', [.1, 0., 0.])['paused'])
+        self.assertEqual(self.c.twist, [0., 0., .5])
+        cockpit(driver, 3, 'release')
+        self.assertEqual(self.access.action['id'], action['action_id'])
+        self.advance(2.1)
+        self.assertEqual(self.c.twist, [0., 0., 0.])
+        self.assertEqual(self.c.input_source, 'web')
+        with self.assertRaisesRegex(ValueError, 'timed out'):
+            cockpit(driver, 4, 'drive', [.1, 0., 0.])
 
     def test_stop_during_kick_clears_model_and_queue_without_releasing_torque(self):
         self.access.start_action(kind='left_kick', session=101)
@@ -1741,7 +1851,7 @@ class VoiceMotionTest(unittest.TestCase):
         self.c.feedback.enabled = False
         reply, data = self.call_mcp(mcp, 'Duck.Move', args)
         self.assertTrue(reply['isError'])
-        self.assertIn('尚未启动', reply['error'])
+        self.assertIn('尚未使能', reply['error'])
         self.c.feedback.enabled = True
         self.motion_status['mcu_watchdog'] = True
         reply, data = self.call_mcp(mcp, 'Duck.Move', args)

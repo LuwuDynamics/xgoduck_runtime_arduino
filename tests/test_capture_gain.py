@@ -124,28 +124,29 @@ async def check():
         except Boundary: pass
         else: raise AssertionError('Audio start was not reached')
         assert abs(audio.input_transform.__self__.gain - 10**.3) < 1e-8
-        import numpy as np
-        np.testing.assert_allclose(app.config['wakeword']['input_transform'](np.array([.1], np.float32)), [.1*10**.3])
+        assert app.config['wakeword']['shared_capture'] is True
         args = app.config['audio_factory'].call_args.kwargs
         assert args['prebuffer_ms'] == 1000 and args['output_latency'] == .5
-        assert args['input_latency'] == .32
-        assert audio.output_transform.__self__ is runtime.volume
+        assert args['input_latency'] == .32 and args['input_device'] == 0
+        with patch.object(runtime.volume, 'pcm', return_value=b'processed') as volume:
+            assert audio.output_transform(b'input') == b'processed'
+            volume.assert_called_once_with(b'input', attenuation=1.)
         assert audio.output_observer.__self__ is runtime.mouth
         assert audio.output_reset_observer.__self__ is runtime.mouth
         assert app.config['tts_mouth_enabled'] is True
         with patch('application.WakeWordManager') as factory:
             factory.return_value.is_available.return_value = False
             app._init_wakeword()
-            assert factory.call_args.kwargs['input_transform'] == app.config['wakeword']['input_transform']
-            assert factory.call_args.kwargs['device'] == 0
+            assert factory.call_args.kwargs['shared_input'] is True
             assert Path(factory.call_args.kwargs['model_path']).name == 'xiaoya.onnx'
-            assert factory.call_args.kwargs['threshold'] == .8
+            assert factory.call_args.kwargs['threshold'] == .5
             assert factory.call_args.kwargs['input_scale'] == 1.
             assert factory.call_args.kwargs['stride_duration'] == .08
             assert factory.call_args.kwargs['cooldown_sec'] == 2.
         assert runtime.status()['input_gain_db'] == 6
     finally:
         await app.shutdown()
+        runtime.mouth_sender.close()
 asyncio.run(check())
 ''')
 

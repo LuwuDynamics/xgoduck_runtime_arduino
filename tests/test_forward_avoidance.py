@@ -6,11 +6,12 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'python'))
 from forward_avoidance import ForwardAvoidance, GuardedWalkingPolicy, load_settings
+from motion_access import COCKPIT_LEASE_S, MotionAccess
 
 
 def frame(distance=1000, seq=1, **changes):
@@ -177,11 +178,13 @@ class ForwardControllerTest(unittest.TestCase):
         self.feedback()
         self.c.mode, self.c.input_source = 'policy', 'web'
         self.c.recovery.phase = 'walk'
+        self.now = 10.
+        self.access = MotionAccess(self.c, clock=lambda: self.now)
 
-    def feedback(self):
+    def feedback(self, *, enabled=True):
         c, w = self.c, self.wire
         seq = c.received + 1
-        c.receive(w.STATE.pack(b'DQS1', 1, 3, w.ALL_MASK, seq, seq*10000, seq*10000,
+        c.receive(w.STATE.pack(b'DQS1', 1, 3 if enabled else 1, w.ALL_MASK, seq, seq*10000, seq*10000,
             c.seq, 0, 10000, 500, 0, 0, 0, 0, 0, -16384, 0, 0, 0,
             *self.defaults, *([0.]*15), *self.defaults))
 
@@ -242,6 +245,138 @@ class ForwardControllerTest(unittest.TestCase):
         policy.infer = original
         self.feedback(); self.c.step()
         self.c.bridge.notify.assert_called_once()
+
+    def ready_cockpit(self):
+        self.c.recovery.angle_deg = 0.
+        for _ in range(23):
+            self.now += .05
+            self.feedback()
+            self.access.tick()
+
+    def test_cockpit_stops_on_release_expiry_and_feedback_loss(self):
+        self.ready_cockpit()
+        cockpit = self.access.cockpit_motion
+        driver, other = 'a' * 24, 'b' * 24
+        twist = [.12, -.08, .45]
+        self.guard.update(frame())
+        self.assertTrue(cockpit(driver, 1, 'begin', twist)['ok'])
+        self.assertEqual(self.c.twist, twist)
+        self.assertIn('ignored', self.access.web_command(twist=[0, 0, 0]))
+        with self.assertRaisesRegex(ValueError, 'Another cockpit'):
+            cockpit(other, 1, 'begin', twist)
+        cockpit(other, 2, 'release')
+        self.assertEqual(self.c.twist, twist)
+        cockpit(driver, 3, 'release')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'retired'):
+            cockpit(driver, 2, 'drive', twist)
+        cockpit(driver, 4, 'begin', twist)
+        expires = self.now + COCKPIT_LEASE_S
+        while self.now <= expires:
+            self.now += .05
+            self.feedback()
+            self.access.tick()
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.c.input_source, 'web')
+        self.assertEqual(self.c.mode, 'policy')
+        with self.assertRaisesRegex(ValueError, 'timed out'):
+            cockpit(driver, 5, 'drive', twist)
+        cockpit(driver, 6, 'begin', twist)
+        self.c.rx_time -= .2
+        self.access.tick()
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.c.input_source, 'web')
+
+    def test_cockpit_tof_blocks_only_forward_until_the_stick_is_released(self):
+        self.ready_cockpit()
+        cockpit = self.access.cockpit_motion
+        driver, twist = 'a' * 24, [.1, .04, -.5]
+        self.guard.update(frame(80, 2))
+        self.assertTrue(cockpit(driver, 1, 'begin', twist)['forward_blocked'])
+        self.assertEqual(self.c.twist, [0, .04, -.5])
+        for seq in (3, 4, 5):
+            self.guard.update(frame(1000, seq))
+        self.assertTrue(cockpit(driver, 2, 'drive', twist)['forward_blocked'])
+        cockpit(driver, 3, 'release')
+        self.assertNotIn('forward_blocked', cockpit(driver, 4, 'begin', twist))
+        self.assertEqual(self.c.twist, twist)
+        self.guard.update(frame(None, 6))
+        self.assertNotIn('forward_blocked', cockpit(driver, 5, 'drive', [-.1, 0, .5]))
+        self.assertEqual(self.c.twist, [-.1, 0, .5])
+
+    def test_cockpit_buttons_select_the_existing_policies_without_voice(self):
+        driver = 'a' * 24
+        self.c.set_mode('shadow')
+        self.feedback()
+        cockpit = self.access.cockpit_motion
+        self.assertTrue(cockpit(driver, 1, 'stand')['ok'])
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.ready_cockpit()
+        models = {'pick':'xgoduck_pick.onnx', 'roulade':'xgoduck_roulade.onnx',
+                  'left_kick':'xgoduck_ballkick_left.onnx', 'right_kick':'xgoduck_ballkick_right.onnx'}
+        for sequence, (kind, model) in enumerate(models.items(), start=1):
+            self.feedback()
+            self.assertTrue(cockpit(driver, 2*sequence, kind)['ok'])
+            self.assertEqual(self.c.status()['active_model'], model)
+            cockpit(driver, 2*sequence+1, 'stop')
+            self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+            self.assertEqual(self.c.mouth, 0.)
+        cockpit(driver, 10, 'sit')
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
+        cockpit(driver, 11, 'stand')
+        self.assertEqual(self.c.status()['sitstand']['phase'], 'stand')
+        self.c.battery_phase = 'locked'
+        with self.assertRaisesRegex(ValueError, 'Low battery'):
+            cockpit(driver, 12, 'stand')
+        self.assertEqual(cockpit(driver, 13, 'torque_off')['mode'], 'off')
+
+    def test_cockpit_stand_rearms_in_policy_and_waits_for_stm32_ack(self):
+        with patch('motion_calibration.time.monotonic', side_effect=lambda: self.now):
+            self.feedback(enabled=False)
+            self.c.recovery.phase = 'getup'
+            self.c.recovery.angle_deg = 110.
+            self.assertTrue(self.access.cockpit_motion('a' * 24, 1, 'stand')['ok'])
+            self.assertTrue(self.c.status()['arming'])
+            for _ in range(2):
+                self.now += .02
+                self.feedback(enabled=False)
+                self.c.step()
+                packet = self.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])
+                self.assertEqual(packet[4], self.wire.ARM)
+                self.assertEqual(list(packet[7:]), list(self.c.feedback.angles))
+            self.now += .02
+            self.feedback(enabled=True)
+            self.c.step()
+            self.assertFalse(self.c.status()['arming'])
+            self.assertEqual(self.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4],
+                             self.wire.POLICY)
+            self.now += .02
+            self.feedback(enabled=False)
+            self.c.step()
+            self.assertEqual(self.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4],
+                             self.wire.POLICY)
+
+    def test_unconfirmed_arming_stops_on_timeout_or_cockpit_stop(self):
+        from motion_calibration import ARM_CONFIRM_S
+        with patch('motion_calibration.time.monotonic', side_effect=lambda: self.now):
+            cockpit = self.access.cockpit_motion
+            for sequence, timed_out in enumerate((True, False), start=1):
+                self.feedback(enabled=False)
+                cockpit('a' * 24, sequence * 2, 'stand')
+                self.c.step()
+                self.assertTrue(self.c.status()['arming'])
+                if timed_out:
+                    self.now += ARM_CONFIRM_S + .02
+                else:
+                    cockpit('a' * 24, sequence * 2 + 1, 'stop')
+                self.feedback(enabled=False)
+                self.c.step()
+                self.assertEqual(self.c.mode, 'shadow')
+                self.assertFalse(self.c.status()['arming'])
+                self.assertEqual(self.c.status()['arm_failed'], timed_out)
+                self.assertEqual(self.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4],
+                                 self.wire.DISARM)
 
 
 if __name__ == '__main__':

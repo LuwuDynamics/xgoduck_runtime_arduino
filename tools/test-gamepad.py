@@ -24,11 +24,13 @@ GamepadControl, motion = ns['GamepadControl'], ns['motion_from_input']
 class GamepadTest(unittest.TestCase):
     def setUp(self):
         self.c = Mock(lock=threading.RLock(), mode='off', input_source='gamepad')
+        self.c.battery_phase, self.c.generation = 'normal', 0
         self.c.fault_hold = False
         self.c.roller_mode = False
         self.c.sitstand_phase, self.c.kick_until = 'idle', 0.
         self.g = GamepadControl.__new__(GamepadControl)
         self.g.controller = self.c
+        self.g.wait_for_neutral = False
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.g.bindings_path = Path(self.temp.name)/'bindings.json'
@@ -95,6 +97,7 @@ class GamepadTest(unittest.TestCase):
         for patch in ({'connected':False},{'stamp':time.monotonic()-1},{'id':'replacement'}):
             with self.subTest(patch=patch):
                 self.g.enabled=True;self.c.set_mode.reset_mock();self.c.pause_motion.reset_mock()
+                self.c.input_source = 'gamepad'
                 self.g.consume(dict(self.data,**patch))
                 self.assertFalse(self.g.enabled)
                 self.c.set_mode.assert_called_once_with('off')
@@ -113,9 +116,21 @@ class GamepadTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Center'):
             self.g.enable(True)
         self.data['axes']={k:0 for k in self.data['axes']};self.data['buttons']={}
+        self.c.mode, self.c.input_source = 'policy', 'voice'
         self.g.enable(True)
-        self.c.set_mode.assert_called_once_with('off')
+        self.assertTrue(self.g.enabled)
+        self.assertEqual(self.c.input_source, 'voice')
+        self.c.set_mode.assert_not_called()
         self.c.pause_motion.assert_not_called()
+
+    def test_held_axes_wait_for_neutral_after_stop(self):
+        self.g.wait_for_neutral = True
+        self.g.consume(self.data)
+        self.c.command.assert_not_called()
+        self.g.consume(dict(self.data, axes={key: 0 for key in self.data['axes']}))
+        self.assertFalse(self.g.wait_for_neutral)
+        self.g.consume(self.data)
+        self.c.command.assert_called_with(twist=[.2, 0., -.5], source='gamepad')
 
     def learn(self, action='pick'):
         self.g.enabled = False
