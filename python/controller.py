@@ -7,6 +7,7 @@ from statistics import median
 from policy import Policy
 from recovery import Recovery
 from proc import SignalFilter
+from heading import HeadingHold
 from standing_imu import (CALIBRATION_PATH, SAMPLE_SECONDS, ImuCorrection,
                           check_standing, estimate as estimate_imu, load as load_imu,
                           save as save_imu, disable as disable_imu)
@@ -90,6 +91,7 @@ class Controller:
             model.action_scale = 0.8
             model.set_action_alphas(leg=0.0, head=0.0)
         self.recovery = Recovery(period_s=CONTROL_PERIOD)
+        self.heading = HeadingHold()
         self.policy_needs_reset = True
         self.pick_active = False
         self.pick_phi = 0.0
@@ -269,6 +271,9 @@ class Controller:
                 and not self.kick_until and not self._imu_job['active']) else 0.
             self.filtered = self.filter.update(fb.acc, fb.gyro, fb.angles, fb.velocities,
                 timestamp=now, imu_timestamp=self._imu_source_time, imu_ok=fb.imu_ok)
+            if self.filtered['imu_fusion_updated']:
+                self.heading.observe(self._heading_walk_locked(now), self.filtered['grav'],
+                                     self.filtered['gyro_rad'], self._imu_source_time)
             self.feedback, self.rx_time = fb, now
             self.received += 1; self.rx_times.append(now)
 
@@ -279,6 +284,22 @@ class Controller:
         if not fb.imu_ok or (fb.mask & mask) != mask:
             raise ValueError('required servo feedback / IMU missing')
         return fb
+
+    def _heading_walk_locked(self, now):
+        return (self.mode == 'policy' and not self.roller_mode
+                and self.recovery.phase == 'walk' and not self.pick_active
+                and not self._roulade_on(now) and self.sitstand_phase == 'idle'
+                and not self.kick_until and not self.action_preparation
+                and not self._imu_job['active'])
+
+    def set_heading_hold(self, enabled):
+        if not isinstance(enabled, bool):
+            raise ValueError('heading hold enabled must be true or false')
+        with self.lock:
+            self.heading.enabled = enabled
+            self.heading.release()
+            self.generation += 1
+            return self.heading.status()
 
     def _disarm_now(self):
         self.arm_pending = False
@@ -415,6 +436,7 @@ class Controller:
                 fb = self._require_feedback(0)
             previous = self.mode
             self.generation += 1; self.mode = mode
+            self.heading.reset()
             self.recovery.reset(); self.policy_needs_reset = True
             self._cancel_actions_locked()
             self.last_error = ''
@@ -786,7 +808,9 @@ class Controller:
                 raise ValueError('walking vx must be between -0.2 and 0.2')
             if t is not None and self.roller_mode and abs(t[2]) > ROLLER_YAW_LIMIT:
                 raise ValueError(f'roller wz must be between {-ROLLER_YAW_LIMIT} and {ROLLER_YAW_LIMIT}')
-            if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until: self.twist = t
+            if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until:
+                self.twist = t
+                self.heading.command(self._heading_walk_locked(time.monotonic()), t)
             if h is not None and not self.pick_active and not self.kick_until: self.head = h
             if m is not None and not self.pick_active and not self.kick_until: self.mouth = m
             self.web_time = time.monotonic()
@@ -1003,6 +1027,7 @@ class Controller:
                 selected = self.policy if phase == 'walk' else self.getup_policy
                 if selected is self.roller_policy:
                     head = [0.0]*4
+            twist[2] = self.heading.command(valid and self._heading_walk_locked(now), twist)
             reset_policy = self.policy_needs_reset
             inferring = mode in ('shadow','policy') and valid
             if inferring:
@@ -1183,6 +1208,7 @@ class Controller:
             result['voltage_age_ms'] = voltage_age
             result['servo_voltage_v'] = {str(MOTOR_IDS[i]): v for i, v in enumerate(volts) if v is not None}
             result['imu_calibration'] = self._imu_status_locked()
+            result['heading_hold'] = self.heading.status()
             result['roller'] = dict(enabled=self.roller_mode, model=self.roller_policy.file,
                                     walk_model=self.policy.file, default_deg=self.roller_policy.default_deg,
                                     yaw_limit=ROLLER_YAW_LIMIT,

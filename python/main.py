@@ -29,6 +29,10 @@ def roller(body: dict):
     try: return controller.set_roller_mode(body['enabled'])
     except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
 
+def heading_hold(body: dict):
+    try: return controller.set_heading_hold(body['enabled'])
+    except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
+
 def command(body: dict):
     try: return controller.command(**body)
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
@@ -111,6 +115,7 @@ def servo_action(body: dict):
 ui.expose_api('GET', '/api/status', controller.status)
 ui.expose_api('POST', '/api/mode', mode)
 ui.expose_api('POST', '/api/roller', roller)
+ui.expose_api('POST', '/api/heading-hold', heading_hold)
 ui.expose_api('POST', '/api/command', command)
 ui.expose_api('POST', '/api/filter', filtering)
 ui.expose_api('POST', '/api/imu-filter', imu_filtering)

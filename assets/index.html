@@ -14,7 +14,7 @@
   <h2>Motion</h2>
   <p id="roller-warning" class="warn" role="note" hidden>Let the roll motors cool down between longer skating sessions.</p>
   <div class="joysticks"><div class="joystick-side"><label id="left-label">Forward / strafe</label><div class="joy" id="joy-left" role="group" aria-labelledby="left-label"><div class="knob"></div></div><p class="joy-value">vx <span id="vxValue">0.00</span> · vy <span id="vyValue">0.00</span></p></div><div class="joystick-side"><label id="right-label">Yaw</label><div class="joy" id="joy-right" role="group" aria-labelledby="right-label"><div class="knob"></div></div><p class="joy-value">ωz <span id="wzValue">0.00</span></p></div></div>
-  <button id="zero">Zero motion</button>
+  <div class="buttons"><button id="zero">Zero motion</button><label class="mode-toggle"><input id="heading-hold" type="checkbox" role="switch" checked>Heading hold <span id="heading-state">On</span></label></div>
   <p class="hint">Drag a pad to move; release to stop. W/S moves forward/back, A/D moves sideways and Q/E turns. Space releases the motors. <span id="motion-limits">Limits: vx ±0.2, vy ±0.3, ωz ±1.0.</span></p>
 </section>
 <section><h2>Head and mouth</h2><div class="controls" id="head-controls"></div><p class="hint">Move the sliders to adjust the head and open or close the mouth.</p></section>
@@ -47,4 +47,4 @@
     </figure>
   </div>
 </section>
-</main><script src="app.js?v=20261105-imu-calibration2"></script></html>
+</main><script src="app.js?v=20261106-heading-hold2"></script></html>

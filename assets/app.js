@@ -6,6 +6,7 @@ let kickActive=false, kickBusy=false;
 let imuCalibrationActive=false, imuCalibrationBusy=false, imuCalibrationError='', imuReady=false;
 let imuState=null, controlModeAvailable=true;
 let actionPreparing=false;
+let headingBusy=false;
 const motionRanges={
   walk:{forward:.2,backward:.2,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
   roller:{forward:.4,backward:.4,strafe:0,yaw:.45,keyboard:[.4,0,.45]}
@@ -18,6 +19,18 @@ function showPreparation(active){
 }
 async function post(path, body){const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const x=await r.json();if(!r.ok)throw new Error(x.detail||'request failed');if(x.preparing)showPreparation(true);return x;}
 function showError(e){$('message').textContent=e.message;}
+function showHeading(h){
+  if(!h)return;
+  $('heading-hold').checked=h.enabled;$('heading-state').textContent=h.enabled?'On':'Off';
+}
+$('heading-hold').onchange=async()=>{
+  if(headingBusy)return;
+  const enabled=$('heading-hold').checked;
+  headingBusy=true;$('heading-hold').disabled=true;
+  try{showHeading(await post('heading-hold',{enabled}));}
+  catch(e){$('heading-hold').checked=!enabled;showError(e);}
+  finally{headingBusy=false;$('heading-hold').disabled=false;}
+};
 async function setMode(mode){try{await post('mode',{mode});$('message').textContent='Mode updated';}catch(e){showError(e);}}
 document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 function showRoller(enabled){
@@ -114,7 +127,7 @@ async function sendCommand(){
   if(imuCalibrationActive||imuCalibrationBusy||!controlModeAvailable)return;
   if(commandBusy){commandPending=true;return;}
   commandBusy=true;commandPending=false;
-  motion=motion.map((old,i)=>.75*old+.25*targetMotion[i]);
+  motion=motion.map((old,i)=>{const value=.75*old+.25*targetMotion[i];return targetMotion[i]===0&&Math.abs(value)<.001?0:value;});
   showMotion();
   try{await post('command',{twist:imuCalibrationActive?[0,0,0]:[...motion],head:[0,1,2,3].map(i=>imuCalibrationActive?0:+$('head'+i).value),mouth:imuCalibrationActive?0:+$('mouth').value});}
   catch(e){showError(e);}
@@ -197,6 +210,7 @@ window.addEventListener('pagehide',()=>{
 setInterval(()=>{if(!document.hidden&&!commandBusy)sendCommand();},50);
 setInterval(async()=>{if(statusBusy||document.hidden)return;statusBusy=true;try{const r=await fetch('/api/status');if(!r.ok)throw new Error('status read failed');const s=await r.json();const modeLabel={shadow:'inference only',off:'torque off',hold:'default pose',policy:'walk',calibrate:'calibration',servo_debug:'servo setup'};$('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';$('rl').textContent=s.inference_hz.toFixed(1)+' Hz';$('servos').textContent=(s.servo_ids?.length||0)+'/15';$('imu').textContent=s.imu_ok?'online':'offline';$('mode').textContent=(s.left_kick?.active?'left kick':s.right_kick?.active?'right kick':s.sitstand?.active?s.sitstand.phase:(modeLabel[s.mode]||s.mode))+(s.enabled?' · enabled':' · torque off');$('message').textContent=s.last_error||(s.control_ready?'Robot ready':'Waiting for robot…');
 controlModeAvailable=!['calibrate','servo_debug'].includes(s.mode);
+if(!headingBusy)showHeading(s.heading_hold);
 $('voltage').textContent=s.voltage_v==null?'—':s.voltage_v.toFixed(1)+' V';
 const imuActive=!!s.imu_calibration?.active;
 if(imuActive!==imuCalibrationActive)zero(false);
