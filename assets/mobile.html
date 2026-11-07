@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=usb-host1">
-<link rel="stylesheet" href="mobile-tof.css?v=motion1">
+<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=app-version1">
+<link rel="stylesheet" href="mobile-tof.css?v=app-version1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
+<link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 </head>
 <body>
 <main id="cockpit">
@@ -13,7 +14,10 @@
   <div class="shade"></div>
   <div class="reticle" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
   <header class="hud top">
-    <a class="brand" href="/index.html" data-desktop-link aria-label="打开桌面控制页" data-i18n-aria-label="desktopControl"><span class="duck-mark">D<span>↗</span></span><span>DUCK<small data-i18n="cockpit">驾驶舱</small></span></a>
+    <a class="brand" href="/index.html" data-desktop-link aria-label="打开桌面控制页" data-i18n-aria-label="desktopControl">
+      <span class="duck-mark">D<span>↗</span></span>
+      <span><span class="brand-name">DUCK</span><small><span class="brand-caption" data-i18n="cockpit">驾驶舱</span><span class="app-version" data-app-version hidden></span></small></span>
+    </a>
     <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
     <div class="top-actions">
       <button id="language" class="language-button" type="button">EN</button>

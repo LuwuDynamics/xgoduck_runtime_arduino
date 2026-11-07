@@ -1,0 +1,10 @@
+.app-version {
+  padding: 2px 7px;
+  border: 1px solid #9eb9cd60;
+  border-radius: 999px;
+  background: #09121acc;
+  color: #c6d8e3;
+  font: 600 11px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  vertical-align: middle;
+  white-space: nowrap;
+}

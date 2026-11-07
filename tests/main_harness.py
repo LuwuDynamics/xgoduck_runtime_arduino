@@ -143,6 +143,8 @@ def main():
             feed.start()
             try:
                 with TestClient(WebUI.instance.app) as client:
+                    version = (ROOT / 'version.txt').read_text().strip()
+                    assert client.get('/api/version').json() == {'version': version}
                     wait_for(lambda: state['controller'].inferred > 5)
                     voice = wait_for(lambda: (s if (s := client.get('/api/voice/status').json()).get('state') == 'disabled' else None))
                     assert Bridge.servo_ops == [], 'Voice startup touched servo parameters'

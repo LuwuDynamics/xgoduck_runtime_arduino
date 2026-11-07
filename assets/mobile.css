@@ -228,8 +228,17 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   .flight-state>span:last-of-type{grid-column:1}
   .flight-state .stop{grid-column:2;grid-row:1/3;align-self:center;margin:0}
 }
+.brand small{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.brand .app-version{padding:0 4px;font-size:10px;letter-spacing:0}
+@media(orientation:landscape) and (max-height:500px),(max-width:370px){
+  .brand-caption{display:none}
+}
 @media(orientation:landscape) and (max-height:420px) and (max-width:740px){
-  .brand>span:last-child,.status-row .optional,#batteryLabel,#bindingRegionChip{display:none}
+  .brand{display:grid;grid-template-columns:35px;justify-items:center;gap:1px}
+  .brand .duck-mark{width:26px;height:24px;border-radius:8px;font-size:17px}
+  .brand .duck-mark span{font-size:9px}
+  .brand .app-version{padding:0;border:0;background:none;font-size:8px;line-height:1.1}
+  .brand-name,.status-row .optional,#batteryLabel,#bindingRegionChip{display:none}
   .device-controls,.control-group{gap:5px}
   .control-group button{padding-inline:6px;font-size:10px}
   .cockpit-action-row button{padding-inline:3px;font-size:11px}

@@ -29,4 +29,4 @@
   .tof-body{grid-template-columns:44px minmax(0,1fr)}
 }
 @media(orientation:portrait) and (max-height:700px){.top{padding-top:max(12px,env(safe-area-inset-top));padding-bottom:10px;row-gap:8px}.device-controls{gap:7px}.flight-state>span:last-of-type{grid-column:1/-1}.flight-state .stop{grid-row:1/3}}
-@media(orientation:portrait) and (max-height:700px) and (max-width:370px){.top{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}.brand>span:last-child{display:none}}
+@media(orientation:portrait) and (max-height:700px) and (max-width:370px){.top{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}.brand-name{display:none}}

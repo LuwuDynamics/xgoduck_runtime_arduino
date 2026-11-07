@@ -25,11 +25,10 @@ from voice_config import VoiceConfig
 from voice_region import register_voice_region
 from voice_supervisor import VoiceSupervisor
 from local_ipc import JsonServer, request
-from app_paths import PRIVATE
+from app_paths import DATA, PRIVATE, ROOT
 from mouth_ipc import MouthReceiver
 from tof_status import ToFMonitor
 from forward_avoidance import ForwardAvoidance
-from app_paths import DATA
 
 # Bound GIL handoff latency between the 100 Hz receiver, policy and WebUI.
 sys.setswitchinterval(0.001)
@@ -192,6 +191,15 @@ def servo_action(body: dict):
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(400, str(exc))
 
+def app_version():
+    try:
+        version = (ROOT / 'version.txt').read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeError):
+        version = ''
+    return {'version': version or None}
+
+
+ui.expose_api('GET', '/api/version', app_version)
 ui.expose_api('GET', '/api/status', controller.status)
 ui.expose_api('GET', '/api/tof/status', tof.status)
 ui.expose_api('GET', '/api/voice/status', voice.status)

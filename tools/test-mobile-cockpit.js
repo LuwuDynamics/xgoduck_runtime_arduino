@@ -3,6 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const {chromium}=require('playwright');
 const root=path.join(__dirname,'../assets'),origin='http://duck-mobile.test';
 const output=process.env.DUCK_UI_SCREENSHOTS;
+const version=fs.readFileSync(path.join(root,'../version.txt'),'utf8').trim();
 const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=','base64');
 
 (async()=>{
@@ -61,6 +62,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           return route.fulfill({json:media});
         }
         if(url.pathname==='/api/status')return route.fulfill({json:robot});
+        if(url.pathname==='/api/version')return route.fulfill({json:{version}});
         if(url.pathname==='/api/tof/status'){
           const snapshot={...tof,seq:++tof.seq};
           if(tofDelay)await new Promise(resolve=>setTimeout(resolve,tofDelay));
@@ -91,6 +93,9 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
     assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'),'/xgo-favicon.png');
+    const versionBadge=page.locator('[data-app-version]');
+    await versionBadge.waitFor({state:'visible'});
+    assert.equal(await versionBadge.innerText(),'v'+version);
     assert.equal(await page.locator('#portraitHint').isVisible(),true);
     assert.equal(await page.locator('#moveStick').isHidden(),true);
     assert.equal(await page.locator('#duckCalls').isHidden(),true);
@@ -249,6 +254,9 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
         const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','usbHostQuick','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
+        const badge=await versionBadge.boundingBox();
+        assert(badge&&badge.x>=0&&badge.y>=0&&badge.x+badge.width<=width+1&&badge.y+badge.height<=height+1,
+          `${language}/${name}: App version off screen`);
         const portrait=height>width;
         assert.equal(await page.locator('#portraitHint').isVisible(),portrait);
         assert.equal(await page.locator('#moveStick').isVisible(),!portrait);
