@@ -151,14 +151,17 @@ static void servoSetId(uint8_t id, uint8_t newId) {
   }
 }
 
-static void servoSetPermKpKd(uint8_t id, uint8_t kp, uint8_t kd) {
+static void servoSetKpKd(uint8_t id, uint8_t kp, uint8_t kd) {
   const uint8_t data[3] = {ADDR_PERM_KP_KD, kp, kd};
   servoUnlock(id);
   for (unsigned i = 0; i < 3; ++i) {
     scsWriteBuf(id, 0x03, data, 3);
     Serial1.flush();
-    if (i < 2) k_msleep(10);
+    k_msleep(10); // Let the final EEPROM write finish before applying live gains.
   }
+  const uint8_t live[3] = {ADDR_TEMP_KP, kp, kd};
+  scsWriteBuf(id, 0x03, live, 3);
+  Serial1.flush();
 }
 
 static void servoSetProtection(uint8_t flags) {
@@ -207,7 +210,7 @@ static void readSinglePresent(uint8_t id) {
   scsWriteBuf(id, 0x02, data, 2);
 }
 
-static void applyMotorFb(uint8_t id, int16_t pos, int32_t vel) {
+static void applyMotorFb(uint8_t id, int16_t pos, int32_t vel, uint8_t voltageDeciV = 0) {
   int idx = motorIndexById(id);
   if (idx < 0) {
     return;
@@ -219,6 +222,10 @@ static void applyMotorFb(uint8_t id, int16_t pos, int32_t vel) {
       (float)(pos - SERVO_CENTER_POS) * M_A / M_N * motors[idx].sign;
   motors[idx].fbVelDeg =
       (float)vel * SERVO_SPEED_UNIT * (360.0f / 4096.0f) * motors[idx].sign;
+  if (voltageDeciV) {
+    motors[idx].fbVoltageDeciV = voltageDeciV;
+    motors[idx].fbVoltageUs = micros();
+  }
   k_mutex_unlock(&motorsMu);
 }
 
@@ -315,15 +322,18 @@ static void parseServoRx() {
             }
             break;
           }
-          if (dataLen != PRESENT_LEN + 2) break;
-          if (idx >= 0) servoVoltage[idx] = servoRxBuffer[11];
+          // Six status bytes give motion feedback; the seventh adds voltage.
+          if (dataLen != 8 && dataLen != 9) break;
+          if (dataLen == 9 && idx >= 0)
+            servoVoltage[idx] = servoRxBuffer[5 + ADDR_VOLTAGE - ADDR_PRESENT];
           if (servoRxBuffer[4] != 0) break;
           if (servoReadId <= 253 && sid == servoReadId) {
             servoReadSeen = true;
             servoReadPos = (uint16_t)hostWord(servoRxBuffer[5], servoRxBuffer[6]);
           }
           applyMotorFb(sid, hostWord(servoRxBuffer[5], servoRxBuffer[6]),
-                       hostVelSignMag(servoRxBuffer[7], servoRxBuffer[8]));
+                       hostVelSignMag(servoRxBuffer[7], servoRxBuffer[8]),
+                       dataLen == 9 ? servoRxBuffer[5 + ADDR_VOLTAGE - ADDR_PRESENT] : 0);
         }
         break;
       default:
@@ -366,7 +376,8 @@ static bool readServoPresent(uint8_t id, uint16_t &pos) {
   return servoReadSeen;
 }
 
-static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd, uint8_t address = ADDR_PERM_KP_KD) {
+static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd,
+                           uint8_t address = ADDR_PERM_KP_KD) {
   drainServoRx();
   servoParamsId = id;
   servoParamsSeen = false;

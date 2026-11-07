@@ -1,6 +1,6 @@
 /* Server selection is explicit; opening links or changing UI language never writes configuration. */
 (() => {
-  const ids=['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip'];
+  const ids=['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip','startupWake'];
   const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
   if(Object.values(el).some(value=>!value))return;
   const t=(key,values)=>window.DuckI18n.t(key,values);
@@ -26,6 +26,8 @@
       card.dataset.selected=String(selected===value);card.dataset.current=String(config?.cloud_region===value&&!config.custom_endpoint);
     }
     el.regionMessage.textContent=t(message||(!config?'bindingChecking':!config.configured||config.custom_endpoint?'bindingSelect':'bindingSame'));
+    const phrase=config?.wake_phrase;
+    el.startupWake.textContent=phrase?t('startupWakeSelected',{phrase}):t('startupWake');
   }
   async function jsonResponse(response){
     if(!response.ok)throw Error('Region service unavailable');

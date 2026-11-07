@@ -5,8 +5,6 @@ against the real wire ABI with a mocked Bridge, policy sessions and feedback.
 """
 import ast
 import collections
-import json
-import math
 from pathlib import Path
 import sys
 import threading
@@ -18,19 +16,14 @@ from unittest.mock import Mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
 import wire
+import controller
+from heading import HeadingHold
 from recovery import Recovery
 
 source = ast.parse((ROOT / 'python/controller.py').read_text())
 cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
-hold_reason = next(n for n in source.body if isinstance(n, ast.Assign)
-                   and getattr(n.targets[0], 'id', None) == 'FEEDBACK_HOLD_REASON')
-ns = dict(vars(wire), threading=threading, time=time, json=json, math=math,
-          DEFAULT_DEG=[0.] * 15, MOUTH_INDEX=14, MOUTH_MIN_DEG=-3.,
-          FACTORY_ZERO=[2047] * 15, collections=collections,
-          EXCLUSIVE_MODES=('calibrate', 'servo_debug'),
-          CONTROL_PERIOD=.02, SITSTAND_STAND_S=1., KICK_S=.4,
-          BATTERY_SAMPLE_MAX_AGE_S=.4)
-exec(compile(ast.Module(body=[hold_reason, cls], type_ignores=[]), 'controller.py', 'exec'), ns)
+ns = vars(controller).copy()
+exec(compile(ast.Module(body=[cls], type_ignores=[]), 'controller.py', 'exec'), ns)
 Controller = ns['Controller']
 
 
@@ -65,9 +58,17 @@ class WebControlTest(unittest.TestCase):
                                      command_age_us=10000, imu_us=0, work_us=0)
         c.filtered = dict(imu_fusion_ready=True, imu_fusion_updated=True, grav=[0, 0, -1],
                           gyro_rad=[0.] * 3, angles_deg=[0.] * 15, vels_deg=[0.] * 15)
+        c.filter = Mock(command_acc_x_bias_ms2=0.)
         c.twist, c.head, c.mouth = [0.] * 3, [0.] * 4, 0.
         c.recovery = Recovery()
+        c.heading = HeadingHold()
+        c._imu_job, c._imu_record = {'active': False}, None
+        c.action_preparation = c._action_first_target = None
         c.roulade_until, c._roulade_alpha = 0., None
+        c.roulade_pending = False
+        c._roulade_requested_at, c._roulade_started_at = 0., None
+        c._roulade_frames = collections.deque(maxlen=128)
+        c._roulade_timing = {}
         c.roller_mode = False
         c.sitstand_phase, c.sitstand_until = 'idle', 0.
         c.kick_until, c.kick_side = 0., None

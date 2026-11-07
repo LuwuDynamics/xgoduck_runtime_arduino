@@ -23,10 +23,11 @@ class VoiceRegionTest(unittest.TestCase):
         self.config = VoiceConfig(self.root / 'voice_config.json')
 
     def test_first_selection_is_explicit_and_read_does_not_create_config(self):
-        self.assertEqual(self.config.region_status(),dict(cloud_region=None,custom_endpoint=False,configured=False))
+        self.assertEqual(self.config.region_status(),dict(cloud_region=None,custom_endpoint=False,configured=False,wake_phrase=None))
         self.assertFalse(self.config.path.exists())
         result=self.config.select_region('global')
         self.assertTrue(result['changed'])
+        self.assertEqual(result['wake_phrase'], 'Hey Ducky')
         self.assertEqual(VoiceConfig(self.config.path).get()['cloud_region'],'global')
         self.assertEqual(self.config.get()['language'],'cn')
 
@@ -41,7 +42,7 @@ class VoiceRegionTest(unittest.TestCase):
         self.assertEqual(self.config.get(),expected)
         self.assertEqual(identity.read_text(),'02:00:00:00:01:23')
         self.assertEqual(calibration.read_text(),'fixture')
-        self.config.select_region('cn')
+        self.assertEqual(self.config.select_region('cn')['wake_phrase'], '小鸭小鸭')
         self.assertEqual(self.config.get(),before)
 
     def test_same_region_is_idempotent_and_does_not_rewrite_or_reconnect(self):
@@ -84,6 +85,7 @@ class VoiceRegionTest(unittest.TestCase):
         result=client.post('/api/voice/region',json={'cloud_region':'global'},headers={'X-Device-Test':'1','Origin':'http://testserver'})
         self.assertEqual(result.status_code,200)
         self.assertTrue(result.json()['changed'])
+        self.assertEqual(result.json()['wake_phrase'], 'Hey Ducky')
         self.assertEqual(self.config.get()['cloud_region'],'global')
         voice.call.assert_called_once()
 

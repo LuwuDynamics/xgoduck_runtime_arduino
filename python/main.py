@@ -85,6 +85,7 @@ avoidance = ForwardAvoidance(tof, settings_path=DATA / 'obstacle-avoidance.json'
 controller.attach_forward_avoidance(avoidance)
 Bridge.provide('duck_state', controller.receive)
 Bridge.provide('duck_diagnostics', controller.receive_diagnostics)
+Bridge.provide('duck_voltage', controller.receive_voltage)
 Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
 Bridge.provide('duck_raw', controller.receive_raw)
 Bridge.provide('duck_servo_reply', controller.receive_servo_reply)
@@ -92,6 +93,10 @@ Bridge.provide('duck_cal_reply', controller.receive_cal_reply)
 
 def mode(body: dict):
     try: return access.web_mode(body['mode'])
+    except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def heading_hold(body: dict):
+    try: return controller.set_heading_hold(body['enabled'])
     except (KeyError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def command(body: dict):
@@ -120,6 +125,14 @@ def roller(body: dict):
 
 def imu_filtering(body: dict):
     try: return controller.set_imu_filters(**body)
+    except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
+
+def imu_calibration(body: dict):
+    try:
+        action = body.get('action', 'start')
+        if action == 'start': return controller.start_imu_calibration()
+        if action == 'reset': return controller.reset_imu_calibration()
+        raise ValueError('unknown IMU calibration action')
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
 def action_scale(body: dict):
@@ -184,14 +197,17 @@ ui.expose_api('GET', '/api/tof/status', tof.status)
 ui.expose_api('GET', '/api/voice/status', voice.status)
 register_voice_region(ui, voice, voice_config)
 ui.expose_api('POST', '/api/mode', mode)
+ui.expose_api('POST', '/api/heading-hold', heading_hold)
 ui.expose_api('POST', '/api/command', command)
 ui.expose_api('POST', '/api/cockpit/motion', cockpit_motion)
 ui.expose_api('POST', '/api/filter', filtering)
 ui.expose_api('POST', '/api/roller', roller)
 ui.expose_api('POST', '/api/imu-filter', imu_filtering)
+ui.expose_api('POST', '/api/imu-calibration', imu_calibration)
 ui.expose_api('POST', '/api/action-scale', action_scale)
 ui.expose_api('POST', '/api/pick', pick)
 ui.expose_api('POST', '/api/roulade', roulade)
+ui.expose_api('GET', '/api/roulade-timing', controller.roulade_timing)
 ui.expose_api('POST', '/api/sitstand', sitstand)
 ui.expose_api('POST', '/api/right_kick', right_kick)
 ui.expose_api('POST', '/api/left_kick', left_kick)

@@ -112,11 +112,11 @@
     <p id="bindingIntro" data-i18n="bindingIntro">点击国内版或国际版即可切换服务器，再打开对应平台绑定设备。</p>
     <div class="binding-device" aria-live="polite"><div><span data-i18n="bindingRegion">当前服务区域</span><strong id="bindingRegion">—</strong></div><div><span data-i18n="bindingStatus">绑定状态</span><strong id="bindingStatus">正在读取</strong></div></div>
     <fieldset class="binding-server-options"><legend data-i18n="bindingChooseRegion">选择服务区域</legend><div class="binding-choices">
-      <div class="binding-choice"><label class="binding-card" id="regionCnCard"><span class="binding-card-top"><span class="binding-symbol">CN</span><input id="regionCn" name="cloudRegion" type="radio" value="cn"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingCn">国内版</span><span class="binding-card-hint" data-i18n="bindingCnHint">国内账号</span><span class="binding-domain">agent.xgorobot.com</span></label><a class="binding-platform" href="https://agent.xgorobot.com/devices" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenCn">打开国内版 ↗</a></div>
-      <div class="binding-choice"><label class="binding-card" id="regionGlobalCard"><span class="binding-card-top"><span class="binding-symbol">GLOBAL</span><input id="regionGlobal" name="cloudRegion" type="radio" value="global"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingGlobal">国际版</span><span class="binding-card-hint" data-i18n="bindingGlobalHint">国际账号</span><span class="binding-domain">agent.luwudynamics.ai</span></label><a class="binding-platform" href="https://agent.luwudynamics.ai/" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenGlobal">打开国际版 ↗</a></div>
+      <div class="binding-choice"><label class="binding-card" id="regionCnCard"><span class="binding-card-top"><span class="binding-symbol">CN</span><input id="regionCn" name="cloudRegion" type="radio" value="cn"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingCn">国内版</span><span class="binding-card-hint" data-i18n="bindingCnHint">唤醒词 · 小鸭小鸭</span><span class="binding-domain">agent.xgorobot.com</span></label><a class="binding-platform" href="https://agent.xgorobot.com/devices" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenCn">打开国内版 ↗</a></div>
+      <div class="binding-choice"><label class="binding-card" id="regionGlobalCard"><span class="binding-card-top"><span class="binding-symbol">GLOBAL</span><input id="regionGlobal" name="cloudRegion" type="radio" value="global"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingGlobal">国际版</span><span class="binding-card-hint" data-i18n="bindingGlobalHint">唤醒词 · Hey Ducky</span><span class="binding-domain">agent.luwudynamics.ai</span></label><a class="binding-platform" href="https://agent.luwudynamics.ai/" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenGlobal">打开国际版 ↗</a></div>
     </div></fieldset>
     <p id="regionMessage" class="binding-message" role="status" aria-live="polite"></p>
-    <ol class="binding-steps"><li data-i18n="bindingStep1">在所选平台登录，进入「设备」并点击「添加设备」。</li><li data-i18n="bindingStep2">按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。</li><li data-i18n="bindingStep3">选择智能体；设备在线后，说「小鸭小鸭」开始聊天。</li></ol>
+    <ol class="binding-steps"><li data-i18n="bindingStep1">在所选平台登录，进入「设备」并点击「添加设备」。</li><li data-i18n="bindingStep2">按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。</li><li data-i18n="bindingStep3">在平台选择智能体，再回到这里确认语音已上线。</li></ol>
     <section class="binding-startup" aria-labelledby="startupTitle">
       <h3 id="startupTitle" data-i18n="startupTitle">开机自启与唤醒</h3>
       <p data-i18n="startupAutostart">首次按 README 完成初始化，并在 App Lab 成功 Run 一次后，后续通电会自动启动网页、聊天和运动服务，无需每次再点 Run。</p>
@@ -127,7 +127,7 @@
       </div>
       <p class="startup-preview-hint" data-i18n="startupPreviewHint">试听在当前手机或电脑播放；开机提示音由小鸭扬声器播放。</p>
       <p id="startupPreviewStatus" class="startup-preview-status" role="status" aria-live="polite" hidden></p>
-      <p class="startup-wake" data-i18n="startupWake">听到这两段启动提示音后，喊「小鸭小鸭」唤醒，听到唤醒鸭叫后就可以说话了。</p>
+      <p id="startupWake" class="startup-wake" data-i18n="startupWake">听到两段启动提示音后，说当前选区的唤醒词。听到唤醒鸭叫后就可以说话了。</p>
     </section>
     <p class="binding-note" data-i18n="bindingNotice">切换服务器会重新连接语音服务，两边的账号、设备绑定和智能体独立；对话语言、音量及运动设置保持。</p>
     <p class="binding-browser" data-i18n="bindingBrowser">网页蓝牙请使用支持 Web Bluetooth 的 Chrome / Edge 浏览器。</p>
@@ -143,5 +143,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=motion2"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion2"></script><script src="mobile.js?v=motion1"></script><script src="mobile-binding.js?v=20261102-binding3"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=hey-ducky1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion2"></script><script src="mobile.js?v=motion1"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

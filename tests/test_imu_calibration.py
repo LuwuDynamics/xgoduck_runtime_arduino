@@ -1,126 +1,147 @@
-"""Static per-device IMU correction, persistence and real filter integration."""
-import copy
-import math
+"""Upstream standing offsets through the AI App's persistent calibration path."""
+import json
 from pathlib import Path
 import sys
 import tempfile
-from threading import RLock
+import time
 import unittest
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
-from imu_calibration import CalibratedSignalFilter, estimate, load, save, validate
+
 from motion_calibration import AppController
+from standing_imu import ImuCorrection, disable, estimate, load, save
+from wire import ALL_MASK, COMMAND, DISARM, Feedback
 
 
 def samples():
-    return [dict(mode='hold', enabled=True, imu_ok=True, feedback_age_ms=5.,
-                 mcu_runtime=dict(imu_seq=i+1, imu_us=(0xffff0000+i*100000) & 0xffffffff),
-                 acc=[-2.6, -.1, -8.35], gyro=[1.1, -11., 17.3]) for i in range(201)]
+    return [(i * .01, [1., 2., -9.], [.8, -.5, 1.2]) for i in range(151)]
 
 
 class ImuCalibrationTest(unittest.TestCase):
-    def test_measured_level_vector_and_gyro_zero_feed_real_filter(self):
-        record = estimate(samples(), device='test-board')
-        filt = CalibratedSignalFilter(record)
-        for i in range(100):
-            result = filt.update([-2.6, -.1, -8.35], [1.1, -11., 17.3], [0.]*15,
-                                 [0.]*15, timestamp=i*.01, imu_timestamp=i*.01)
-        for actual, expected in zip(result['grav'], [0., 0., -1.]):
-            self.assertAlmostEqual(actual, expected, places=10)
-        self.assertEqual(result['gyro_rad'], [0.]*3)
-        self.assertAlmostEqual(record['measurement']['duration_s'], 20.)
+    def test_stationary_offsets_align_gravity_and_keep_relative_motion(self):
+        record = estimate(samples())
+        self.assertEqual(record['version'], 2)
+        self.assertEqual(record['measurement']['samples'], 151)
+        correction = ImuCorrection(record)
+        acc, gyro = correction.apply([2., 3., -8.], [2.8, -.5, 1.2])
+        for actual, expected in zip(acc + gyro, [1., 1., -8.8, 2., 0., 0.]):
+            self.assertAlmostEqual(actual, expected)
 
-    def test_rotation_preserves_magnitude_and_real_motion_after_zero_subtraction(self):
-        filt = CalibratedSignalFilter(estimate(samples()))
-        v = [2., -3., 4.]
-        out = filt.rotate(v)
-        self.assertAlmostEqual(sum(x*x for x in out), sum(x*x for x in v))
-        result = filt.update([-2.6, -.1, -8.35], [3.1, -14., 21.3], [0.]*15,
-                             [0.]*15, timestamp=1., imu_timestamp=1.)
-        for actual, expected in zip(result['gyro_rad'], out):
-            self.assertAlmostEqual(actual, math.radians(expected))
-
-    def test_reset_and_filter_tuning_preserve_calibration_without_file_reads(self):
-        filt = CalibratedSignalFilter(estimate(samples()))
-        with patch.object(Path, 'read_text', side_effect=AssertionError('Receive loop read a file')):
-            filt.set_imu_filters(gyro_alpha=.4, gravity_tau_s=.5)
-            filt.reset()
-            out = filt.update([-2.6, -.1, -8.35], [1.1, -11., 17.3], [0.]*15,
-                              [0.]*15, timestamp=1., imu_timestamp=1.)
-        self.assertAlmostEqual(out['grav'][2], -1.)
-        self.assertEqual(out['gyro_rad'], [0.]*3)
-
-    def test_unsafe_pose_stale_feedback_and_movement_are_rejected(self):
-        for mutation in ['mode', 'enabled', 'stale', 'moving', 'upside_down', 'nan']:
-            with self.subTest(mutation=mutation):
-                rows = samples()
-                if mutation == 'mode': rows[3]['mode'] = 'policy'
-                if mutation == 'enabled': rows[3]['enabled'] = False
-                if mutation == 'stale': rows[3]['feedback_age_ms'] = 151
-                if mutation == 'moving':
-                    for i, row in enumerate(rows): row['gyro'][0] = (-1)**i*10.
-                if mutation == 'upside_down':
-                    for row in rows: row['acc'][2] = 8.35
-                if mutation == 'nan': rows[3]['gyro'][0] = float('nan')
-                with self.assertRaises(ValueError): estimate(rows)
-
-    def test_duplicate_frames_and_source_gaps_cannot_pass_stationary_sampling(self):
-        for rows in [samples()[:99], [samples()[0]]*201,
-                     [samples()[0]] + samples()[80:]]:
-            with self.assertRaises(ValueError): estimate(rows)
-
-    def test_small_upstream_status_clock_overlap_is_not_stale(self):
+    def test_motion_interruption_and_wrong_orientation_are_rejected(self):
         rows = samples()
-        rows[1]['feedback_age_ms'] = -2.
-        self.assertEqual(estimate(rows)['measurement']['samples'], 201)
+        with self.assertRaisesRegex(ValueError, 'Not enough'):
+            estimate(rows[:89])
+        with self.assertRaisesRegex(ValueError, 'interrupted'):
+            estimate(rows[:70] + rows[90:])
+        with self.assertRaisesRegex(ValueError, 'interrupted'):
+            estimate(rows[:70] + [rows[69]] + rows[70:])
+        moving = list(rows)
+        moving[60] = (moving[60][0], [1., 2., -11.], moving[60][2])
+        with self.assertRaisesRegex(ValueError, 'Movement'):
+            estimate(moving)
+        with self.assertRaisesRegex(ValueError, 'upright'):
+            estimate([(t, [9.8, 0., 0.], g) for t, _, g in rows])
 
-    def test_atomic_save_load_and_existing_file_is_never_overwritten(self):
-        record = estimate(samples())
+    def test_save_preserves_previous_and_reset_disables_calibration(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'imu-calibration.json'
-            self.assertIsNone(load(path))
-            save(path, record)
-            before = path.read_bytes()
-            self.assertEqual(load(path), record)
-            with self.assertRaises(FileExistsError): save(path, record)
-            self.assertEqual(path.read_bytes(), before)
-            self.assertEqual(list(path.parent.glob('.imu-calibration-*')), [])
+            file = Path(directory) / 'imu-calibration.json'
+            first = estimate(samples())
+            second = estimate([(t, [0., 1., -9.], g) for t, _, g in samples()])
+            save(file, first)
+            save(file, second)
+            self.assertEqual(load(file), second)
+            self.assertEqual(load(file.with_suffix('.previous.json')), first)
+            disable(file)
+            self.assertIsNone(load(file))
+            self.assertEqual(load(file.with_suffix('.disabled.json')), second)
 
-    def test_corrupt_versions_frames_and_nonfinite_values_are_rejected(self):
-        record = estimate(samples())
-        for key, value in [('version', True), ('frame', 'different-axes'),
-                           ('gyro_zero_dps', [0, 0, float('inf')]),
-                           ('rotation_deg', [0, 0, 5])]:
-            bad = copy.deepcopy(record)
-            bad[key] = value
-            with self.assertRaises(ValueError): validate(bad)
-
-    def test_app_restarts_load_same_record_without_accumulating_correction(self):
-        record = estimate(samples())
+    def test_startup_reloads_offset_instead_of_reapplying_it_to_the_saved_record(self):
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / 'imu-calibration.json'
-            save(path, record)
-            before = path.read_bytes()
+            file = Path(directory) / 'imu-calibration.json'
+            save(file, estimate(samples()))
+            before = file.read_bytes()
             for _ in range(2):
-                with patch('motion_calibration.Controller.__init__', return_value=None):
-                    app = AppController(Mock(), data_dir=directory)
-                out = app.filter.update([-2.6, -.1, -8.35], [1.1, -11., 17.3], [0.]*15,
-                                        [0.]*15, timestamp=1., imu_timestamp=1.)
-                self.assertAlmostEqual(out['grav'][2], -1.)
-                self.assertEqual(app._imu_record, record)
-                self.assertEqual(path.read_bytes(), before)
-
-    def test_corrupt_saved_file_blocks_arming_but_app_initialization_survives(self):
-        with tempfile.TemporaryDirectory() as directory:
-            (Path(directory) / 'imu-calibration.json').write_text('{broken')
-            with patch('motion_calibration.Controller.__init__', return_value=None):
                 app = AppController(Mock(), data_dir=directory)
-            app.lock = RLock()
-            for mode in ['hold', 'policy']:
-                with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'): app.set_mode(mode)
-            with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'): app.set_sitstand('sit')
+                self.assertTrue(app.status()['imu_calibration']['calibrated'])
+                acc, gyro = app.filter.correct_imu(samples()[0][1], samples()[0][2])
+                for actual, expected in zip(acc + gyro, [0., 0., -9.8, 0., 0., 0.]):
+                    self.assertAlmostEqual(actual, expected)
+                self.assertEqual(file.read_bytes(), before)
+
+    def test_corrupt_and_old_records_block_arming_until_calibration_or_reset(self):
+        for content in ('{broken', json.dumps({'version': 1, 'rotation_deg': [1., 2., 0.]})):
+            with self.subTest(content=content), tempfile.TemporaryDirectory() as directory:
+                file = Path(directory) / 'imu-calibration.json'
+                file.write_text(content)
+                app = AppController(Mock(), data_dir=directory)
+                self.assertEqual(app.status()['imu_calibration']['state'], 'error')
+                for mode in ('hold', 'policy'):
+                    with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'):
+                        app.set_mode(mode)
+                with self.assertRaisesRegex(ValueError, 'IMU 标定文件无效'):
+                    app.set_sitstand('sit')
+                self.assertEqual(file.read_text(), content)
+                app.reset_imu_calibration()
+                self.assertEqual(file.with_suffix('.disabled.json').read_text(), content)
+                self.assertEqual(app.status()['imu_calibration']['state'], 'idle')
+
+    def test_web_sampling_replaces_legacy_record_without_a_restart_or_arming(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'imu-calibration.json'
+            legacy = '{"version": 1}'
+            file.write_text(legacy)
+            app = AppController(Mock(), data_dir=directory)
+            app.set_mode('calibrate')
+            rows = iter(samples())
+            self.supply_feedback(app, samples()[0])
+            with patch('controller.threading.Thread') as worker:
+                self.assertTrue(app.start_imu_calibration()['active'])
+                with self.assertRaisesRegex(ValueError, 'calibration is in progress'):
+                    app.cal_center(0)
+            job = worker.call_args.kwargs
+
+            def next_sample(_interval):
+                self.supply_feedback(app, next(rows))
+                return False
+
+            with patch.object(app.stop_event, 'wait', side_effect=next_sample):
+                job['target'](*job['args'])
+            self.assertEqual(app.status()['imu_calibration']['state'], 'saved')
+            self.assertEqual(app.filter.correct_imu([1., 2., -9.], [.8, -.5, 1.2])[0],
+                             [0., 0., -9.8])
+            self.assertEqual(file.with_suffix('.previous.json').read_text(), legacy)
+            self.assertEqual(load(file)['version'], 2)
+            self.assertEqual(app.mode, 'calibrate')
+            commands = [COMMAND.unpack(call.args[1])[4] for call in app.bridge.notify.call_args_list
+                        if call.args[0] == 'duck_command']
+            self.assertTrue(commands)
+            self.assertEqual(set(commands), {DISARM})
+
+    def test_exiting_calibration_prevents_a_pending_sample_from_saving(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'imu-calibration.json'
+            save(file, estimate(samples()))
+            before = file.read_bytes()
+            app = AppController(Mock(), data_dir=directory)
+            app.set_mode('calibrate')
+            self.supply_feedback(app, samples()[0])
+            with patch('controller.threading.Thread') as worker:
+                app.start_imu_calibration()
+            app.set_mode('shadow')
+            job = worker.call_args.kwargs
+            job['target'](*job['args'])
+            self.assertEqual(app.status()['imu_calibration']['state'], 'cancelled')
+            self.assertEqual(file.read_bytes(), before)
+
+    @staticmethod
+    def supply_feedback(app, row):
+        stamp, acc, gyro = row
+        app.feedback = Feedback(1, ALL_MASK, 1, 0, 0, 0, 0, 10000, 0, 0, 0, 0,
+                                acc, gyro, [0.] * 15, [0.] * 15, [0.] * 15)
+        app._imu_source_time = stamp
+        app.rx_time = time.monotonic()
 
 
 if __name__ == '__main__':

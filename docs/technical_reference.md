@@ -82,6 +82,8 @@ Legacy software-center migration is described above and in the AI guide. Do not 
 
 Pinned stack: App CLI with Arduino Zephyr core 1.0.0, RouterBridge 0.4.3, RPClite 0.3.1, MsgPack 0.4.2. `sketch/sketch.yaml` lists those libraries, including the transitive ones. Python packages are installed by the App build from `python/requirements.txt`.
 
+Router: 0.8.0 or newer (the 2 Mbps drop-in below passes `--after-ready`). Since 0.2.41 the Bridge supervisor accepts the `RouteAlreadyExists` answer that Routers 0.5.4–0.10.x give to a repeated registration; 0.2.37–0.2.40 reconnected every 2.26 s on those Routers and effectively needed 0.11.0. Verified on a board with Router 0.9.0.
+
 On the Uno Q, from this directory:
 
 ```bash

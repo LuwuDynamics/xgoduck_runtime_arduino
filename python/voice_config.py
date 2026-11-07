@@ -8,12 +8,27 @@ from pathlib import Path
 from app_paths import DATA
 
 CONFIG_PATH = DATA / 'voice_config.json'
+WAKE_MODELS = Path(__file__).with_name('models')
 DEFAULTS = dict(enabled=True, language='cn', enable_wakeword=True, enable_aec=False,
                 input_device=None, output_device=None, voice_motion_enabled=False,
                 volume=60, enable_camera=True, ota_url='', camera_device=None, remote_motion_enabled=False,
                 cloud_region=None, input_auto_gain=None, input_gain_db=0, output_gain_db=0,
                 tts_mouth_enabled=True, input_channel_mode='auto', input_sample_rate=None,
                 aec_output_headroom_db=0)
+
+
+def wake_profile(config):
+    """Choose the phrase and detector settings for the same voice session."""
+    region = None if config.get('ota_url') else config.get('cloud_region')
+    if region == 'global':
+        phrase, model = 'Hey Ducky', 'hey_ducky.onnx'
+    elif region == 'cn' or config.get('language', 'cn') == 'cn':
+        phrase, model = '小鸭小鸭', 'xiaoya.onnx'
+    else:
+        # Custom servers keep the legacy language-based English profile.
+        return 'Hi Luka', dict(shared_capture=True)
+    return phrase, dict(shared_capture=True, model_path=str(WAKE_MODELS / model),
+                        threshold=.50, input_scale=1., stride_duration=.08, cooldown_sec=2.)
 
 
 class VoiceConfig:
@@ -76,8 +91,9 @@ class VoiceConfig:
                 pass
             except (OSError, ValueError, TypeError) as exc:
                 raise ValueError('Saved voice configuration is invalid; repair it before switching servers.') from exc
+            configured = bool(config['ota_url'] or config['cloud_region'])
             return dict(cloud_region=config['cloud_region'], custom_endpoint=bool(config['ota_url']),
-                        configured=bool(config['ota_url'] or config['cloud_region']))
+                        configured=configured, wake_phrase=wake_profile(config)[0] if configured else None)
 
     def select_region(self, region):
         """Explicit user selection preserves all unrelated settings and identity."""

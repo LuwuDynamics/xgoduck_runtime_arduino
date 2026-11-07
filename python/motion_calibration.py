@@ -2,8 +2,8 @@
 
 The stable web/sketch calibrates each servo itself. A robot with nondefault
 software zeros must complete that workflow before the App enables motion.
-Optional per-robot IMU calibration adds a cached rotation and gyro-zero
-subtraction before the unchanged receive-side filter.
+Standing IMU calibration uses the upstream offset workflow and the App's
+persistent data directory.
 """
 import hashlib
 import json
@@ -17,33 +17,24 @@ from app_paths import DATA
 from controller import Controller
 from rl_core import MOTOR_IDS
 from wire import SERVO_CENTER_POS
-from imu_calibration import CalibratedSignalFilter, load as load_imu_calibration
 from runtime_gains import RuntimeGainsReader
 from forward_avoidance import GuardedWalkingPolicy
 
 ARM_CONFIRM_S = 1.
+IMU_LOAD_ERROR = 'IMU 标定文件无效或为旧版。请在 9527 的 Control 页重新标定 IMU。'
 
 
 class AppController(Controller):
     def __init__(self, bridge, *, data_dir=None):
-        super().__init__(bridge)
+        data = Path(DATA if data_dir is None else data_dir)
+        super().__init__(bridge, imu_calibration_path=data / 'imu-calibration.json')
         self.run_gains = RuntimeGainsReader(self)
         self.forward_avoidance = None
         self._forward_release = set()
         self._arm_deadline = None
         self._arm_failed = False
-        self._imu_path = Path(DATA if data_dir is None else data_dir) / 'imu-calibration.json'
-        self._imu_record, self._imu_error = None, ''
-        try:
-            self._imu_record = load_imu_calibration(self._imu_path)
-            if self._imu_record is not None:
-                self.filter = CalibratedSignalFilter(self._imu_record)
-                print('[imu-calibration] Loaded saved gravity direction and gyro zero.', flush=True)
-        except (OSError, ValueError, TypeError) as exc:
-            self._imu_error = 'IMU 标定文件无效，未应用；请检查 data/imu-calibration.json。'
-            print('[imu-calibration]', self._imu_error, type(exc).__name__, flush=True)
         self._center_lock = threading.Lock()
-        self._center_path = Path(DATA if data_dir is None else data_dir) / 'hardware-centers.json'
+        self._center_path = data / 'hardware-centers.json'
         self._legacy_path = self._center_path.with_name('zero_pos.json')
         self._legacy_digest = None
         self._legacy_present = False
@@ -89,8 +80,8 @@ class AppController(Controller):
     def set_mode(self, mode):
         with self.lock:
             active = mode in ('hold', 'policy')
-            if active and self._imu_error:
-                raise ValueError(self._imu_error)
+            if active and self._imu_load_failed:
+                raise ValueError(IMU_LOAD_ERROR)
             if active and self._needs_centering:
                 raise ValueError(self._center_message())
             same_mode = mode == self.mode
@@ -133,11 +124,12 @@ class AppController(Controller):
             self.arm_pending = True
 
     def set_sitstand(self, action):
-        if self._imu_error:
-            raise ValueError(self._imu_error)
-        if self._needs_centering:
-            raise ValueError(self._center_message())
-        return super().set_sitstand(action)
+        with self.lock:
+            if self._imu_load_failed:
+                raise ValueError(IMU_LOAD_ERROR)
+            if self._needs_centering:
+                raise ValueError(self._center_message())
+            return super().set_sitstand(action)
 
     def _remember_center(self, sid):
         centered = self._centered_ids | {sid}
@@ -231,25 +223,24 @@ class AppController(Controller):
             result = super().status()
             result['arming'] = self._arm_deadline is not None and result.get('enabled') is not True
             result['arm_failed'] = self._arm_failed
+            imu = result['imu_calibration']
+            imu_error = IMU_LOAD_ERROR if self._imu_load_failed else ''
+            result['gravity_calibration'] = dict(
+                state='invalid' if imu_error else 'loaded' if imu['calibrated'] else 'not_calibrated',
+                file=str(self._imu_path), rotation_deg=None,
+                acc_offset_ms2=imu['acc_offset_ms2'], gyro_zero_dps=imu['gyro_zero_dps'],
+                calibrated_at=imu['calibrated_at'], measurement=imu['measurement'], error=imu_error)
+            if imu['calibrated']:
+                result['deployment']['gyro_zero_dps'] = list(imu['gyro_zero_dps'])
+                if 'gyro_corrected' in result:
+                    result['gravity_calibration']['corrected_gyro_dps'] = result['gyro_corrected']
+            if imu_error:
+                result['last_error'] = imu_error
         result['runtime_gains'] = self.run_gains.status()
         if self.forward_avoidance is not None:
             result['obstacle_avoidance'] = self.forward_avoidance.status()
             with self.lock:
                 result['obstacle_avoidance']['awaiting_new_command_sources'] = sorted(self._forward_release)
-        record = self._imu_record or {}
-        result['gravity_calibration'] = dict(
-            state='invalid' if self._imu_error else 'loaded' if self._imu_record else 'not_calibrated',
-            file=str(self._imu_path), rotation_deg=record.get('rotation_deg'),
-            gyro_zero_dps=record.get('gyro_zero_dps'), calibrated_at=record.get('calibrated_at'),
-            measurement=record.get('measurement'), error=self._imu_error)
-        if self._imu_record:
-            result['deployment']['imu_bias_deg'] = list(record['rotation_deg'])
-            result['deployment']['gyro_zero_dps'] = list(record['gyro_zero_dps'])
-            if result.get('gyro'):
-                result['gravity_calibration']['corrected_gyro_dps'] = self.filter.rotate(
-                    [g-z for g, z in zip(result['gyro'], self.filter.zero)])
-        if self._imu_error:
-            result['last_error'] = self._imu_error
         result['calibration'] = dict(mode='hardware_center', encoder_center=SERVO_CENTER_POS,
                                     legacy_software_file=self._legacy_present,
                                     requires_centering=self._needs_centering,

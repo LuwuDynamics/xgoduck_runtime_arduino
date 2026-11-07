@@ -11,7 +11,7 @@ import time
 import wave
 from voice_application import application_type
 from app_paths import DATA, PRIVATE, VENDOR, private_directory
-from voice_config import VoiceConfig
+from voice_config import VoiceConfig, wake_profile
 from local_ipc import JsonServer, request
 from audio_devices import CaptureGain, Volume, device_identity, prepare_capture, prepare_portaudio, select_audio, usb_audio_cards
 from onboarding import Onboarding, ota_url
@@ -194,10 +194,7 @@ class Runtime:
         USBVision = vision_type()
         (private_directory() / 'language.ini').write_text(cfg['language'])
         self.capture_channels = CaptureChannels(channels, cfg['input_channel_mode'])
-        wakeword = dict(shared_capture=True)
-        if cfg['language'] == 'cn':
-            wakeword.update(model_path=str(Path(__file__).with_name('models') / 'xiaoya.onnx'),
-                            threshold=.5, input_scale=1., stride_duration=.08, cooldown_sec=2.)
+        wake_phrase, wakeword = wake_profile(cfg)
         app = DuckApplication(dict(ota_url=ota_url(cfg), enable_wakeword=cfg['enable_wakeword'] and self.audio_ready,
             enable_aec=cfg['enable_aec'], enable_camera=cfg['enable_camera'], enable_robot=True,
             audio_available=self.audio_ready, provisioned_mqtt=dict(self.onboarding.mqtt),
@@ -205,7 +202,7 @@ class Runtime:
             send_wake_word_data=False, auto_start_chat=False, ambient_sound={'enabled': False},
             audio=dict(output_sample_rate=16000, input_device=input_index, output_device=output_index,
                        input_channels=channels, input_latency=.32, output_latency=.5, prebuffer_ms=1000, aec_ref_delay_ms=500),
-            wakeword=wakeword,
+            wakeword=wakeword, wake_phrase=wake_phrase,
             input_transform=capture_gain.pcm,
             output_transform=aec_playback_transform(self.volume, cfg['aec_output_headroom_db'],
                 lambda: (app.audio is not None and app.audio.aec_enabled

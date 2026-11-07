@@ -173,6 +173,19 @@ def main():
                         time.sleep(30)
                         raise AssertionError('Orphan test failed to kill the simulated motion process')
                     assert client.post('/api/mode', json={'mode': 'off'}).status_code == 200
+                    if mode == 'normal':
+                        Bridge.callbacks['duck_voltage'](wire.VOLTAGE.pack(
+                            b'DQV1', 1, 0, wire.ALL_MASK, *([82] * 15)))
+                        motion = client.get('/api/status').json()
+                        assert motion['voltage_v'] == 8.2 and len(motion['servo_voltage_v']) == 15
+                        assert client.post('/api/heading-hold', json={'enabled': False}).json()['enabled'] is False
+                        assert client.post('/api/heading-hold', json={'enabled': True}).json()['enabled'] is True
+                        sampling = client.post('/api/imu-calibration', json={'action': 'start'})
+                        assert sampling.status_code == 200 and sampling.json()['active']
+                        wait_for(lambda: client.get('/api/status').json()['imu_calibration']['state'] == 'saved')
+                        saved = json.loads((Path(os.environ['DUCK_DATA_DIR']) / 'imu-calibration.json').read_text())
+                        assert saved['version'] == 2 and saved['measurement']['samples'] >= 90
+                        assert client.post('/api/imu-calibration', json={'action': 'reset'}).json()['state'] == 'idle'
                     assert client.post('/api/mode', json={'mode': 'shadow'}).status_code == 200
                     cockpit = '/api/cockpit/motion'
                     start = dict(controller_id='a'*24, sequence=1, kind='stand')

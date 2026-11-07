@@ -87,16 +87,23 @@ class XiaoyaModelTest(unittest.TestCase):
     def test_delivered_final_model_and_fixed_waveform_match_their_manifest(self):
         import hashlib, wave
         import onnxruntime as ort
-        manifest = json.loads((ROOT / 'provenance/xiaoya-wakeword.json').read_text())
-        for entry in (manifest['classifier'], manifest['cue']):
-            path = ROOT / entry['path']
-            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), entry['sha256'])
         options = ort.SessionOptions()
         options.intra_op_num_threads = options.inter_op_num_threads = 1
-        session = ort.InferenceSession(str(MODEL), options, providers=['CPUExecutionProvider'])
-        self.assertEqual(session.get_inputs()[0].shape[1:], [16, 96])
-        self.assertEqual(session.get_outputs()[0].shape[1:], [1])
-        with wave.open(str(ROOT / manifest['cue']['path']), 'rb') as w:
+        manifests = [json.loads((ROOT / 'provenance' / name).read_text())
+                     for name in ('xiaoya-wakeword.json', 'hey-ducky-wakeword.json')]
+        for manifest in manifests:
+            with self.subTest(phrase=manifest['wake_phrase']):
+                entry = manifest['classifier']
+                path = ROOT / entry['path']
+                self.assertEqual(path.stat().st_size, entry['size'])
+                self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), entry['sha256'])
+                session = ort.InferenceSession(str(path), options, providers=['CPUExecutionProvider'])
+                self.assertEqual(session.get_inputs()[0].shape[1:], [16, 96])
+                self.assertEqual(session.get_outputs()[0].shape[1:], [1])
+        cue = manifests[0]['cue']
+        path = ROOT / cue['path']
+        self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), cue['sha256'])
+        with wave.open(str(path), 'rb') as w:
             self.assertEqual((w.getframerate(), w.getnchannels(), w.getsampwidth()), (16000, 1, 2))
             self.assertAlmostEqual(w.getnframes() / 16000, .9169375)
 
@@ -351,7 +358,7 @@ async def main():
 asyncio.run(main())
 ''')
 
-    def test_product_wake_profile_follows_language_without_changing_cloud(self):
+    def test_product_wake_profile_follows_region_without_changing_language(self):
         self.check('''
 import asyncio, os
 from pathlib import Path
@@ -362,20 +369,27 @@ async def check():
     config = VoiceConfig(Path(os.environ['DUCK_DATA_DIR'])/'voice.json')
     runtime = Runtime('test',0,config,onboarding=SimpleNamespace(mqtt={},bound=True,snapshot=lambda:{}))
     try:
-        for language in ('cn','en'):
-            for region in ('cn','global'):
-                config.update({'language':language,'cloud_region':region})
+        for language in ('cn', 'en'):
+            custom = ('xiaoya.onnx', '小鸭小鸭') if language == 'cn' else (None, 'Hi Luka')
+            for region, endpoint, (model, phrase) in (
+                ('cn', '', ('xiaoya.onnx', '小鸭小鸭')),
+                ('global', '', ('hey_ducky.onnx', 'Hey Ducky')),
+                ('global', 'https://custom.invalid/ota/', custom),
+            ):
+                saved = config.update({'language':language, 'cloud_region':region, 'ota_url':endpoint})
                 app = runtime.build_application([])
                 try:
                     profile = app.config['wakeword']
-                    if language == 'cn':
-                        assert Path(profile['model_path']).name == 'xiaoya.onnx'
-                        assert (profile['threshold'],profile['input_scale'],profile['stride_duration'],profile['cooldown_sec']) == (.5,1.,.08,2.)
-                        assert app._wake_word() == '小鸭小鸭'
-                    else:
+                    assert profile['shared_capture'] is True
+                    assert app._wake_word() == config.region_status()['wake_phrase'] == phrase
+                    if model is None:
                         assert 'model_path' not in profile and 'input_scale' not in profile
-                        assert app._wake_word() == 'Hi Luka'
-                    assert config.get()['cloud_region'] == region
+                    else:
+                        path = Path(profile['model_path'])
+                        assert path.name == model and path.is_file()
+                        assert (profile['threshold'], profile['input_scale'], profile['stride_duration'],
+                                profile['cooldown_sec']) == (.5, 1., .08, 2.)
+                    assert config.get() == saved
                 finally: await app.shutdown()
     finally: runtime.mouth_sender.close()
 asyncio.run(check())

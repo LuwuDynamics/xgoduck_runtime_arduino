@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
 sys.path.insert(0, str(ROOT / 'python/vendor/luwu_os/apps/voice_chat'))
+from controller import ROULADE_ALPHA, ROULADE_S
 from motion_access import MotionAccess
 from local_ipc import JsonServer
 from duck_thing import DuckThing
@@ -20,9 +21,6 @@ from mcp_server import McpServer
 spec = importlib.util.spec_from_file_location('web_fixture', ROOT / 'tools/test-web-control.py')
 fixture = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fixture)
-fixture.ns['MOUTH_MAX_DEG'] = 30
-fixture.ns['ROULADE_S'] = 1.9
-fixture.ns['ROULADE_ALPHA'] = .15
 
 
 class VoiceMotionTest(unittest.TestCase):
@@ -30,6 +28,10 @@ class VoiceMotionTest(unittest.TestCase):
         setup = fixture.WebControlTest()
         setup.setUp()
         self.c = setup.c
+        # These tests isolate leases and tool results from the policy worker.
+        # The motion baseline suite drives real preparation and submissions.
+        for method in ('set_sitstand', 'start_pick', 'start_roulade', 'start_kick'):
+            setattr(self.c, method, self.with_ready_model(getattr(self.c, method)))
         self.c.input_source = 'web'
         self.c.mode = 'policy'
         for policy in self.c._models():
@@ -50,6 +52,18 @@ class VoiceMotionTest(unittest.TestCase):
         self.access.heartbeat(101)
         self.access.tick()
         self.advance(1.)
+
+    def with_ready_model(self, start):
+        def run(*args):
+            reply = start(*args)
+            now = fixture.ns['time'].monotonic()
+            pending = self.c.action_preparation
+            pending.update(ready_at=now, warm_passes=1)
+            self.c._advance_preparation_locked(now, True)
+            if self.c.roulade_pending:
+                self.c._record_roulade_frame_locked(now, 0., 0., 0.)
+            return dict(reply, preparing=False)
+        return run
 
     def advance(self, seconds):
         end = self.now + seconds
@@ -1284,16 +1298,15 @@ class VoiceMotionTest(unittest.TestCase):
         self.advance(12)
         self.assertEqual(self.c.input_source, 'gamepad')
 
-    def test_manual_takeover_and_rejected_mode(self):
+    def test_servo_setup_takes_over_and_disarms(self):
         self.move()
-        with self.assertRaisesRegex(ValueError, 'disarm'):
-            self.access.web_mode('servo_debug')
-        self.assertEqual(self.c.input_source, 'voice')
-        self.assertEqual(self.access.action['state'], 'running')
-        self.access.web_mode('hold')
+        self.access.web_mode('servo_debug')
+        self.assertEqual(self.c.mode, 'servo_debug')
         self.assertEqual(self.c.input_source, 'web')
         self.assertEqual(self.access.action['state'], 'cancelled')
-        self.assertEqual(self.c.mode, 'hold')
+        sent = [fixture.wire.COMMAND.unpack(call.args[1])[4]
+                for call in self.c.bridge.notify.call_args_list if call.args[0] == 'duck_command']
+        self.assertEqual(sent[-1], fixture.wire.DISARM)
 
     def test_pick_cancellation_and_explicit_torque_off(self):
         self.access.start_action(kind='pick', session=101)
@@ -1311,14 +1324,14 @@ class VoiceMotionTest(unittest.TestCase):
         roll = next(t for t in tools if t['name'] == 'Duck.Roulade')
         self.assertEqual(roll['inputSchema']['properties'], {})
         self.assertEqual(roll['inputSchema']['required'], [])
-        self.assertIn('1.9', roll['description'])
+        self.assertIn('翻滚一次', roll['description'])
         with patch.object(self.c, 'start_roulade', wraps=self.c.start_roulade) as start:
             reply = mcp.handle_message({'id': 2, 'method': 'tools/call',
                 'params': {'name': 'Duck.Roulade', 'arguments': {}}})['result']
             self.assertFalse(reply['isError'])
             start.assert_called_once_with()
         self.assertEqual(self.access.action['kind'], 'roulade')
-        self.assertEqual(self.access.action['duration_s'], 1.9)
+        self.assertEqual(self.access.action['duration_s'], ROULADE_S)
         self.assertEqual(self.c.twist, [0, 0, 0])
         self.assertEqual(self.c.head, [0] * 4)
         self.assertEqual(self.c.mouth, 0)
@@ -1368,7 +1381,7 @@ class VoiceMotionTest(unittest.TestCase):
         with patch.object(fixture.ns['time'], 'monotonic', side_effect=lambda: self.now):
             self.c.rx_time = self.now
             self.access.start_action(kind='roulade', session=101)
-            self.c.policy.set_action_alphas.assert_called_with(leg=.15, head=.15)
+            self.c.policy.set_action_alphas.assert_called_with(leg=ROULADE_ALPHA, head=ROULADE_ALPHA)
             self.c.filtered['grav'] = [0, 0, 1]  # Full inversion during an intentional roll.
             self.c.step()
             self.c.roulade_policy.infer.assert_called_once()
@@ -1376,11 +1389,11 @@ class VoiceMotionTest(unittest.TestCase):
             self.c.getup_policy.infer.assert_not_called()
             self.assertEqual(self.c.recovery.phase, 'walk')
             self.c.recovery.fall_elapsed = .12
-            self.advance(1.85)
+            self.advance(ROULADE_S - .05)
             self.assertEqual(self.access.action['state'], 'running')
             self.advance(.1)
             self.assertEqual(self.access.action['state'], 'completed')
-            self.assertAlmostEqual(self.access.action['elapsed_s'], 1.9, delta=.051)
+            self.assertAlmostEqual(self.access.action['elapsed_s'], ROULADE_S, delta=.051)
             self.assertEqual(self.c.roulade_until, 0)
             self.assertEqual(self.c.recovery.fall_elapsed, 0)
             self.assertTrue(self.c.policy_needs_reset)
@@ -1412,7 +1425,7 @@ class VoiceMotionTest(unittest.TestCase):
     def test_move_after_roulade_waits_through_recovery_and_standing(self):
         self.access.start_action(kind='roulade', session=101)
         queued = self.move(duration=2, twist=[.2, 0, 0])
-        self.advance(1.8)
+        self.advance(ROULADE_S - .1)
         self.c.recovery.phase, self.c.recovery.angle_deg = 'getup', 70
         self.advance(.2)
         self.assertEqual(self.access.action['kind'], 'roulade')
@@ -1433,7 +1446,7 @@ class VoiceMotionTest(unittest.TestCase):
         self.access.start_action(kind='roulade', session=101)
         self.move(duration=2)
         self.access.start_action(kind='roulade', session=101)
-        self.advance(1.8)
+        self.advance(ROULADE_S - .1)
         self.c.recovery.phase, self.c.recovery.angle_deg = 'getup', 70
         self.advance(5.4)
         self.assertEqual(self.access.action['state'], 'failed')

@@ -6,6 +6,7 @@ from collections import deque
 import threading
 import time
 import uuid
+from controller import ACTION_PREPARE_TIMEOUT_S, ROULADE_S
 from recovery import Recovery
 from speech_mouth import OUTPUT_HZ, SpeechMouthMotion
 from motion_feedback import (LEG_IDS, HEAD_IDS, MOUTH_ID, SERVO_IDS,
@@ -18,6 +19,7 @@ COCKPIT_TWIST_LIMITS = (.15, .3, 1.)
 COCKPIT_LEASE_S = .4
 COCKPIT_ACTIONS = ('stand', 'sit', 'pick', 'roulade', 'left_kick', 'right_kick')
 WALK_ACTIONS = ('move', 'turn', 'pick', 'roulade', 'left_kick', 'right_kick')
+TIMED_MODEL_ACTIONS = ('pick', 'roulade', 'left_kick', 'right_kick')
 STAND_TIMEOUT_S = 5.
 VOICE_ACTION_SECONDS = 10.
 MAX_QUEUED_ACTIONS = 4
@@ -121,6 +123,8 @@ class MotionAccess:
             reason = '当前为仅推理或卸力模式，请先让鸭子站起来。'
         elif recovery.get('phase') != 'walk':
             reason = '鸭子正在起身或恢复姿态，请等待站稳后再遥控。'
+        elif (status.get('action_preparation') or {}).get('active'):
+            reason = '鸭子正在准备动作，请稍等。'
         elif not angle_known or angle >= tilt_limit:
             reason = '鸭子趴倒、倾斜或姿态未知，请先完成站立。'
         elif (status.get('pick') or {}).get('active') or (status.get('roulade') or {}).get('active'):
@@ -472,7 +476,7 @@ class MotionAccess:
             elif kind == 'pick':
                 duration = 4.
             elif kind == 'roulade':
-                duration = 1.9  # The existing Controller.ROULADE_S window.
+                duration = ROULADE_S
                 payload.update(head=[0.] * 4, mouth=0.)
             elif kind == 'stand':
                 duration = STAND_TIMEOUT_S
@@ -503,7 +507,7 @@ class MotionAccess:
             c = self.controller
             if remote and (busy or self.cockpit_driver and self.clock() < self.cockpit_deadline
                            or c.input_source == 'gamepad' and any(c.twist)
-                           or c.mode == 'policy' and (c.sitstand_phase == 'stand' or c.pick_active
+                           or c.mode == 'policy' and (c.action_preparation or c.sitstand_phase == 'stand' or c.pick_active
                                                      or c.roulade_until or c.kick_until)):
                 self.remember_remote(controller_id, sequence)
                 self.remote_directions[controller_id] = 'paused'
@@ -645,6 +649,8 @@ class MotionAccess:
         started = self.clock()
         job.pop('waiting_for', None)
         job.pop('waiting_since', None)
+        if reply.get('preparing'):
+            job['awaiting_model'] = True
         job.update(state='running', started_at=started, deadline=started + job['duration_s'],
                    obstacle_stop_count=avoidance.get('stop_count', 0),
                    required_joint_ids=list(required_ids),
@@ -678,32 +684,35 @@ class MotionAccess:
             self.pending.appendleft((job, payload))
 
     def _apply_action(self, kind, payload, source):
+        c = self.controller
+        if c.action_preparation:
+            raise ValueError('鸭子正在准备动作，请稍等。')
         if kind in ('mouth', *COCKPIT_ACTIONS):
             self.speech_mouth.override('explicit action owns mouth')
-        c = self.controller
+        action = None
         if kind == 'stand':
             c._stop_pick_locked()
             c._stop_roulade_locked()
             c._stop_kick_locked()
             # Preserve the seated model's history through sit -> stand.
             if c.sitstand_phase == 'sit':
-                c.set_sitstand('stand')
+                action = c.set_sitstand('stand')
             elif c.sitstand_phase != 'stand':
                 c.set_mode('policy')
         elif kind == 'sit':
-            c.set_sitstand('sit')
+            action = c.set_sitstand('sit')
         else:
             c.set_mode('policy')
         reply = c.command(**payload, source=source)
         if reply.get('forward_blocked'):
             return reply
         if kind == 'pick':
-            c.start_pick()
+            action = c.start_pick()
         elif kind == 'roulade':
-            c.start_roulade()
+            action = c.start_roulade()
         elif kind in ('left_kick', 'right_kick'):
-            c.start_kick('left' if kind == 'left_kick' else 'right')
-        return reply
+            action = c.start_kick('left' if kind == 'left_kick' else 'right')
+        return dict(reply, preparing=True) if (action or {}).get('preparing') else reply
 
     def _blocked_forward(self, job, blocked):
         reason, avoidance = str(blocked), blocked.avoidance
@@ -813,6 +822,7 @@ class MotionAccess:
             if c.input_source == 'voice' or stop_manual:
                 c.generation += 1
                 self._zero_twist()
+                c._cancel_preparation_locked()
                 if c.pick_active:
                     c.mouth = 0.
                     c.policy_needs_reset = True
@@ -842,6 +852,35 @@ class MotionAccess:
             if self.speech_mouth.deadline:
                 self._tick_speech_locked(self.controller.status())
 
+    @staticmethod
+    def _model_active(status, kind):
+        if kind in ('sit', 'stand'):
+            return (status.get('sitstand') or {}).get('phase') == kind
+        return bool((status.get(kind) or {}).get('active'))
+
+    def _await_model(self, status):
+        job = self.action
+        now = self.clock()
+        pending = status.get('action_preparation') or {}
+        if pending.get('active') and pending.get('action') == job['kind']:
+            if now - job['started_at'] <= ACTION_PREPARE_TIMEOUT_S + .15:
+                self.controller.web_time = time.monotonic()
+                return True
+        elif self._model_active(status, job['kind']):
+            job.update(awaiting_model=False, started_at=now, deadline=now + job['duration_s'],
+                       queue_wait_s=round(max(0., now - job['accepted_at']), 3))
+            return False
+        reason = status.get('last_error') or '动作准备未完成，请重试。'
+        self._finish_action('failed', reason=reason)
+        self.cancel(reason)
+        return True
+
+    def _action_done(self, status):
+        job = self.action
+        if job.get('awaiting_model') is False and job['kind'] in TIMED_MODEL_ACTIONS:
+            return not self._model_active(status, job['kind'])
+        return self.clock() >= job['deadline']
+
     def tick(self, *, speech=True):
         with self.lock:
             status = self.controller.status()
@@ -864,9 +903,11 @@ class MotionAccess:
                 self._cancel_pending('control source changed')
                 return
             allowed = self.remote_allowed if running and self.action.get('remote_controller') else self.allowed
+            preparing_sit = (running and self.action.get('awaiting_model') and self.action['kind'] == 'sit'
+                             and self.controller.mode == 'hold')
             if (running and not allowed()) or self.voice_session is None or self.clock() - self.voice_seen > .8:
                 self.cancel('voice unavailable or motion disabled')
-            elif self.controller.mode != 'policy':
+            elif self.controller.mode != 'policy' and not preparing_sit:
                 self.cancel(status.get('last_error') or 'controller left policy mode')
             elif (status.get('fault_hold') or not feedback_ready(status, required_ids) or
                   (not command_link_ready(status) and not
@@ -886,10 +927,12 @@ class MotionAccess:
                   and (status.get('recovery') or {}).get('phase') != 'walk'):
                 self._retire_remote_directions()
                 self.cancel('动作中断，鸭子正在恢复姿态。')
+            elif running and self.action.get('awaiting_model') and self._await_model(status):
+                return
             elif (self.action and self.action['state'] == 'running' and self.action['kind'] == 'stand'
                   and movement['movement_ready']):
                 self._finish_action('completed', result='Balance feedback ready: motors enabled and upright for one second.')
-            elif self.action and self.action['state'] == 'running' and self.clock() >= self.action['deadline']:
+            elif running and self._action_done(status):
                 self._zero_twist()
                 self.controller._stop_pick_locked()
                 if self.action['kind'] == 'roulade':
@@ -899,6 +942,8 @@ class MotionAccess:
                 self.controller.command(twist=[0, 0, 0], mouth=0, source='voice')
                 if self.action['kind'] == 'stand':
                     self._finish_action('failed', reason='Standing not confirmed. ' + movement['movement_block_reason'])
+                elif self.action.get('awaiting_model') is False and status.get('last_error'):
+                    self._finish_action('failed', reason=status['last_error'])
                 else:
                     self._finish_action('completed', result='Timed command ended; physical success not evaluated.')
             elif self.action and self.action['state'] == 'running':

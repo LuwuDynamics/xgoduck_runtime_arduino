@@ -19,7 +19,7 @@ def application_type(base, runtime):
             return runtime.config.get()['volume']
 
         def _wake_word(self):
-            return 'Hi Luka' if self._lang() == 'en' else '小鸭小鸭'
+            return self.config.get('wake_phrase') or ('Hi Luka' if self._lang() == 'en' else '小鸭小鸭')
 
         def _play_wake_sound(self):
             self.audio.play_wav(str(WAKE_CUE))
@@ -132,8 +132,7 @@ def application_type(base, runtime):
             if code is None:
                 raise ValueError('language must be zh-CN/en-US')
             runtime.config.update({'language': code})
-            # Runtime reopens the matching wake-word model. The locally chosen
-            # cloud and its credentials remain independent of language.
+            # Runtime reopens the session. A preset region keeps its wake phrase.
             return 'Language set to: ' + ('zh-CN' if code == 'cn' else 'en-US')
 
         def mcp_set_aec(self, enable):

@@ -10,12 +10,13 @@ class Element extends EventTarget {
   change(){this.dispatchEvent(new Event('change'));}
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+const wakePhrases={cn:'小鸭小鸭',global:'Hey Ducky'};
 function setup({locale='zh-CN',languages,savedLanguage}={}){
-  const elements=Object.fromEntries(['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip','language'].map(id=>[id,new Element()]));
+  const elements=Object.fromEntries(['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip','startupWake','language'].map(id=>[id,new Element()]));
   const document=Object.assign(new EventTarget(),{hidden:false,documentElement:{},getElementById:id=>elements[id],querySelectorAll:()=>[]});
   const window=new EventTarget(),stored=new Map(savedLanguage?[['duck-cockpit-language',savedLanguage]]:[]),requests=[];
   const navigator={language:locale,languages};
-  const state={config:{cloud_region:'cn',custom_endpoint:false,configured:true},voice:{onboarding:{cloud_region:'cn',bound:true},cloud_connected:true,session_cloud_region:'cn'}};
+  const state={config:{cloud_region:'cn',custom_endpoint:false,configured:true,wake_phrase:wakePhrases.cn},voice:{onboarding:{cloud_region:'cn',bound:true},cloud_connected:true,session_cloud_region:'cn'}};
   let override=null;
   const ctx=vm.createContext({window,document,navigator,localStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)},CustomEvent:class extends Event{},AbortController,setTimeout,clearTimeout,
     setInterval:(f,n)=>{const timer=setInterval(f,n);timer.unref();return timer;},clearInterval,
@@ -24,7 +25,7 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
       if(options.method==='POST'){
         const body=JSON.parse(options.body);assert.deepEqual(Object.keys(body),['cloud_region']);
         const changed=state.config.cloud_region!==body.cloud_region||state.config.custom_endpoint;
-        state.config={cloud_region:body.cloud_region,custom_endpoint:false,configured:true};
+        state.config={cloud_region:body.cloud_region,custom_endpoint:false,configured:true,wake_phrase:wakePhrases[body.cloud_region]};
         return Promise.resolve({ok:true,json:async()=>({...state.config,changed,reconnecting:changed})});
       }
       const value=structuredClone(url==='/api/voice/region'?state.config:state.voice);
@@ -55,17 +56,23 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
   const s=setup(),e=s.elements;
   assert(s.requests.every(r=>!r.options.method));await tick();assert.equal(e.bindingRegionChip.textContent,'国内');e.openBinding.click();await tick();
   assert.equal(e.bindingRegion.textContent,'国内版');assert.equal(e.bindingStatus.textContent,'已绑定 · 语音在线');
+  assert.match(e.startupWake.textContent,/说「小鸭小鸭」唤醒/);
   assert(e.regionCn.checked);assert(!e.regionCn.disabled);assert(s.requests.every(r=>!r.options.method));
   s.window.DuckI18n.setLanguage('en');assert.equal(e.bindingRegion.textContent,'China');
+  assert.match(e.startupWake.textContent,/say “小鸭小鸭”/);
   assert(s.requests.every(r=>!r.options.method),'UI language must not switch servers.');
   e.regionCn.change();assert(s.requests.every(r=>!r.options.method),'Selecting the current server must not reconnect.');
   e.regionGlobal.change();assert.equal(e.bindingRegion.textContent,'China','The current region changes only after the server acknowledges the save.');
+  assert.match(e.startupWake.textContent,/say “小鸭小鸭”/);
   assert.equal(s.requests.filter(r=>r.options.method==='POST').length,1,'Selection must immediately save the server.');
   assert(e.regionCn.disabled&&e.regionGlobal.disabled);e.regionGlobal.change();e.regionCn.change();await tick();
   const writes=s.requests.filter(r=>r.options.method==='POST');assert.equal(writes.length,1);
   assert.equal(writes[0].url,'/api/voice/region');assert.equal(writes[0].options.headers['X-Device-Test'],'1');
   assert.deepEqual(JSON.parse(writes[0].options.body),{cloud_region:'global'});
   assert.equal(e.bindingRegion.textContent,'International');assert.notEqual(e.bindingStatus.dataset.state,'online','Old China connection must not be presented as the new server being online.');
+  assert.match(e.startupWake.textContent,/say “Hey Ducky”/);
+  s.window.DuckI18n.setLanguage('zh');assert.match(e.startupWake.textContent,/说「Hey Ducky」唤醒/);
+  s.window.DuckI18n.setLanguage('en');
   s.state.voice={onboarding:{cloud_region:'global',bound:false},cloud_connected:false,session_cloud_region:null};
   s.window.dispatchEvent(new Event('focus'));await tick();assert.equal(e.bindingStatus.dataset.state,'unbound');
   s.state.voice={onboarding:{cloud_region:'global',bound:true},cloud_connected:true,session_cloud_region:'global'};
@@ -82,6 +89,7 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
   assert.equal(failed.state.config.cloud_region,'cn');assert(failed.elements.regionCn.checked&&!failed.elements.regionGlobal.checked,'A failed save must restore the actual selection.');
   assert.equal(failed.elements.regionGlobalCard.dataset.current,'false');assert(!failed.elements.regionGlobal.disabled);
   assert.match(failed.elements.regionMessage.textContent,/未能确认切换/);failed.elements.closeBinding.click();
+  assert.match(failed.elements.startupWake.textContent,/说「小鸭小鸭」唤醒/);
   const delayed=setup();await tick();delayed.elements.openBinding.click();await tick();let finish;
   delayed.override((url,options)=>options.method==='POST'?new Promise(resolve=>finish=resolve):undefined);
   delayed.elements.regionGlobal.change();delayed.elements.closeBinding.click();delayed.elements.openBinding.click();

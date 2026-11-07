@@ -18,7 +18,8 @@ static constexpr uint16_t CAL_HOLD_POS = 2048;
 
 static const uint8_t ADDR_GOAL_POS = 0x2A;
 static const uint8_t ADDR_PRESENT = 0x38;
-static const uint8_t PRESENT_LEN = 7; // Includes present voltage at 0x3e.
+static const uint8_t ADDR_VOLTAGE = 0x3E;
+static const uint8_t PRESENT_LEN = 7; // Position, speed, load, then voltage (0.1 V).
 static const uint8_t ADDR_TORQUE = 40;
 static const uint8_t ADDR_TEMP_KP = 50;
 static const uint8_t ADDR_TEMP_KD = 51;
@@ -51,6 +52,8 @@ struct Motor {
   uint16_t desPos;
   float fbAngleDeg;
   float fbVelDeg;
+  uint8_t fbVoltageDeciV;
+  uint32_t fbVoltageUs;
 };
 
 extern Motor motors[NUM_MOTORS];

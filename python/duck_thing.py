@@ -73,7 +73,7 @@ class DuckThing(Thing):
         self.add_method('SetMouth', '设置嘴部开合角度', [p('degrees', '0–30 度')],
                         lambda a: self.action(kind='mouth', mouth=a['degrees'].get_value(), duration=1))
         self.add_method('Pick', '抓取约4秒；若处于坐姿，板端会先起立再抓取', [], lambda _: self.action(kind='pick'))
-        self.add_method('Roulade', '翻滚约1.9秒；若处于坐姿会先起立，后续动作等重新站稳，查GetStatus', [], lambda _: self.action(kind='roulade'))
+        self.add_method('Roulade', '翻滚一次；若处于坐姿会先起立，后续动作等重新站稳，查GetStatus', [], lambda _: self.action(kind='roulade'))
         self.add_method('Sit', '站稳后坐下并保持扭矩，支持默认姿态保持；起立用Stand',
                         [], lambda _: self.action(kind='sit'))
         self.add_method('LeftKick', '左脚踢球约0.4秒；若处于坐姿会先起立，站稳后踢，查GetStatus', [], lambda _: self.action(kind='left_kick'))

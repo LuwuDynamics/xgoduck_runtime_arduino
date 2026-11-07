@@ -27,6 +27,7 @@ class GamepadTest(unittest.TestCase):
         self.c.battery_phase, self.c.generation = 'normal', 0
         self.c.fault_hold = False
         self.c.roller_mode = False
+        self.c._imu_job = {'active': False}
         self.c.sitstand_phase, self.c.kick_until = 'idle', 0.
         self.g = GamepadControl.__new__(GamepadControl)
         self.g.controller = self.c

@@ -3,6 +3,7 @@ import ast
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import sys
 import tempfile
@@ -267,7 +268,7 @@ class BaselineTest(unittest.TestCase):
         encoder_center = self.c.status()['encoder_center']
         self.c.set_roller_mode(True)
         self.assertEqual(self.c.policy.file, 'xgoduck_roller.onnx')
-        self.assertEqual(self.c.policy.action_scale, .7)
+        self.assertEqual(self.c.policy.action_scale, .8)
         self.assertNotEqual(self.c.policy.default_deg, DEFAULT_DEG)
         self.c.set_roller_mode(False)
         self.assertEqual(self.c.policy.default_deg, DEFAULT_DEG)
@@ -297,10 +298,10 @@ class BaselineTest(unittest.TestCase):
         self.make_motion(enabled=True)
         for source in ('web', 'voice', 'gamepad'):
             self.c.input_source = source
-            for vx in (-.18, .2):
+            for vx in (-.2, .2):
                 self.c.command(twist=[vx, 0., 0.], source=source)
                 self.assertEqual(self.c.twist[0], vx)
-            for vx in (-.181, .201):
+            for vx in (-.201, .201):
                 with self.assertRaisesRegex(ValueError, 'walking vx'):
                     self.c.command(twist=[vx, 0., 0.], source=source)
         self.c.set_roller_mode(True)
@@ -313,15 +314,38 @@ class BaselineTest(unittest.TestCase):
         self.c.set_mode('policy')
         self.c.step()
         self.access.web_sitstand('sit')
-        self.c.step()
+        self.finish_preparation()
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
         self.assertEqual(self.c.sitstand_phase, 'sit')
         self.access.web_sitstand('stand')
+        self.finish_preparation()
         self.now += 1.01
         self.feedback()
         self.c.step()
         self.assertEqual(self.c.sitstand_phase, 'idle')
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+
+    def test_heading_hold_reaches_both_walking_policies(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        for skating, kp in ((False, 1.5), (True, 1.0)):
+            with self.subTest(skating=skating):
+                self.c.set_roller_mode(skating)
+                self.now += .02
+                self.feedback()
+                self.assertTrue(self.c.heading.status()['initialized'])
+                head = [.1, .2, 0., 0.]
+                self.c.command(twist=[.1, 0., 0.], head=head)
+                self.c.heading.yaw += math.radians(10.)
+                with patch.object(self.c.policy, 'infer', wraps=self.c.policy.infer) as infer:
+                    self.c.step()
+                    twist, pose = infer.call_args.args[-2:]
+                    self.assertAlmostEqual(twist[2], -kp * math.radians(10.))
+                    self.assertEqual(pose, [0.] * 4 if skating else head)
+                    self.c.command(twist=[.1, 0., .2])
+                    self.c.step()
+                    self.assertEqual(infer.call_args.args[-2][2], .2)
+                    self.assertFalse(self.c.heading.status()['active'])
 
     def test_real_kick_policies_suppress_travel_and_return_to_walking(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -329,6 +353,7 @@ class BaselineTest(unittest.TestCase):
         self.c.step()
         for side in ('left', 'right'):
             self.access.web_action('kick', side)
+            self.finish_preparation()
             self.c.command(twist=[.2, 0., 0.])
             self.assertEqual(self.c.twist, [0., 0., 0.])
             self.c.step()
@@ -352,8 +377,42 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(self.c.twist, [0., 0., 0.])
         self.assertEqual(self.c.input_source, 'web')
         self.assertEqual(self.access.action['state'], 'cancelled')
-        self.c.step()
+        self.finish_preparation()
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
+
+    def finish_preparation(self):
+        self.c._keep_warm_idle()
+        self.now += controller.ACTION_PREPARE_S + .01
+        self.feedback()
+        self.c.step()
+
+    def test_voice_kick_runs_full_window_after_preparation(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        for _ in range(23):
+            self.now += .05
+            self.feedback()
+            self.c.step()
+            self.access.heartbeat(101)
+            self.access.tick()
+        self.access.start_action(kind='left_kick', session=101)
+        self.access.tick()
+        self.assertTrue(self.c.status()['action_preparation']['active'])
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+        self.finish_preparation()
+        self.access.tick()
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_ballkick_left.onnx')
+        self.now += .25
+        self.feedback()
+        self.c.step()
+        self.access.tick()
+        self.assertEqual(self.access.action['state'], 'running')
+        self.now += .16
+        self.feedback()
+        self.c.step()
+        self.access.tick()
+        self.assertEqual(self.access.action['state'], 'completed')
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
 
 
 class HardwareCenterMigrationTest(unittest.TestCase):

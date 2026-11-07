@@ -12,7 +12,7 @@ ROOT=Path(__file__).resolve().parents[1]
 class RuntimeGainsMCUTest(unittest.TestCase):
     def test_manual_tuning_and_reads_survive_debug_entry_exit_and_retired_profile_requests(self):
         sketch=(ROOT/'sketch/sketch.ino').read_text();bus=(ROOT/'sketch/scs_bus.h').read_text()
-        writer=bus[bus.index('static void servoSetPermKpKd('):bus.index('static void servoSetProtection(')]
+        writer=bus[bus.index('static void servoSetKpKd('):bus.index('static void servoSetProtection(')]
         receiver=sketch[sketch.index('static void receiveServo('):sketch.index('static void fillRawPacket(')]
         dispatch=sketch[sketch.index('static void applyServoOp('):sketch.index('static void controlTask(')]
         code=r'''
@@ -29,10 +29,18 @@ int atomic_get(int *v){return *v;} void atomic_set(int *v,int x){*v=x;}
 uint32_t micros(){return 42;}
 ServoPacket pendingServo;bool servoPending=false;
 struct {void flush(){}} Serial1;
-int torqueWrites=0,savedWrites=0,readAddress=0,userKp=7,userKd=19;
+int torqueWrites=0,savedWrites=0,liveWrites=0,readAddress=0;
+uint8_t savedKp=7,savedKd=19,liveKp=7,liveKd=19;
+bool rejectLive=false;
 void scsWriteBuf(uint8_t id,uint8_t op,const uint8_t *data,uint8_t len){
- assert(id==33&&op==3&&len==3&&data[0]==21);
- userKp=data[1];userKd=data[2];++savedWrites;
+ assert(id==33&&op==3&&len==3);
+ if(data[0]==ADDR_PERM_KP_KD){
+  savedKp=data[1];savedKd=data[2];++savedWrites;
+ }else{
+  assert(data[0]==ADDR_TEMP_KP);
+  if(!rejectLive){liveKp=data[1];liveKd=data[2];}
+  ++liveWrites;
+ }
 }
 void k_msleep(int){}
 void setTorqueEnable(bool){++torqueWrites;}
@@ -42,7 +50,10 @@ void servoSetProtection(uint8_t){} void servoSetProtectionCurrent(uint16_t){}
 bool pingServo(uint8_t){return true;}
 bool readServoPresent(uint8_t,uint16_t &p){p=2048;return true;}
 bool readServoGains(uint8_t,uint8_t &p,uint8_t &d,uint8_t address=ADDR_PERM_KP_KD){
- readAddress=address;p=userKp;d=userKd;return true;
+ readAddress=address;
+ p=address==ADDR_TEMP_KP ? liveKp : savedKp;
+ d=address==ADDR_TEMP_KP ? liveKd : savedKd;
+ return true;
 }
 HostBusMode hostMode=HOST_NORMAL;
 bool rawNotifyEveryTick=false;
@@ -65,13 +76,16 @@ int main(){
  applyServoOp(p);assert(lastReply.ok&&readAddress==50&&lastReply.kp==7&&lastReply.kd==19);
  assert(savedWrites==0&&torqueWrites==0);
  p.op=SERVO_ENTER;applyServoOp(p);assert(lastReply.ok&&hostMode==HOST_SERVO_DEBUG);
- assert(savedWrites==0&&userKp==7&&userKd==19);
+ assert(savedWrites==0&&liveWrites==0&&liveKp==7&&liveKd==19);
  p.op=SERVO_SET_PERM_KP_KD;p.kp=9;p.kd=23;
  receive(p);assert(servoPending);
- applyServoOp(p);assert(lastReply.ok&&savedWrites==3&&userKp==9&&userKd==23);
+ applyServoOp(p);assert(lastReply.ok&&savedWrites==3&&savedKp==9&&savedKd==23);
+ assert(liveWrites==1&&liveKp==9&&liveKd==23);
+ rejectLive=true;p.kp=10;applyServoOp(p);
+ assert(!lastReply.ok&&savedKp==10&&liveKp==9);
  p.op=SERVO_EXIT;applyServoOp(p);assert(lastReply.ok&&hostMode==HOST_NORMAL);
  p.op=SERVO_READ_RUN_GAINS;applyServoOp(p);
- assert(lastReply.ok&&lastReply.kp==9&&lastReply.kd==23&&savedWrites==3);
+ assert(lastReply.ok&&lastReply.kp==9&&lastReply.kd==23&&savedWrites==6&&liveWrites==2);
  hostMode=HOST_CAL;applyServoOp(p);assert(!lastReply.ok);
  hostMode=HOST_NORMAL;servoMidId=34;applyServoOp(p);assert(!lastReply.ok);
 }

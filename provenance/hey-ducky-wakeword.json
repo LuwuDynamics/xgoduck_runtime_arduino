@@ -1,0 +1,28 @@
+{
+  "wake_phrase": "Hey Ducky",
+  "cloud_region": "global",
+  "source": "esp-voice-1/wake_heyducky_ours/models/hey_ducky.onnx",
+  "source_readme_sha256": "81eed5c81ec9e72efd5d858156bb29564f1c112f7aa32e01452a3ca50101c37b",
+  "variant": "hey_ducky_v2_s2",
+  "classifier": {
+    "path": "python/models/hey_ducky.onnx",
+    "sha256": "3da1728a623e61328b0aa1725891815e51d7e9185449dd97f7554a0faca1f0b1",
+    "size": 955471,
+    "input": "float32 [batch,16,96] embeddings",
+    "output": "float32 [batch,1] score"
+  },
+  "preprocessing": {
+    "sample_rate": 16000,
+    "window_seconds": 2,
+    "input_scale": 1.0,
+    "threshold": 0.5,
+    "stride_seconds": 0.08,
+    "cooldown_seconds": 2,
+    "reference": "esp-voice-1/livekit-wakeword/src/livekit/wakeword/inference/model.py",
+    "reference_commit": "95448a7559c453fcd87645bd67b247ffb45f85b0",
+    "frontends": {
+      "melspectrogram.onnx": "ba2b0e0f8b7b875369a2c89cb13360ff53bac436f2895cced9f479fa65eb176f",
+      "embedding_model.onnx": "70d164290c1d095d1d4ee149bc5e00543250a7316b59f31d056cff7bd3075c1f"
+    }
+  }
+}

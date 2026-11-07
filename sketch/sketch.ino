@@ -24,6 +24,7 @@ static StatePacket snapshot = {};
 static RawPacket rawSnapshot = {};
 static bool rawSnapshotEveryTick = false;
 static DiagnosticPacket diagnosticSnapshot = {};
+static VoltagePacket voltageSnapshot = {};
 static atomic_t bridgeReady = ATOMIC_INIT(0), bridgeStage = ATOMIC_INIT(0);
 static atomic_t bridgeAttempts = ATOMIC_INIT(0), bridgeFailures = ATOMIC_INIT(0);
 static atomic_t notifyDrops = ATOMIC_INIT(0), bridgeReconnects = ATOMIC_INIT(0);
@@ -325,10 +326,17 @@ static void applyServoOp(const ServoPacket &pkt) {
       servoMidCount = 0;
       servoMidNextUs = micros();
       return; // Reply only after all three mid commands have been sent.
-    case SERVO_SET_PERM_KP_KD:
+    case SERVO_SET_PERM_KP_KD: {
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
-      servoSetPermKpKd(pkt.targetId, pkt.kp, pkt.kd);
+      servoSetKpKd(pkt.targetId, pkt.kp, pkt.kd);
+      uint8_t savedKp = 0, savedKd = 0, liveKp = 0, liveKd = 0;
+      const bool savedOk = readServoGains(pkt.targetId, savedKp, savedKd);
+      const bool liveOk = readServoGains(pkt.targetId, liveKp, liveKd, ADDR_TEMP_KP);
+      reply.ok = savedOk && liveOk && savedKp == pkt.kp && savedKd == pkt.kd &&
+                 liveKp == pkt.kp && liveKd == pkt.kd;
+      reply.kp = liveKp; reply.kd = liveKd;
       break;
+    }
     case SERVO_SET_PROTECTION:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
       servoSetProtection(pkt.protectionFlags);
@@ -484,10 +492,16 @@ static void controlTask(void*, void*, void*) {
     s.periodUs = period; s.overruns = overruns; s.invalidCommands = bad;
     memcpy(s.acc, sampledImu.sample.accRaw, sizeof(s.acc));
     memcpy(s.gyro, sampledImu.sample.gyroRaw, sizeof(s.gyro));
+    VoltagePacket voltage = {};
+    memcpy(voltage.magic, "DQV1", 4);
+    voltage.seq = s.seq; voltage.sampleUs = sampleUs;
     k_mutex_lock(&motorsMu, K_FOREVER);
     for (unsigned i = 0; i < NUM_MOTORS; ++i) {
       s.angle[i] = motors[i].fbAngleDeg; s.velocity[i] = motors[i].fbVelDeg;
       s.target[i] = motors[i].desAngleDeg;
+      voltage.deciV[i] = motors[i].fbVoltageDeciV;
+      if (voltage.deciV[i] && (uint32_t)(sampleUs-motors[i].fbVoltageUs) <= VOLTAGE_STALE_US)
+        voltage.servoMask |= 1u << i;
     }
     k_mutex_unlock(&motorsMu);
     s.workUs = micros()-start;
@@ -513,6 +527,7 @@ static void controlTask(void*, void*, void*) {
     s.reportDrops = reportDrops; snapshot = s;
     rawSnapshot = raw; rawSnapshotEveryTick = rawNotifyEveryTick;
     diagnosticSnapshot = diagnostic;
+    voltageSnapshot = voltage;
     k_mutex_unlock(&stateMu);
     k_sem_give(&reportReady);
     deadline += TICK_US;
@@ -534,10 +549,12 @@ static void reportTask(void*, void*, void*) {
     k_sem_take(&reportReady, K_FOREVER);
     RawPacket raw;
     DiagnosticPacket diagnostic;
+    VoltagePacket voltage;
     bool rawEveryTick;
     k_mutex_lock(&stateMu, K_FOREVER);
     memcpy(bytes.data(), &snapshot, sizeof(snapshot));
     raw = rawSnapshot; diagnostic = diagnosticSnapshot;
+    voltage = voltageSnapshot;
     rawEveryTick = rawSnapshotEveryTick;
     k_mutex_unlock(&stateMu);
     if (!atomic_get(&bridgeReady)) continue;
@@ -588,6 +605,10 @@ static void reportTask(void*, void*, void*) {
       if (!Bridge.tryNotify("duck_diagnostics", db)) atomic_inc(&notifyDrops);
     }
     if ((++reports % 100) == 0) {
+      MsgPack::bin_t<uint8_t> vb;
+      vb.resize(sizeof(voltage));
+      memcpy(vb.data(), &voltage, sizeof(voltage));
+      if (!Bridge.tryNotify("duck_voltage", vb)) atomic_inc(&notifyDrops);
       MsgPack::bin_t<uint8_t> pd;
       pd.resize(32);
       pd[0]=servoPdMask & 255; pd[1]=servoPdMask >> 8;
@@ -595,6 +616,17 @@ static void reportTask(void*, void*, void*) {
       if (!Bridge.tryNotify("duck_boot_pd", pd)) atomic_inc(&notifyDrops);
     }
   }
+}
+
+// Router 0.11.0 answers a repeated `$/register` from the route's owner with success.
+// Routers 0.5.4-0.10.x answer RouteAlreadyExists (code 5) while the route is intact.
+// Either way this connection already owns the route; timeouts and other errors do not.
+static bool routeRegistered(const char *name) {
+  constexpr int ROUTE_EXISTS = 5;
+  bool registered = false;
+  const MsgPack::str_t route(name);
+  auto &&rpc = Bridge.call(BIND_METHOD, route);
+  return (rpc.result(registered) && registered) || rpc.getErrorCode() == ROUTE_EXISTS;
 }
 
 static void bridgeTask(void*, void*, void*) {
@@ -629,11 +661,9 @@ static void bridgeTask(void*, void*, void*) {
       MsgPack::str_t version;
       if (!Bridge.getRouterVersion(version)) break;
       // A serial reconnect drops Router registrations while version still works.
-      // Re-registering the same owner is idempotent; local handlers stay bound.
-      if (!(Bridge.provide("duck_command", receiveCommand) &&
-            Bridge.provide("duck_cal", receiveCal) &&
-            Bridge.provide("duck_servo", receiveServo) &&
-            Bridge.provide("duck_tof", readTof))) break;
+      // Re-assert every route: "already registered" counts, local handlers stay bound.
+      if (!(routeRegistered("duck_command") && routeRegistered("duck_cal") &&
+            routeRegistered("duck_servo") && routeRegistered("duck_tof"))) break;
     }
     atomic_clear(&bridgeReady);
     atomic_inc(&bridgeFailures);

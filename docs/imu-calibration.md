@@ -1,22 +1,19 @@
-# 一次性重力方向与陀螺仪静止零偏标定
+# 站姿 IMU 标定 / Standing IMU calibration
 
-每只鸭子单独标定。在 9527 选择 **Default Pose**，确认舵机已使能；将鸭子放在水平面上，身体端正，保持静止约 30 秒。请支撑好身体，避免摔倒，但不要在采样时挪动它。行走、悬空晃动、侧躺时不能作为标定参考。
+在 `http://<板子IP>:9527/` 的 **Control** 页先点 **Torque off**。按图支撑小鸭，让板子的电池接口朝正上方，下边缘贴住水平桌面。在 **IMU and servos** 下点 **Calibrate IMU**，保持静止约 1.5 秒。页面显示已保存后即可试站。
 
-使用 App 的 Python 环境运行：
+Open **Control** on port 9527 and click **Torque off**. Support Duck with the battery connector pointing up and the bottom edge of the board against a level tabletop. Click **Calibrate IMU** under **IMU and servos** and keep the board still for about 1.5 seconds until the page reports that it saved the result.
 
-```bash
-docker exec xgoduck_ai-main-1 /app/.cache/.venv/bin/python \
-  /app/tools/calibrate-imu.py --output /app/data/imu-calibration.json
-```
+<img src="../assets/imu-calibration-pose.png" alt="IMU calibration posture with the battery connector pointing up" width="420">
 
-工具只读取状态，不发送运动命令。它检查姿态模式、反馈新鲜度、IMU 源时间戳和采样波动；不够静止则拒绝保存。已有文件不会覆盖，重新标定前需自行备份并移开旧文件。
+至少需要 90 个不同的 MCU IMU 样本。抖动、反馈中断或方向偏离竖直超过 45° 会使标定失败。采样期间走路和其他动作暂停，点击 **Torque off** 可取消。失败或取消时保留旧结果。
 
-文件实际保存在板端 `ArduinoApps/xgoduck_ai/data/imu-calibration.json`，不进入源码或分发 ZIP。运动进程启动时读取一次，后续更新代码应保留 `data/`。不会每次开机重新测量，也不会在控制循环中读文件。
+加速度采用固定偏移 `[0, 0, -9.8] - mean(raw_acc)`，单位 m/s²。陀螺仪减去同一段静止采样的平均值。偏移直接用于滤波、策略观测和跌倒恢复。接口 `/api/status` 中的 `acc`、`gyro` 是原始读数，`acc_corrected`、`gyro_corrected` 是修正后读数。
 
-首次保存或重新标定后，需要重启运动进程才能应用。重启会卸力，请先支撑鸭子；重启后默认仍未使能，需要重新选择 Default Pose。无需重新刷 STM32 或重新校准舵机。
+AI 版将版本 2 记录保存在 App 的 `data/imu-calibration.json`。保存后立即生效，重启时自动加载。重标成功后旧文件保存在 `imu-calibration.previous.json`，**Reset IMU calibration** 则将已保存的文件移到 `imu-calibration.disabled.json`。旧版旋转记录需用网页重标。更换板子或调整安装方向后重新标定。
 
-文件记录安装侧倾/俯仰修正角、静止陀螺仪零偏、采样统计和时间。修正在现有融合滤波之前应用：加速度和减去零偏的陀螺仪同时旋转，原滤波、模型及关节控制算法保留。单一姿态不能测出偏航方向或完整的加速度计三轴零偏/增益，本工具不拟合这些参数。
+The App needs at least 90 unique IMU samples. Motion, interrupted feedback or a board tilted more than 45° from upright rejects the run. **Torque off** cancels sampling. Failed or cancelled runs preserve the previous result.
 
-`/api/status` 中 `gravity` 是校正后的融合重力，正常端正静止时应接近 `[0, 0, -1]`。`acc`、`gyro` 继续显示原始机体坐标数据，便于排查；校正后的角速度见 `gravity_calibration.corrected_gyro_dps`。同一对象还显示文件加载状态和标定参数。
+Accelerometer correction adds the fixed offset `[0, 0, -9.8] - mean(raw_acc)` in m/s². Gyro correction subtracts the stationary mean. Use `acc_corrected` and `gyro_corrected` in `/api/status` to check the result. The raw readings are available as `acc` and `gyro`.
 
-没有文件时沿用未标定行为；文件损坏时聊天和状态页面仍可启动，但阻止身体使能并报告原因。更换 IMU、改变板子安装方向后需重新标定，不应把这只鸭子的文件复制给其他鸭子。
+The AI App saves version 2 records in `data/imu-calibration.json`, applies them immediately and reloads them on restart. Successful recalibration saves the previous file as `imu-calibration.previous.json`. **Reset IMU calibration** moves the active file to `imu-calibration.disabled.json`. Recalibrate after upgrading from a rotation-based record, changing the board or changing its mounting orientation.

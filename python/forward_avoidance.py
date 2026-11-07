@@ -117,6 +117,9 @@ class ForwardAvoidance:
         reason, scale, state = '', 1., 'clear'
         if not enabled:
             state = 'disabled'
+        elif not self.config_error and self.frame.get('state') == 'absent':
+            # The MCU found no ToF at startup. Runtime sensor faults use other states.
+            state = 'absent'
         elif not available:
             scale, state = 0., 'unavailable'
             if self.config_error:
@@ -133,7 +136,7 @@ class ForwardAvoidance:
         elif self.distance < slow:
             scale, state = max(0., min(1., (self.distance-stop)/(slow-stop))), 'slowing'
         return dict(enabled=enabled, available=available, state=state, scale=scale,
-                    forward_ready=not enabled or available and scale > 0,
+                    forward_ready=scale > 0,
                     front_distance_mm=self.distance if available else None,
                     valid_front_zones=self.valid, age_ms=age, frame_seq=self.frame.get('seq'),
                     stop_distance_mm=stop, slow_distance_mm=slow, blocking_reason=reason,

@@ -68,10 +68,10 @@ This is an open-source App for a user-owned **Arduino UNO Q**, rather than a pre
 
 One App supports both services. Select the region **locally on the board**. Phone provisioning, Wi-Fi SSID and language cannot change it. Without a selection, the state is `awaiting_cloud_config` and neither chat cloud is contacted.
 
-| `cloud_region` | OTA service | Client |
-| --- | --- | --- |
-| `cn` | `https://xl-api.xgorobot.com/xiaolu/ota/` | Domestic WeChat Mini Program |
-| `global` | `https://xl-api.luwudynamics.ai/xiaolu/ota/` | International Android / iOS App |
+| `cloud_region` | Wake word | OTA service | Client |
+| --- | --- | --- | --- |
+| `cn` | 小鸭小鸭 | `https://xl-api.xgorobot.com/xiaolu/ota/` | Domestic WeChat Mini Program |
+| `global` | Hey Ducky | `https://xl-api.luwudynamics.ai/xiaolu/ota/` | International Android / iOS App |
 
 | WeChat Mini Program (`cn`) | International App (`global`) |
 | --- | --- |
@@ -174,7 +174,11 @@ Scan Wi-Fi and send the SSID/password. The existing BluFi service (FFFF / FF01 /
 
 Advertising stops once the board is online and binding checks succeed, after an active phone setup session finishes. Wi-Fi loss reopens provisioning. Temporary cloud failures retain a known binding from the same endpoint and retry; they are not treated as an unbind. If the wrong client region was used, Wi-Fi may still connect while the selected cloud remains unbound. Use the matching client or explicitly change the board's region.
 
-Without USB audio, the cloud MCP service remains available with `waiting_audio`. Plugging devices in reopens the session. Chinese uses the bundled “小鸭小鸭” classifier, and English uses Hi Luka. On detection, the Duck plays the fixed 0.92-second cue without moving its jaw and connects to the voice service in parallel. It buffers the first utterance, including up to 360 ms before detection, and sends the buffered frames in order once the voice channel is ready. The Chinese profile uses normalized 16 kHz audio, a two-second window, a threshold of 0.50 and an 80 ms hop. Only identical mel windows reuse embeddings in a 32-entry cache. See `provenance/xiaoya-wakeword.json` for model and cue hashes. Microphone and speaker may be separate USB devices. ALSA plug converts their audio formats.
+Without USB audio, the cloud MCP service remains available with `waiting_audio`. Plugging devices in reopens the session. The microphone and speaker can be separate USB devices. ALSA plug converts their audio formats.
+
+The China region uses “小鸭小鸭” (`python/models/xiaoya.onnx`). The international region uses “Hey Ducky” (`python/models/hey_ducky.onnx`). Changing the region reconnects voice and loads its model. Both models use normalized 16 kHz mono audio, a **0.50** detection threshold, a two-second window, an 80 ms hop, and a two-second cooldown. Only identical mel windows reuse embeddings in the 32-entry cache. [小鸭小鸭 model and wake cue](../provenance/xiaoya-wakeword.json) · [Hey Ducky model](../provenance/hey-ducky-wakeword.json)
+
+When Duck detects the wake word, it plays the fixed 0.92-second duck call while connecting to the voice service. It buffers the first utterance, including up to 360 ms before detection, and sends the buffered frames in order once the voice channel is ready.
 
 ## Settings, region changes and updates
 
@@ -202,7 +206,7 @@ Without USB audio, the cloud MCP service remains available with `waiting_audio`.
 }
 ```
 
-Missing fields use defaults; cloud selection has no implicit default. Prefer a stable USB audio key or ALSA card ID and a `/dev/v4l/by-id/` camera path. An explicitly configured HTTPS `ota_url` overrides the region for a custom server. `configure-ai.py --region ...` clears that override and preserves other settings. It refuses to overwrite malformed configuration files.
+Missing fields use defaults. Select a cloud explicitly. Prefer a stable USB audio key or ALSA card ID and a `/dev/v4l/by-id/` camera path. An explicitly configured HTTPS `ota_url` overrides the region for a custom server. Custom servers still use the wake word associated with the conversation language, “小鸭小鸭” for Chinese and “Hi Luka” for English. `configure-ai.py --region ...` clears the override and preserves other settings. It reports malformed configuration files for repair.
 
 Stop the App before changing regions:
 
@@ -278,6 +282,8 @@ Place the Duck with room to get up, explicitly enable voice motion, then say “
 
 **Feedback timeout (0.2.38).** In Hold or Policy, if Linux goes more than 150 ms without fresh STM32 feedback, it pauses motion and stops sending targets. The STM32 holds the last targets while its IMU and Bridge are healthy. Once feedback returns, select Default pose or Walk / get up, or use `Duck.DefaultPose` or `Duck.Stand` to resume explicitly. Pending voice actions are cancelled. An IMU fault, low-voltage protection or explicit Torque off can still release torque. The normal MCU command timer is disabled. Calibration and servo setup have their own timeouts.
 
+**Router compatibility (0.2.41).** Every two seconds the STM32 re-registers its four Bridge routes in case the Router lost them. Routers 0.5.4 through 0.10.x answer that with `RouteAlreadyExists` while the routes are intact, and 0.2.37–0.2.40 treated it as a failure: the Bridge reconnected every 2.26 s, dropped servo setup, calibration and Hold / Policy, and servo scans stopped after a few IDs. 0.2.41 accepts that answer as "already registered" (Router 0.11.0 answers success), so Routers 0.8.0 through 0.11.0 behave the same. Verified on a board with Router 0.9.0: no reconnects and a full 254-ID scan in 119 s. Update the App and compile/upload its matching MCU sketch together using Run.
+
 Frequent jaw targets use a private 0600 Unix datagram socket with the per-App token and session/utterance/sequence checks. Sends do not await HTTP replies; bounded queues, expired-data discard and DAC scheduling remain. MCP and other controls retain authenticated loopback HTTP. The audio callback only enqueues, and jaw updates never enable body servos.
 
 Phone direction commands require Policy mode, enabled motors, fresh feedback from the ten leg joints and IMU, MCU command age at most 150 ms, recovery phase `walk`, and body tilt below 15 degrees continuously for one second. Pick and roll also require stable standing. If posture or communication is lost during travel, velocity goes to zero and the balance or recovery policy handles posture. Once the Duck is ready, release the direction key and press it again. MCP errors describe the permission, posture or communication problem.
@@ -296,7 +302,7 @@ From a seated hold, a kick, pick, roll or walk request runs the dashboard's stan
 
 Calls share the chat codec's USB output, volume and speaker gain. An existing answer gets up to one second to finish, otherwise the tool reports busy; concurrent calls are rejected. Wake listening and capture pause during the call, and early TTS events resume in order afterwards. Completion waits for PCM and DAC tail to drain; it cannot prove the external speaker is powered or audible. User interruption, reset, shutdown or timeout cancels playback. Inspect `duck_sound` in `/api/voice/status` for the latest state/reason. No motion permission is needed. The original web UI and TTS mouth animation are preserved; a duck call does not activate or move servos.
 
-**Voice roll (0.2.14).** After explicitly enabling voice motion and confirming standing, “roll over once” calls parameterless `Duck.Roulade`, using the existing `xgoduck_roulade.onnx` and approximately 1.9-second window. Entry requires the same standing, permission, feedback and ownership checks. During the roll, the original controller handles tilt; loss of feedback, motor enable, chat or permission still cancels it. Completion or Stop ends the roll, restores smoothing and resets action filtering, retaining the original balance/get-up policy. Following queued actions may wait up to five seconds for this intentional roll's recovery and standing; timeout clears the queue without retrying the roll. `completed` confirms that the command window ended, not a measured full physical rotation. Existing web buttons and phone directional remote behavior are unchanged.
+**Voice roll (0.2.14).** After explicitly enabling voice motion and confirming standing, “roll over once” calls parameterless `Duck.Roulade`, using `xgoduck_roulade.onnx`. After preparation, the roll runs for about 1.7 seconds from the first submitted target. Entry requires the same standing, permission, feedback and ownership checks. During the roll, the original controller handles tilt; loss of feedback, motor enable, chat or permission still cancels it. Completion or Stop ends the roll, restores smoothing and resets action filtering, retaining the original balance/get-up policy. Following queued actions may wait up to five seconds for this intentional roll's recovery and standing; timeout clears the queue without retrying the roll. `completed` confirms that the command window ended, not a measured full physical rotation. Existing web buttons and phone directional remote behavior are unchanged.
 
 **Photo authentication (0.2.9).** Camera requests use the same lowercase `Device-Id` as OTA credential issuance, fixing device/token identity mismatches. The persisted device identity, binding, Client-Id and signed token are preserved; no rebinding is required. Missing camera, network and model-service failures remain visible errors.
 

@@ -14,6 +14,9 @@ from forward_avoidance import ForwardAvoidance, GuardedWalkingPolicy, load_setti
 from motion_access import COCKPIT_LEASE_S, MotionAccess
 
 
+ABSENT = dict(state='absent', fresh=False, seq=0, age_ms=0xffffffff)
+
+
 def frame(distance=1000, seq=1, **changes):
     return dict(state='ranging', fresh=True, seq=seq, age_ms=10,
                 grid_mm=[[distance]*8 for _ in range(8)], **changes)
@@ -85,8 +88,23 @@ class ForwardAvoidanceTest(unittest.TestCase):
         self.assertEqual(self.guard.limit([.2, 0, 0]), [0, 0, 0])
         self.assertEqual(self.guard.limit([-.1, 0, 0]), [-.1, 0, 0])
 
-    def test_absent_error_invalid_coverage_and_invalid_metadata_fail_closed(self):
-        for data in ({}, dict(state='unavailable', error_message='sensor disconnected'),
+    def test_confirmed_absence_allows_forward_and_valid_frames_restore_avoidance(self):
+        self.guard.update(ABSENT)
+        status = self.guard.status()
+        self.assertEqual(status['state'], 'absent')
+        self.assertFalse(status['available'])
+        self.assertTrue(status['forward_ready'])
+        self.assertIsNone(status['front_distance_mm'])
+        self.assertEqual(status['blocking_reason'], '')
+        self.assertEqual(self.guard.limit([.2, .1, .5]), [.2, .1, .5])
+        self.guard.update(frame(80))
+        self.assertEqual(self.guard.limit([.2, .1, .5]), [0, .1, .5])
+
+    def test_unknown_state_errors_and_invalid_measurements_fail_closed(self):
+        self.guard.update(ABSENT)
+        for data in ({}, dict(state='unavailable', error_message='Router timed out'),
+                     dict(state='offline', error_message='sensor disconnected'),
+                     dict(state='error', error_message='sensor initialization failed'),
                      frame(None), frame(0), frame(float('nan')), frame(True)):
             with self.subTest(data=str(data)[:100]):
                 self.guard.update(data)
@@ -129,7 +147,9 @@ class ForwardAvoidanceTest(unittest.TestCase):
                 self.assertFalse(bad.status()['forward_ready'], values)
                 self.assertIn('配置无效', bad.status()['blocking_reason'])
             path.write_text('{bad')
-            self.assertFalse(ForwardAvoidance(self.monitor, settings_path=path).status()['forward_ready'])
+            bad = ForwardAvoidance(self.monitor, settings_path=path)
+            bad.update(ABSENT)
+            self.assertFalse(bad.status()['forward_ready'])
         disabled = ForwardAvoidance(self.monitor, settings={'enabled': False})
         self.assertTrue(disabled.status()['forward_ready'])
         disabled.start()
@@ -223,7 +243,8 @@ class ForwardControllerTest(unittest.TestCase):
                   self.c.roulade_policy, *self.c.kick_policies.values()):
             self.assertNotIsInstance(p, GuardedWalkingPolicy)
         self.guard.update(frame(80, 2))
-        self.c.set_sitstand('sit'); self.feedback(); self.c.step()
+        self.c.set_sitstand('sit')
+        self.finish_preparation()
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
         self.assertEqual(self.c.sitstand_phase, 'sit')
 
@@ -252,6 +273,27 @@ class ForwardControllerTest(unittest.TestCase):
             self.now += .05
             self.feedback()
             self.access.tick()
+
+    def test_no_tof_passes_forward_commands_from_web_cockpit_voice_and_phone(self):
+        self.guard.update(ABSENT)
+        self.ready_cockpit()
+        twist = [.1, 0., 0.]
+        self.assertNotIn('forward_blocked', self.access.web_command(twist=twist))
+        self.assertEqual(self.c.twist, twist)
+        self.access.web_command(twist=[0, 0, 0])
+        driver = 'a' * 24
+        reply = self.access.cockpit_motion(driver, 1, 'begin', twist)
+        self.assertNotIn('forward_blocked', reply)
+        self.assertEqual(self.c.twist, twist)
+        self.access.cockpit_motion(driver, 2, 'release')
+
+        self.access.allowed = self.access.remote_allowed = lambda: True
+        self.access.heartbeat(101)
+        for remote in ({}, dict(remote=True, controller_id='phone-1234', sequence=1)):
+            result = self.access.start_action('move', session=101, twist=twist, duration=.7, **remote)
+            self.assertEqual(result['status'], 'accepted')
+            self.assertEqual(self.c.twist, twist)
+            self.access.start_action('stop', session=101)
 
     def test_cockpit_stops_on_release_expiry_and_feedback_loss(self):
         self.ready_cockpit()
@@ -318,18 +360,28 @@ class ForwardControllerTest(unittest.TestCase):
         for sequence, (kind, model) in enumerate(models.items(), start=1):
             self.feedback()
             self.assertTrue(cockpit(driver, 2*sequence, kind)['ok'])
+            self.finish_preparation()
             self.assertEqual(self.c.status()['active_model'], model)
             cockpit(driver, 2*sequence+1, 'stop')
             self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
             self.assertEqual(self.c.mouth, 0.)
         cockpit(driver, 10, 'sit')
+        self.finish_preparation()
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
         cockpit(driver, 11, 'stand')
+        self.finish_preparation()
         self.assertEqual(self.c.status()['sitstand']['phase'], 'stand')
         self.c.battery_phase = 'locked'
         with self.assertRaisesRegex(ValueError, 'Low battery'):
             cockpit(driver, 12, 'stand')
         self.assertEqual(cockpit(driver, 13, 'torque_off')['mode'], 'off')
+
+    def finish_preparation(self):
+        pending = self.c.action_preparation
+        pending['ready_at'] = pending['requested_at']
+        self.c._keep_warm_idle()
+        self.feedback()
+        self.c.step()
 
     def test_cockpit_stand_rearms_in_policy_and_waits_for_stm32_ack(self):
         with patch('motion_calibration.time.monotonic', side_effect=lambda: self.now):

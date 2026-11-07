@@ -2,6 +2,7 @@ const $=id=>document.getElementById(id);
 const MOTORS=[10,11,12,13,14,20,21,22,23,24,30,31,32,33,34];
 let statusBusy=false, active=false, centering=null, presentMask=0;
 let held=Array(15).fill(false);
+let imuCalibrationActive=false;
 
 async function post(path, body={}){
   const r=await fetch('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -21,10 +22,11 @@ MOTORS.forEach((id,i)=>{
 function refreshRows(){
   document.querySelectorAll('[data-center]').forEach(btn=>{
     const i=+btn.dataset.center;
-    btn.disabled=!active||centering!==null||held[i]||!(presentMask&(1<<i));
+    btn.disabled=!active||centering!==null||imuCalibrationActive||held[i]||!(presentMask&(1<<i));
     $(`row${i}`).classList.toggle('done',held[i]);
-    $(`state${i}`).textContent=centering===i?'Centering…':held[i]?'Holding 2048':'Unloaded';
+    $(`state${i}`).textContent=centering===i?'Centering…':held[i]?'Holding center':'Unloaded';
   });
+  $('start').disabled=imuCalibrationActive||centering!==null;
 }
 
 document.querySelectorAll('[data-center]').forEach(btn=>{
@@ -35,20 +37,22 @@ document.querySelectorAll('[data-center]').forEach(btn=>{
     $('message').textContent=`Setting the center of ID ${MOTORS[i]}…`;
     try{
       await post('cal/center',{index:i});
-      $('message').textContent=`Center command sent to ID ${MOTORS[i]}. It is holding position 2048.`;
+      $('message').textContent=`ID ${MOTORS[i]} is holding its center.`;
     }catch(e){showError(e);}
     finally{centering=null;refreshRows();}
   };
 });
 
 async function enter(){
+  if(imuCalibrationActive)return false;
   try{
     await post('cal/enter');
     active=true;
     held.fill(false);
     $('message').textContent='All servos are unloaded. Turn one joint by hand, then set its center.';
-  }catch(e){showError(e);}
-  refreshRows();
+    return true;
+  }catch(e){showError(e);return false;}
+  finally{refreshRows();}
 }
 async function exit(){
   active=false;
@@ -56,6 +60,7 @@ async function exit(){
   try{
     await post('cal/exit');
     held.fill(false);
+    imuCalibrationActive=false;
     $('message').textContent='Calibration closed. All servos are unloaded.';
   }catch(e){showError(e);}
   refreshRows();
@@ -77,6 +82,7 @@ setInterval(async()=>{
     active=s.mode==='calibrate';
     presentMask=s.raw_mask||0;
     held=s.cal_done||Array(15).fill(false);
+    imuCalibrationActive=!!s.imu_calibration?.active;
     $('mode').textContent=active?'Calibration active':'Calibration closed';
     if(s.last_error)$('message').textContent=s.last_error;
     if(s.raw_pos)s.raw_pos.forEach((v,i)=>{
