@@ -11,12 +11,14 @@ import time
 import wave
 from app_paths import ROOT, PRIVATE
 from audio_devices import prepare_capture, select_audio, usb_audio_cards
+from duck_sound import KINDS, sound_pcm
 
 BENCH_DIR = ROOT / 'tools/device-test'
 sys.path.insert(0, str(BENCH_DIR))
 spec = importlib.util.spec_from_file_location('duck_media_bench', BENCH_DIR / 'server.py')
 legacy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(legacy)
+DUCK_CALL_SOURCES = {f'duck-{kind}': kind for kind in KINDS}
 
 
 class AudioGate:
@@ -110,16 +112,25 @@ class MediaBench(legacy.Bench):
                     cmd = ['arecord', '-D', f'plughw:{card},0', '-f', 'S16_LE', '-r', '48000',
                            '-c', '1', '-d', str(seconds), str(self.dir / 'recording.wav')]
                 elif kind == 'playing':
+                    settings = self.config.get()
                     names = {'music': 'music.wav', 'upload': 'upload.wav', 'recording': 'recording.wav', 'tts': 'tts.wav'}
                     sources = {name: self.dir / filename for name, filename in names.items()}
                     sources['duck'] = ROOT / 'python/assets/speaker-test.wav'
                     if warning:
-                        language = self.config.get()['language']
+                        language = settings['language']
                         sources['low-battery'] = ROOT / f'python/assets/low-battery-{language}.wav'
                     path = sources.get(source)
+                    if source in DUCK_CALL_SOURCES:
+                        rate = 24000
+                        identity = os.environ.get('DUCK_DEVICE_ID', 'XGO-Duck')
+                        pcm = sound_pcm(DUCK_CALL_SOURCES[source], identity, 0, rate, settings['output_gain_db'])
+                        path = self.dir / 'duck-call.wav'
+                        with wave.open(str(path), 'wb') as audio:
+                            audio.setparams((1, 2, rate, 0, 'NONE', 'not compressed'))
+                            audio.writeframes(pcm)
                     if path is None or not path.is_file():
                         raise ValueError('The selected audio source is not available.')
-                    self.set_volume(self.config.get()['volume'] if volume is None else volume)
+                    self.set_volume(settings['volume'] if volume is None else volume)
                     cmd = ['aplay', '-D', f'plughw:{card},0', str(self.playback_file(path))]
                 else:
                     raise ValueError('Unknown audio operation.')

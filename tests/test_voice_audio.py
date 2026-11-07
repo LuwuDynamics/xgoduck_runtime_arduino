@@ -427,5 +427,34 @@ class AudioHandoffTest(unittest.TestCase):
         self.assertFalse(self.gate.busy())
 
 
+    def test_cockpit_duck_calls_generate_distinct_playable_audio(self):
+        from duck_sound import KINDS
+        self.config.update({'output_gain_db': 6})
+        played = []
+
+        def play(cmd, **kwargs):
+            self.assertTrue(self.paused.is_set())
+            self.assertEqual(cmd[:3], ['aplay', '-D', 'plughw:3,0'])
+            with wave.open(cmd[-1], 'rb') as audio:
+                self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()), (1, 2, 24000))
+                data = audio.readframes(audio.getnframes())
+                peak = max(abs(sample) for sample in array.array('h', data))
+                self.assertGreater(peak, 1000)
+                self.assertLess(peak, 32767)
+                played.append(data)
+            return REAL_POPEN([sys.executable, '-c', 'pass'], **kwargs)
+
+        with patch('voice_media.usb_audio_cards', return_value=CARDS), \
+             patch('voice_media.subprocess.Popen', side_effect=play):
+            for kind in KINDS:
+                proc = self.bench.audio_start('playing', source='duck-'+kind)
+                proc.wait(timeout=2)
+                until = time.monotonic() + 2
+                while self.gate.busy() and time.monotonic() < until:
+                    time.sleep(.01)
+                self.assertFalse(self.gate.busy())
+        self.assertEqual(len(set(played)), len(KINDS))
+
+
 if __name__ == '__main__':
     unittest.main()

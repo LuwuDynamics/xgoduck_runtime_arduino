@@ -15,6 +15,8 @@ from motion_access import COCKPIT_LEASE_S, MotionAccess
 
 
 ABSENT = dict(state='absent', fresh=False, seq=0, age_ms=0xffffffff)
+OFFLINE = dict(state='offline', fresh=False, seq=2, age_ms=1600,
+               error_message='Distance frame I2C read failed')
 
 
 def frame(distance=1000, seq=1, **changes):
@@ -88,22 +90,25 @@ class ForwardAvoidanceTest(unittest.TestCase):
         self.assertEqual(self.guard.limit([.2, 0, 0]), [0, 0, 0])
         self.assertEqual(self.guard.limit([-.1, 0, 0]), [-.1, 0, 0])
 
-    def test_confirmed_absence_allows_forward_and_valid_frames_restore_avoidance(self):
-        self.guard.update(ABSENT)
-        status = self.guard.status()
-        self.assertEqual(status['state'], 'absent')
-        self.assertFalse(status['available'])
-        self.assertTrue(status['forward_ready'])
-        self.assertIsNone(status['front_distance_mm'])
-        self.assertEqual(status['blocking_reason'], '')
-        self.assertEqual(self.guard.limit([.2, .1, .5]), [.2, .1, .5])
-        self.guard.update(frame(80))
-        self.assertEqual(self.guard.limit([.2, .1, .5]), [0, .1, .5])
+    def test_absent_and_offline_allow_forward_and_valid_frames_restore_avoidance(self):
+        for sensor in (ABSENT, OFFLINE):
+            with self.subTest(state=sensor['state']):
+                # An obstacle from the last ranging frame cannot block manual travel offline.
+                self.guard.update(frame(80))
+                self.guard.update(sensor)
+                status = self.guard.status()
+                self.assertEqual(status['state'], sensor['state'])
+                self.assertFalse(status['available'])
+                self.assertTrue(status['forward_ready'])
+                self.assertIsNone(status['front_distance_mm'])
+                self.assertEqual(status['blocking_reason'], '')
+                self.assertEqual(self.guard.limit([.2, .1, .5]), [.2, .1, .5])
+                self.guard.update(frame(80, 3))
+                self.assertEqual(self.guard.limit([.2, .1, .5]), [0, .1, .5])
 
     def test_unknown_state_errors_and_invalid_measurements_fail_closed(self):
         self.guard.update(ABSENT)
         for data in ({}, dict(state='unavailable', error_message='Router timed out'),
-                     dict(state='offline', error_message='sensor disconnected'),
                      dict(state='error', error_message='sensor initialization failed'),
                      frame(None), frame(0), frame(float('nan')), frame(True)):
             with self.subTest(data=str(data)[:100]):
@@ -274,8 +279,8 @@ class ForwardControllerTest(unittest.TestCase):
             self.feedback()
             self.access.tick()
 
-    def test_no_tof_passes_forward_commands_from_web_cockpit_voice_and_phone(self):
-        self.guard.update(ABSENT)
+    def test_offline_tof_passes_forward_commands_from_web_cockpit_voice_and_phone(self):
+        self.guard.update(OFFLINE)
         self.ready_cockpit()
         twist = [.1, 0., 0.]
         self.assertNotIn('forward_blocked', self.access.web_command(twist=twist))
@@ -336,14 +341,16 @@ class ForwardControllerTest(unittest.TestCase):
         self.guard.update(frame(80, 2))
         self.assertTrue(cockpit(driver, 1, 'begin', twist)['forward_blocked'])
         self.assertEqual(self.c.twist, [0, .04, -.5])
-        for seq in (3, 4, 5):
-            self.guard.update(frame(1000, seq))
+        self.guard.update(OFFLINE)
+        self.assertTrue(self.guard.status()['forward_ready'])
         self.assertTrue(cockpit(driver, 2, 'drive', twist)['forward_blocked'])
         cockpit(driver, 3, 'release')
         self.assertNotIn('forward_blocked', cockpit(driver, 4, 'begin', twist))
         self.assertEqual(self.c.twist, twist)
+        self.guard.update(frame(80, 5))
+        self.assertTrue(cockpit(driver, 5, 'drive', twist)['forward_blocked'])
         self.guard.update(frame(None, 6))
-        self.assertNotIn('forward_blocked', cockpit(driver, 5, 'drive', [-.1, 0, .5]))
+        self.assertNotIn('forward_blocked', cockpit(driver, 6, 'drive', [-.1, 0, .5]))
         self.assertEqual(self.c.twist, [-.1, 0, .5])
 
     def test_cockpit_buttons_select_the_existing_policies_without_voice(self):
@@ -375,6 +382,28 @@ class ForwardControllerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Low battery'):
             cockpit(driver, 12, 'stand')
         self.assertEqual(cockpit(driver, 13, 'torque_off')['mode'], 'off')
+
+    def test_cockpit_pose_buttons_preserve_other_axes_and_respect_motion_state(self):
+        self.ready_cockpit()
+        cockpit, driver = self.access.cockpit_motion, 'a' * 24
+        self.c.command(twist=[.1, 0., 0.], head=[.1, -.2, 0., .4])
+        for sequence, (kind, yaw) in enumerate(
+                [('head_left', .3), ('head_right', -.3), ('head_center', 0.)], 1):
+            self.assertTrue(cockpit(driver, sequence, kind)['ok'])
+            self.assertEqual(self.c.head, [.1, -.2, yaw, .4])
+            self.assertEqual(self.c.twist, [.1, 0., 0.])
+        for sequence, (kind, mouth) in enumerate([('mouth_open', 20.), ('mouth_close', 0.)], 4):
+            self.assertTrue(cockpit(driver, sequence, kind)['ok'])
+            self.assertEqual(self.c.mouth, mouth)
+            self.assertEqual(self.c.head, [.1, -.2, 0., .4])
+        self.c.set_roller_mode(True)
+        with self.assertRaisesRegex(ValueError, 'require Walk'):
+            cockpit(driver, 6, 'head_left')
+        self.c.set_mode('shadow')
+        self.feedback(enabled=False)
+        with self.assertRaisesRegex(ValueError, '尚未使能'):
+            cockpit(driver, 7, 'mouth_open')
+        self.assertEqual(cockpit(driver, 8, 'default_pose')['mode'], 'hold')
 
     def finish_preparation(self):
         pending = self.c.action_preparation

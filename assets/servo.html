@@ -1,63 +1,74 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261021-3">
+<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261107-1">
 <main class="page-servo">
 <header>
-  <div><small>ARDUINO UNO Q</small><h1>Servo setup</h1></div>
+  <div><small>ARDUINO UNO Q</small><h1 data-zh="舵机设置">Servo setup</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html" aria-current="page">Servo setup</a></nav>
-    <button class="stop" id="exit">Exit</button>
+    <nav class="nav"><a href="/" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" aria-current="page" data-zh="舵机设置">Servo setup</a></nav>
+    <button class="stop" id="exit" data-zh="退出">Exit</button>
   </div>
 </header>
-<p class="warn">When changing an ID, connect only the servo you want to change. Duplicate IDs cannot be distinguished on the same bus.</p>
-<p id="message" role="status">Entering servo setup and unloading all servos…</p>
+<p class="warn" data-zh="修改 ID 时，请只连接要修改的那一个舵机。同一总线上无法区分 ID 重复的舵机。">When changing an ID, connect only the servo you want to change. Duplicate IDs cannot be distinguished on the same bus.</p>
+<p id="message" role="status" data-zh="正在进入舵机设置，所有舵机将卸力…">Entering servo setup and unloading all servos…</p>
 <section class="servo-panel">
   <div class="servo-scan">
     <div class="servo-scan-actions">
-      <button id="scan">Scan all IDs</button>
-      <button id="scan-stop" hidden>Stop scan</button>
-      <span id="scan-status" role="status">Scan IDs 0–253 to find connected servos.</span>
+      <button id="scan" data-zh="扫描所有 ID">Scan all IDs</button>
+      <button id="scan-stop" data-zh="停止扫描" hidden>Stop scan</button>
+      <span id="scan-status" role="status" data-zh="扫描 ID 0–253，查找已连接的舵机。">Scan IDs 0–253 to find connected servos.</span>
     </div>
-    <progress id="scan-progress" max="254" value="0" hidden aria-label="Servo scan progress"></progress>
-    <div id="scan-results" class="servo-scan-results" aria-label="Discovered servo IDs"></div>
-    <p class="hint">Select a found ID to read or change that servo's settings. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
+    <progress id="scan-progress" max="254" value="0" hidden aria-label="Servo scan progress" data-zh-aria-label="舵机扫描进度"></progress>
+    <div id="scan-results" class="servo-scan-results" aria-label="Discovered servo IDs" data-zh-aria-label="已找到的舵机 ID"></div>
+    <p class="hint" data-zh="选择找到的 ID，即可读取或修改该舵机的设置。停止扫描会保留已有结果。ID 254 和 255 为保留地址。">Select a found ID to read or change that servo's settings. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
   </div>
   <div class="servo-grid">
     <div class="servo-row servo-action-row">
-      <button id="reset-mid" disabled>Reset Mid</button>
+      <button id="reset-mid" data-zh="重置中位" disabled>Reset Mid</button>
     </div>
     <div class="servo-row">
-      <span class="servo-label">Set KP/KD</span>
+      <span class="servo-label" data-zh="设置 KP/KD">Set KP/KD</span>
       <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
       <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
-      <button id="set-gains" disabled>Set KpKd</button>
+      <button id="set-gains" data-zh="写入 KP/KD" disabled>Set KpKd</button>
     </div>
     <div class="servo-row">
-      <span class="servo-label">Change ID to</span>
-      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" disabled>
-      <button id="set-id" disabled>Change ID</button>
+      <span class="servo-label" data-zh="新 ID">Change ID to</span>
+      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" data-zh-title="新 ID" disabled>
+      <button id="set-id" data-zh="修改 ID" disabled>Change ID</button>
     </div>
     <div class="servo-row servo-action-row">
-      <button id="read" disabled>Read</button>
+      <button id="read" data-zh="读取" disabled>Read</button>
       <strong id="read-out" class="servo-readout">—</strong>
     </div>
+    <div class="servo-gains">
+      <table aria-label="Selected servo KP and KD" data-zh-aria-label="所选舵机的 KP 和 KD">
+        <thead><tr><th scope="col" data-zh="参数来源">Parameter source</th><th scope="col">KP</th><th scope="col">KD</th></tr></thead>
+        <tbody>
+          <tr><th scope="row" data-zh="保存值（上电时加载）">Saved (power-on)</th><td id="saved-kp">—</td><td id="saved-kd">—</td></tr>
+          <tr><th scope="row" data-zh="运行值（当前生效）">Runtime (current)</th><td id="runtime-kp">—</td><td id="runtime-kd">—</td></tr>
+        </tbody>
+      </table>
+      <p id="gains-status" role="status" data-zh="请选择舵机，读取保存值和运行值。">Select a servo to read both values.</p>
+    </div>
+    <p class="hint" data-zh="保存值存储在舵机中，运行值是当前生效的参数。「写入 KP/KD」同时更新两组值。「读取」只查看数值。">Saved values are stored in the servo. Runtime values are used now. Set KpKd writes both; Read never changes them.</p>
   </div>
 </section>
 <section class="servo-panel servo-protection">
-  <h2>All-servo voltage / overcurrent protection</h2>
+  <h2 data-zh="电压与过流保护（全部舵机）">All-servo voltage / overcurrent protection</h2>
   <div class="protection-controls">
-    <button id="enable-protection">Enable</button>
-    <button id="disable-protection">Disable</button>
-    <span id="protection-out" class="servo-readout" role="status">Not applied</span>
+    <button id="enable-protection" data-zh="启用">Enable</button>
+    <button id="disable-protection" data-zh="禁用">Disable</button>
+    <span id="protection-out" class="servo-readout" role="status" data-zh="尚未设置">Not applied</span>
   </div>
   <div class="protection-controls">
-    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" aria-label="Protection current in amperes">
+    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" aria-label="Protection current in amperes" data-zh-aria-label="保护电流（安培）">
     <span>A</span>
-    <button id="set-protection-current">Set protection current</button>
-    <span id="protection-current-out" class="servo-readout" role="status">Not applied</span>
+    <button id="set-protection-current" data-zh="设置保护电流">Set protection current</button>
+    <span id="protection-current-out" class="servo-readout" role="status" data-zh="尚未设置">Not applied</span>
   </div>
-  <p class="hint">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
+  <p class="hint" data-zh="「启用 / 禁用」只改变电压与过流保护的开关，「设置保护电流」只改变过流阈值。两项设置都会广播到所有舵机，无需扫描或选择 ID。过热保护保持开启，已保存的电压限值保持原值。电流分辨率为 6.5 mA。广播写入后，舵机不会逐个返回确认。">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
 </section>
 </main>
-<script src="servo.js?v=20261105-1"></script>
+<script src="servo.js?v=20261107-servo-i18n"></script>
 </html>

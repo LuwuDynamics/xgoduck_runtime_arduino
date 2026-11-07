@@ -1,50 +1,50 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>XGO Duck</title><link rel="stylesheet" href="style.css?v=20261105-imu-calibration2">
+<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="stylesheet" href="style.css?v=20261107-control-i18n">
 <main>
-<header><div><small>ARDUINO UNO Q</small><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html">Servo setup</a></nav><button class="stop" id="stop">Torque off</button></div></header>
-<p id="message">Connecting…</p>
-<section class="metrics"><article><small>Feedback</small><strong id="rx">—</strong></article><article><small>Policy</small><strong id="rl">—</strong></article><article><small>Servos online</small><strong id="servos">—</strong></article><article><small>Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
+<header><div><small>ARDUINO UNO Q</small><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a></nav><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
+<p id="message" data-zh="正在连接…">Connecting…</p>
+<section class="metrics"><article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article><article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article><article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article><article><small data-zh="电压">Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
 <section>
-  <h2>Mode <span id="mode">—</span></h2>
-  <div class="buttons"><button data-mode="shadow">Inference only</button><button data-mode="hold">Default pose</button><button data-mode="policy">Walk / get up</button><button id="pick">Pick</button><button id="roulade">Roulade</button><button id="sitstand" disabled>Sit</button><button id="left_kick" disabled>Left kick</button><button id="right_kick" disabled>Right kick</button><label class="mode-toggle"><input id="roller-mode" type="checkbox" role="switch">Skating mode <span id="roller-state">Off</span></label></div>
-  <p class="hint">Default pose holds a standing pose. Walk / get up walks and recovers after a fall. Choose Pick, Roulade, Sit/Stand or a kick to perform that action. Enable Skating mode for skating. Inference only previews motion; Torque off releases the motors.</p>
+  <h2><span data-zh="模式">Mode</span> <span id="mode">—</span></h2>
+  <div class="buttons"><button data-mode="shadow" data-zh="仅推理">Inference only</button><button data-mode="hold" data-zh="默认姿态">Default pose</button><button data-mode="policy" data-zh="行走 / 起身">Walk / get up</button><button id="pick" data-zh="叼东西">Pick</button><button id="roulade" data-zh="翻滚">Roulade</button><button id="sitstand" data-zh="坐下" disabled>Sit</button><button id="left_kick" data-zh="左脚踢球" disabled>Left kick</button><button id="right_kick" data-zh="右脚踢球" disabled>Right kick</button><label class="mode-toggle"><input id="roller-mode" type="checkbox" role="switch"><span data-zh="滑行模式">Skating mode</span> <span id="roller-state" data-zh="关">Off</span></label></div>
+  <p class="hint" data-zh="默认姿态保持站立。行走 / 起身支持行走和跌倒后起身。可选择叼东西、翻滚、坐下、站起或踢球。滑行时请开启滑行模式。仅推理模式只预览动作。点击「舵机卸力」可释放扭矩。">Default pose holds a standing pose. Walk / get up walks and recovers after a fall. Choose Pick, Roulade, Sit/Stand or a kick to perform that action. Enable Skating mode for skating. Inference only previews motion; Torque off releases the motors.</p>
 </section>
 <section>
-  <h2>Motion</h2>
-  <p id="roller-warning" class="warn" role="note" hidden>Let the roll motors cool down between longer skating sessions.</p>
-  <div class="joysticks"><div class="joystick-side"><label id="left-label">Forward / strafe</label><div class="joy" id="joy-left" role="group" aria-labelledby="left-label"><div class="knob"></div></div><p class="joy-value">vx <span id="vxValue">0.00</span> · vy <span id="vyValue">0.00</span></p></div><div class="joystick-side"><label id="right-label">Yaw</label><div class="joy" id="joy-right" role="group" aria-labelledby="right-label"><div class="knob"></div></div><p class="joy-value">ωz <span id="wzValue">0.00</span></p></div></div>
-  <div class="buttons"><button id="zero">Zero motion</button><label class="mode-toggle"><input id="heading-hold" type="checkbox" role="switch" checked>Heading hold <span id="heading-state">On</span></label></div>
-  <p class="hint">Drag a pad to move; release to stop. W/S moves forward/back, A/D moves sideways and Q/E turns. Space releases the motors. <span id="motion-limits">Limits: vx ±0.2, vy ±0.3, ωz ±1.0.</span></p>
+  <h2 data-zh="运动控制">Motion</h2>
+  <p id="roller-warning" class="warn" role="note" data-zh="长时间滑行后，请暂停片刻，让驱动电机冷却。" hidden>Let the roll motors cool down between longer skating sessions.</p>
+  <div class="joysticks"><div class="joystick-side"><label id="left-label" data-zh="前后 / 侧移">Forward / strafe</label><div class="joy" id="joy-left" role="group" aria-labelledby="left-label"><div class="knob"></div></div><p class="joy-value">vx <span id="vxValue">0.00</span> · vy <span id="vyValue">0.00</span></p></div><div class="joystick-side"><label id="right-label" data-zh="左右转向">Yaw</label><div class="joy" id="joy-right" role="group" aria-labelledby="right-label"><div class="knob"></div></div><p class="joy-value">ωz <span id="wzValue">0.00</span></p></div></div>
+  <div class="buttons"><button id="zero" data-zh="停止移动">Zero motion</button><label class="mode-toggle"><input id="heading-hold" type="checkbox" role="switch" checked><span data-zh="航向保持">Heading hold</span> <span id="heading-state" data-zh="开">On</span></label></div>
+  <p class="hint"><span data-zh="拖动摇杆移动，松开停止。W/S 前进或后退，A/D 左右侧移，Q/E 左右转向。按空格键可卸力。">Drag a pad to move; release to stop. W/S moves forward/back, A/D moves sideways and Q/E turns. Space releases the motors.</span> <span id="motion-limits" data-zh="速度范围 · vx ±0.2，vy ±0.3，ωz ±1.0。">Limits: vx ±0.2, vy ±0.3, ωz ±1.0.</span></p>
 </section>
-<section><h2>Head and mouth</h2><div class="controls" id="head-controls"></div><p class="hint">Move the sliders to adjust the head and open or close the mouth.</p></section>
+<section><h2 data-zh="头部与嘴部">Head and mouth</h2><div class="controls" id="head-controls"></div><p class="hint" data-zh="拖动滑块可调整头部姿态和嘴部开合。">Move the sliders to adjust the head and open or close the mouth.</p></section>
 <section>
-  <h2>Action settings · <span id="action-profile">Walking / other models</span></h2>
-  <div class="controls"><label>Action scale <span id="action-scale-value">1.00</span><input id="action-scale" type="range" min="0" max="2" value="1" step="0.05"></label><label>Leg smoothing <span id="leg-alpha-value">0.35</span><input id="leg-alpha" type="range" min="0" max="0.95" value="0.35" step="0.05"></label><label>Head smoothing <span id="head-alpha-value">0.45</span><input id="head-alpha" type="range" min="0" max="0.95" value="0.45" step="0.05"></label></div>
-  <p class="hint">Adjust movement size and smoothing. Each walking mode keeps its own settings.</p>
-</section>
-<section>
-  <h2>IMU filtering</h2>
-  <div class="controls"><label>Gyro smoothing <span id="gyro-alpha-value">0.50</span><input id="gyro-alpha" type="range" min="0" max="0.95" value="0.5" step="0.05"></label><label>Gravity smoothing <span id="gravity-tau-value">0.30</span><input id="gravity-tau" type="range" min="0.01" max="2" value="0.3" step="0.01"></label></div>
-  <p class="hint">Increase smoothing for steadier readings.</p>
+  <h2><span data-zh="动作参数">Action settings</span> · <span id="action-profile" data-zh="行走 / 其他模型">Walking / other models</span></h2>
+  <div class="controls"><label><span data-zh="动作幅度">Action scale</span> <span id="action-scale-value">1.00</span><input id="action-scale" type="range" min="0" max="2" value="1" step="0.05"></label><label><span data-zh="腿部平滑">Leg smoothing</span> <span id="leg-alpha-value">0.35</span><input id="leg-alpha" type="range" min="0" max="0.95" value="0.35" step="0.05"></label><label><span data-zh="头部平滑">Head smoothing</span> <span id="head-alpha-value">0.45</span><input id="head-alpha" type="range" min="0" max="0.95" value="0.45" step="0.05"></label></div>
+  <p class="hint" data-zh="可调整动作幅度和平滑程度。行走与滑行分别保留各自的设置。">Adjust movement size and smoothing. Each walking mode keeps its own settings.</p>
 </section>
 <section>
-  <h2>Walk and recovery <span id="recovery-phase">—</span></h2>
-  <div class="controls"><article><small>Current action</small><p id="active-model">—</p></article><article><small>Tilt</small><p id="tilt-angle">—</p></article><article><small>Status</small><p id="recovery-timer">—</p></article></div>
-  <p class="hint">After a fall, the robot gets up and returns to walking.</p>
+  <h2 data-zh="IMU 滤波">IMU filtering</h2>
+  <div class="controls"><label><span data-zh="陀螺仪平滑">Gyro smoothing</span> <span id="gyro-alpha-value">0.50</span><input id="gyro-alpha" type="range" min="0" max="0.95" value="0.5" step="0.05"></label><label><span data-zh="重力平滑">Gravity smoothing</span> <span id="gravity-tau-value">0.30</span><input id="gravity-tau" type="range" min="0.01" max="2" value="0.3" step="0.01"></label></div>
+  <p class="hint" data-zh="增大平滑参数可使读数更稳定。">Increase smoothing for steadier readings.</p>
 </section>
-<section class="telemetry"><h2>IMU and servos</h2><div class="telemetry-grid"><div class="imu-lines"><div><b>acc</b><span id="acc-values">—</span></div><div><b>gyro</b><span id="gyro-values">—</span></div><div><b>grav</b><span id="gravity-values">—</span></div><div><b>acc raw</b><span id="acc-raw-values">—</span></div><div><b>gyro raw</b><span id="gyro-raw-values">—</span></div></div><div class="table"><table><thead><tr><th>ID</th><th>°</th><th>Target</th></tr></thead><tbody id="joints"></tbody></table></div></div><p class="hint" id="command-health">Waiting for feedback…</p>
+<section>
+  <h2><span data-zh="行走与起身">Walk and recovery</span> <span id="recovery-phase">—</span></h2>
+  <div class="controls"><article><small data-zh="当前动作">Current action</small><p id="active-model">—</p></article><article><small data-zh="倾角">Tilt</small><p id="tilt-angle">—</p></article><article><small data-zh="状态">Status</small><p id="recovery-timer">—</p></article></div>
+  <p class="hint" data-zh="跌倒后，小鸭会起身并恢复行走模式。">After a fall, the robot gets up and returns to walking.</p>
+</section>
+<section class="telemetry"><h2 data-zh="IMU 与舵机">IMU and servos</h2><div class="telemetry-grid"><div class="imu-lines"><div><b data-zh="加速度">acc</b> <span id="acc-values">—</span></div><div><b data-zh="角速度">gyro</b> <span id="gyro-values">—</span></div><div><b data-zh="重力方向">grav</b> <span id="gravity-values">—</span></div><div><b data-zh="原始加速度">acc raw</b> <span id="acc-raw-values">—</span></div><div><b data-zh="原始角速度">gyro raw</b> <span id="gyro-raw-values">—</span></div></div><div class="table"><table><thead><tr><th>ID</th><th>°</th><th data-zh="目标角度">Target</th></tr></thead><tbody id="joints"></tbody></table></div></div><p class="hint" id="command-health" data-zh="等待反馈…">Waiting for feedback…</p>
   <div class="imu-calibration">
     <div>
-      <h3>IMU calibration</h3>
-      <div class="buttons"><button id="imu-calibrate" disabled>Calibrate IMU</button><button id="imu-reset" disabled>Reset IMU calibration</button></div>
-      <p class="hint">Keep Arduino upright, with its bottom edge firmly against the tabletop. Hold still for 1.5 seconds.</p>
+      <h3 data-zh="IMU 标定">IMU calibration</h3>
+      <div class="buttons"><button id="imu-calibrate" data-zh="标定 IMU" disabled>Calibrate IMU</button><button id="imu-reset" data-zh="重置 IMU 标定" disabled>Reset IMU calibration</button></div>
+      <p class="hint" data-zh="将 Arduino 主板竖直放置，底边贴紧桌面，保持静止 1.5 秒。">Keep Arduino upright, with its bottom edge firmly against the tabletop. Hold still for 1.5 seconds.</p>
       <progress id="imu-calibration-progress" max="1" value="0" hidden></progress>
-      <p id="imu-calibration-status" role="status" aria-live="polite">Reading calibration status…</p>
+      <p id="imu-calibration-status" role="status" aria-live="polite" data-zh="正在读取标定状态…">Reading calibration status…</p>
     </div>
     <figure class="imu-calibration-pose">
-      <img src="imu-calibration-pose.png" width="910" height="1155" alt="IMU calibration posture: Arduino upright with its bottom edge resting on the tabletop.">
+      <img src="imu-calibration-pose.png" width="910" height="1155" alt="IMU calibration posture: Arduino upright with its bottom edge resting on the tabletop." data-zh-alt="IMU 标定姿态。Arduino 主板竖直，底边贴紧桌面。">
     </figure>
   </div>
 </section>
-</main><script src="app.js?v=20261106-heading-hold2"></script></html>
+</main><script src="app.js?v=20261107-control-i18n"></script></html>

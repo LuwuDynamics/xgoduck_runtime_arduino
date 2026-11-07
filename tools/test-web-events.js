@@ -8,7 +8,7 @@ const element = id => {
     insertAdjacentHTML() {}, hasPointerCapture: () => false});
   return nodes.get(id);
 };
-const context = {document: {hidden: false, getElementById: element, querySelectorAll: () => [],
+const context = {document: {hidden: false, documentElement: {}, getElementById: element, querySelectorAll: () => [],
   addEventListener: (name, fn) => doc[name] = fn},
   window: {addEventListener: (name, fn) => win[name] = fn},
   fetch: async (path, options) => {requests.push({path, body: JSON.parse(options.body)}); return {ok:true, json:async()=>({})};},

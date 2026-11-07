@@ -4,3 +4,11 @@
 .servo-action-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.servo-action-row .servo-readout{font-size:13px;overflow-wrap:anywhere}
 .protection-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px}.protection-controls input{width:110px;padding:7px 10px;border-radius:6px;border:1px solid #3c5b78;background:#0e1924;color:#dce5ef;font:inherit}.protection-controls button{padding:7px 12px}.servo-protection .servo-readout{font-size:13px;overflow-wrap:anywhere}
 .protection-controls+.protection-controls{margin-top:12px}
+.servo-gains{margin-top:4px;padding:12px;border:1px solid #26384b;border-radius:10px;background:#0e1924}
+.servo-gains table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}
+.servo-gains th,.servo-gains td{padding:9px 8px;border-bottom:1px solid #26384b}
+.servo-gains thead th{font-size:12px;color:#9cafc3;font-weight:500}
+.servo-gains tbody th{font-weight:500}
+.servo-gains td{font-family:monospace;color:#8ce2cc;font-size:17px;min-width:40px}
+.servo-gains #gains-status{margin:12px 8px 0;color:#9cafc3;font-size:13px}
+.servo-gains #gains-status[data-state=different],.servo-gains #gains-status[data-state=incomplete]{color:#f4c373}

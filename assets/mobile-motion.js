@@ -1,4 +1,4 @@
-/* Local cockpit sticks. The board expires travel if renewals stop. */
+/* Local cockpit sticks and keyboard. The board expires travel if renewals stop. */
 (() => {
   const $ = id => document.getElementById(id);
   const t = window.DuckI18n.t;
@@ -11,6 +11,8 @@
     const pad = $(id);
     return {pad, knob:pad.querySelector('.stick-knob'), pointer:null, x:0, y:0};
   });
+  const driveKeys = new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
+  const heldKeys = new Set();
   let robot = null, gamepadActive = false, sequence = 0, gesture = null, pending = null, notice = null, noticeTimer;
   const deadzone = value => Math.abs(value) <= .15 ? 0 : value;
 
@@ -39,6 +41,7 @@
   function release() {
     const active = gesture !== null;
     gesture = null;
+    heldKeys.clear();
     sticks.forEach(resetStick);
     if (active) send('release').catch(() => {});
   }
@@ -59,13 +62,14 @@
     const state = mode();
     const roller = robot?.roller?.enabled === true;
     $('moveStickLabel').textContent = t(roller ? 'moveStickRoller' : 'moveStick');
+    $('keyboardStrafe').hidden = roller;
     sticks[0].pad.classList.toggle('roller-pad', roller);
     for (const stick of sticks) stick.pad.setAttribute('aria-disabled', String(!state.ready || !!pending));
     for (const button of actions) {
       const kind = button.dataset.motion;
       button.disabled = kind === 'stop' ? !robot || state.exclusive
-        : kind === 'stand' ? !state.usable || !!state.active || !!pending || robot?.arming === true
-        : !state.ready || !!pending;
+        : kind === 'stand' || kind === 'default_pose' ? !state.usable || !!state.active || !!pending || robot?.arming === true
+        : !state.ready || !!pending || roller && kind.startsWith('head_');
       button.toggleAttribute('data-active', kind === state.active || kind === 'sit' && state.seated);
     }
     const feedback = robot?.battery?.low || state.exclusive ? null : notice;
@@ -85,6 +89,9 @@
       ? t('motionAccepted', {action:t(names[feedback.kind])})
       : t(key, {action:action ? t(names[action]) : ''}));
     if (status.textContent !== text) status.textContent = text;
+    const poseStatus = $('poseStatus');
+    const poseText = pending || feedback || !state.ready ? text : t(roller ? 'poseRoller' : 'poseHint');
+    if (poseStatus.textContent !== poseText) poseStatus.textContent = poseText;
     status.title = text;
     status.toggleAttribute('data-warning', !!(feedback?.text || gesture?.forwardBlocked
       || robot?.battery?.low || key === 'motionArmFailed'));
@@ -122,28 +129,35 @@
     }
   }
 
+  function radius(stick) {
+    return (stick.pad.getBoundingClientRect().width - stick.knob.offsetWidth) / 2;
+  }
+
+  function positionStick(stick, x, y, travel = radius(stick)) {
+    const scale = Math.max(1, Math.hypot(x, y));
+    stick.x = x / scale;
+    stick.y = y / scale;
+    stick.knob.style.transform = `translate(${stick.x * travel}px,${-stick.y * travel}px)`;
+  }
+
   function move(stick, event) {
     const bounds = stick.pad.getBoundingClientRect();
-    const radius = (bounds.width - stick.knob.offsetWidth) / 2;
+    const travel = (bounds.width - stick.knob.offsetWidth) / 2;
     const verticalOnly = stick === sticks[0] && robot?.roller?.enabled === true;
-    let dx = verticalOnly ? 0 : event.clientX - bounds.left - bounds.width / 2;
-    let dy = stick === sticks[0] ? event.clientY - bounds.top - bounds.height / 2 : 0;
-    const distance = Math.hypot(dx, dy);
-    if (distance > radius) {dx *= radius / distance; dy *= radius / distance;}
-    stick.x = Math.max(-1, Math.min(1, dx / radius));
-    stick.y = Math.max(-1, Math.min(1, -dy / radius));
-    stick.knob.style.transform = `translate(${dx}px,${dy}px)`;
+    const x = verticalOnly ? 0 : (event.clientX - bounds.left - bounds.width / 2) / travel;
+    const y = stick === sticks[0] ? (bounds.top + bounds.height / 2 - event.clientY) / travel : 0;
+    positionStick(stick, x, y, travel);
   }
 
   for (const stick of sticks) {
     const pad = stick.pad;
     pad.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || stick.pointer !== null || !mode().ready || pending) return;
+      if (event.button !== 0 || stick.pointer !== null || gesture?.source === 'keyboard' || !mode().ready || pending) return;
       event.preventDefault();
       pad.setPointerCapture(event.pointerId);
       stick.pointer = event.pointerId;
       pad.classList.add('is-held');
-      gesture ??= {twist:[0,0,0], started:false, busy:false};
+      gesture ??= {source:'pointer', twist:[0,0,0], started:false, busy:false};
       notice = null;
       move(stick, event);
       drive();
@@ -158,6 +172,49 @@
       });
     }
   }
+
+  function keyboardSticks() {
+    const axis = (positive, negative) => Number(heldKeys.has(positive)) - Number(heldKeys.has(negative));
+    const x = robot?.roller?.enabled ? 0 : axis('KeyD','KeyA');
+    positionStick(sticks[0], x, axis('KeyW','KeyS'));
+    positionStick(sticks[1], axis('KeyE','KeyQ'), 0);
+    for (const stick of sticks) stick.pad.classList.toggle('is-held', !!(stick.x || stick.y));
+    drive();
+  }
+
+  function keyboardBlocked(target) {
+    return document.body.classList.contains('clean') || document.querySelector('dialog[open]')
+      || target.closest?.('input, textarea, select, [contenteditable], [role="textbox"]');
+  }
+
+  window.addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.isComposing || event.altKey || event.ctrlKey || event.metaKey
+        || keyboardBlocked(event.target) || document.hidden) return;
+    if (event.code === 'Space') {
+      if (!robot || mode().exclusive || !gesture && event.target.closest?.('button:focus-visible')) return;
+      event.preventDefault();
+      if (!event.repeat) action('stop');
+      return;
+    }
+    if (!driveKeys.has(event.code) || !mode().ready || pending || gesture?.source === 'pointer') return;
+    if (robot?.roller?.enabled && ['KeyA','KeyD'].includes(event.code)) return;
+    event.preventDefault();
+    if (event.repeat || heldKeys.has(event.code)) return;
+    heldKeys.add(event.code);
+    gesture ??= {source:'keyboard', twist:[0,0,0], started:false, busy:false};
+    notice = null;
+    keyboardSticks();
+  });
+
+  window.addEventListener('keyup', event => {
+    if (!heldKeys.delete(event.code)) return;
+    event.preventDefault();
+    if (heldKeys.size) keyboardSticks();
+    else {release(); render();}
+  });
+  document.addEventListener('focusin', event => {
+    if (gesture?.source === 'keyboard' && keyboardBlocked(event.target)) {release(); render();}
+  });
 
   async function action(kind) {
     release();
@@ -175,6 +232,13 @@
   }
   for (const button of actions) button.addEventListener('click', () => action(button.dataset.motion));
   $('torqueOff').addEventListener('click', () => action('torque_off'));
+  for (const [button, dialog] of [['moreActions','poseDialog'], ['openDuckSounds','duckSoundDialog']]) {
+    $(button).addEventListener('click', () => {
+      release();
+      showNotice(null);
+      $(dialog).showModal();
+    });
+  }
   for (const id of ['clean','settings','padLink','openBinding']) $(id).addEventListener('click', release);
   for (const event of ['blur','pagehide']) window.addEventListener(event, release);
   document.addEventListener('visibilitychange', () => {if (document.hidden) release();});

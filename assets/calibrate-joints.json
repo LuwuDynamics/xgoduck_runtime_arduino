@@ -1,0 +1,160 @@
+{
+  "photos": {
+    "legs": {"src": "cal-photo-legs.webp", "width": 701, "height": 711},
+    "head": {
+      "src": "cal-photo-head.webp", "width": 1594, "height": 711,
+      "labels": [
+        {"x": 0.012, "y": 0.04, "en": "Neck", "zh": "颈部"},
+        {"x": 0.6, "y": 0.04, "en": "Inside the head shell", "zh": "头壳内部"}
+      ]
+    }
+  },
+  "zones": [
+    {
+      "key": "head", "ids": [30, 31, 32, 33, 34], "photo": "head",
+      "title": {"en": "Head & neck", "zh": "头颈"},
+      "note": {
+        "en": "Servos 30 and 31 are the neck (left photo). Servos 32, 33 and 34 sit inside the head shell (right photo).",
+        "zh": "30、31 是颈部舵机（左图）；32、33、34 装在头壳里面（右图）。"
+      }
+    },
+    {
+      "key": "left", "ids": [10, 11, 12, 13, 14], "photo": "legs", "focus": "right",
+      "title": {"en": "Left leg", "zh": "左腿"},
+      "note": {
+        "en": "Left and right are from Duck’s perspective. Its left leg is IDs 10–14, on the right half of this front-view photo. The other leg is dimmed.",
+        "zh": "左右以小鸭自身为准。左腿是 ID 10–14，对应这张正面照片右半边的编号牌；另一条腿已调暗。"
+      }
+    },
+    {
+      "key": "right", "ids": [20, 21, 22, 23, 24], "photo": "legs", "focus": "left",
+      "title": {"en": "Right leg", "zh": "右腿"},
+      "note": {
+        "en": "Left and right are from Duck’s perspective. Its right leg is IDs 20–24, on the left half of this front-view photo. The other leg is dimmed.",
+        "zh": "左右以小鸭自身为准。右腿是 ID 20–24，对应这张正面照片左半边的编号牌；另一条腿已调暗。"
+      }
+    }
+  ],
+  "joints": {
+    "10": {
+      "image": "cal-10-pose.svg",
+      "name": {"en": "Hip yaw", "zh": "髋·转向"},
+      "pose": {
+        "en": "From above, turn the leg until it points straight ahead, parallel to the dashed centre line.",
+        "zh": "从上往下看，把腿转到正对前方，与虚线（机身中线）平行。"
+      }
+    },
+    "11": {
+      "image": "cal-11-pose.svg",
+      "name": {"en": "Hip roll", "zh": "髋·侧摆"},
+      "pose": {
+        "en": "From the front, the leg hangs straight down: not leaning out or in.",
+        "zh": "从正面看，腿笔直垂下，不向外撇也不向内收。"
+      }
+    },
+    "12": {
+      "image": "cal-12-pose.svg",
+      "name": {"en": "Hip pitch", "zh": "髋·前后摆"},
+      "pose": {
+        "en": "From the side, align the upper leg’s top edge with the horizontal dashed line and the lower leg with the vertical line. They form a right angle, not a straight standing leg.",
+        "zh": "从侧面看，大腿连杆上沿对齐水平虚线，小腿对齐竖直虚线，摆成直角，不是把整条腿拉直。"
+      }
+    },
+    "13": {
+      "image": "cal-13-pose.svg",
+      "name": {"en": "Knee", "zh": "膝"},
+      "pose": {
+        "en": "From the side, align the lower leg with the vertical dashed line. Keep it square to the horizontal upper leg; do not straighten both links into one line.",
+        "zh": "从侧面看，小腿对齐竖直虚线，与上方水平连杆成直角，不要把大腿和小腿拉成一直线。"
+      }
+    },
+    "14": {
+      "image": "cal-14-pose.svg",
+      "name": {"en": "Ankle", "zh": "踝"},
+      "pose": {
+        "en": "From the side, the foot is flat: the sole is level and square to the leg.",
+        "zh": "从侧面看，脚掌放平，脚底水平、与小腿垂直。"
+      }
+    },
+    "20": {
+      "image": "cal-20-pose.svg",
+      "name": {"en": "Hip yaw", "zh": "髋·转向"},
+      "pose": {
+        "en": "From above, turn the leg until it points straight ahead, parallel to the dashed centre line.",
+        "zh": "从上往下看，把腿转到正对前方，与虚线（机身中线）平行。"
+      }
+    },
+    "21": {
+      "image": "cal-21-pose.svg",
+      "name": {"en": "Hip roll", "zh": "髋·侧摆"},
+      "pose": {
+        "en": "From the front, the leg hangs straight down: not leaning out or in.",
+        "zh": "从正面看，腿笔直垂下，不向外撇也不向内收。"
+      }
+    },
+    "22": {
+      "image": "cal-22-pose.svg",
+      "name": {"en": "Hip pitch", "zh": "髋·前后摆"},
+      "pose": {
+        "en": "From the side, align the upper leg’s top edge with the horizontal dashed line and the lower leg with the vertical line. They form a right angle, not a straight standing leg.",
+        "zh": "从侧面看，大腿连杆上沿对齐水平虚线，小腿对齐竖直虚线，摆成直角，不是把整条腿拉直。"
+      }
+    },
+    "23": {
+      "image": "cal-23-pose.svg",
+      "name": {"en": "Knee", "zh": "膝"},
+      "pose": {
+        "en": "From the side, align the lower leg with the vertical dashed line. Keep it square to the horizontal upper leg; do not straighten both links into one line.",
+        "zh": "从侧面看，小腿对齐竖直虚线，与上方水平连杆成直角，不要把大腿和小腿拉成一直线。"
+      }
+    },
+    "24": {
+      "image": "cal-24-pose.svg",
+      "name": {"en": "Ankle", "zh": "踝"},
+      "pose": {
+        "en": "From the side, the foot is flat: the sole is level and square to the leg.",
+        "zh": "从侧面看，脚掌放平，脚底水平、与小腿垂直。"
+      }
+    },
+    "30": {
+      "image": "cal-30-pose.svg",
+      "name": {"en": "Neck pitch", "zh": "颈·俯仰"},
+      "pose": {
+        "en": "From the side, the neck stands straight up.",
+        "zh": "从侧面看，脖子笔直向上。"
+      }
+    },
+    "31": {
+      "image": "cal-31-pose.svg",
+      "name": {"en": "Head pitch", "zh": "头·点头"},
+      "pose": {
+        "en": "From the side, the head is level: its bottom edge is horizontal, not nodding up or down.",
+        "zh": "从侧面看，头摆平：底边水平，不抬头也不低头。"
+      }
+    },
+    "32": {
+      "image": "cal-32-pose.svg",
+      "name": {"en": "Head yaw", "zh": "头·左右转"},
+      "pose": {
+        "en": "From above, the head faces straight ahead, in line with the dashed centre line.",
+        "zh": "从上往下看，头正对前方，与虚线（机身中线）对齐。"
+      }
+    },
+    "33": {
+      "image": "cal-33-pose.svg",
+      "name": {"en": "Head roll", "zh": "头·侧歪"},
+      "pose": {
+        "en": "From the front, the head is level: not tilted to the left or right.",
+        "zh": "从正面看，头摆正，不向左歪也不向右歪。"
+      }
+    },
+    "34": {
+      "image": "cal-34-pose.svg",
+      "name": {"en": "Mouth", "zh": "嘴"},
+      "pose": {
+        "en": "Gently close the mouth to its natural closed position along the dashed mouth line. Do not squeeze the shell.",
+        "zh": "把嘴轻轻合到自然闭合位置，对齐图示嘴缝，不要用力挤压外壳。"
+      }
+    }
+  }
+}

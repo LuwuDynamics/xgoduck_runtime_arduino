@@ -13,13 +13,13 @@ class RuntimeGainsReader:
         op = SERVO_READ_RUN_GAINS
         c = self.controller
         with c.lock:
-            # The UI mode can change before the MCU acknowledges leaving its
-            # exclusive bus mode. Do not overwrite that pending exit request.
+            # Reading RAM gains is allowed in confirmed servo setup. Do not
+            # overwrite a calibration operation or a pending setup enter/exit.
             fb = getattr(c, 'feedback', None)
-            if (c.mode in ('calibrate', 'servo_debug')
+            if (c.mode == 'calibrate'
                     or getattr(fb, 'calibrating', False)
-                    or getattr(fb, 'servo_debugging', False)):
-                raise ValueError('Runtime gain reads wait until calibration/servo setup closes')
+                    or (c.mode == 'servo_debug') != bool(getattr(fb, 'servo_debugging', False))):
+                raise ValueError('Runtime gain reads wait until calibration or servo setup transitions finish')
             c.servo_reply_event.clear()
             c.servo_reply = None
             c.servo_expected_reply = (op, sid)

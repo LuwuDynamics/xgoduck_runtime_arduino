@@ -35,7 +35,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         return Promise.resolve(new Response(stream,{headers:{'Content-Type':'application/octet-stream'}}));
       };
     });
-    await page.route(origin+'/**',async route=>{
+    const mockCockpit=async route=>{
       const request=route.request(),url=new URL(request.url());
       if(url.pathname.startsWith('/api/')){
         if(request.method()==='POST'){
@@ -49,6 +49,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           if(url.pathname==='/api/media/camera/light')media.camera.light.enabled=body.enabled;
           else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:true,fps:30});
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
+          else if(url.pathname==='/api/media/audio/play'&&body.source.startsWith('duck-'))media.audio.state='playing';
           return route.fulfill({json:media});
         }
         if(url.pathname==='/api/status')return route.fulfill({json:robot});
@@ -70,7 +71,8 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       if(!fs.existsSync(file))return route.fulfill({status:404,body:''});
       const type=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.html')?'text/html':'application/json';
       return route.fulfill({contentType:type,body:fs.readFileSync(file)});
-    });
+    };
+    await page.route(origin+'/**',mockCockpit);
     await page.goto(origin+'/');
     assert.equal(page.url(),origin+'/');
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
@@ -215,8 +217,65 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         if(output)await page.screenshot({path:path.join(output,language+'-'+name+'.png')});
       }
     }
-    assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and eight layouts; stand, simultaneous touch sticks, ToF feedback, release/blur, Pick, Stop and Torque off.');
+    assert.equal(await page.locator('#keyboardHint').isHidden(),true);
     await context.close();
+
+    const desktop=await browser.newPage({locale:'en-US',viewport:{width:1280,height:800}});
+    desktop.on('pageerror',error=>errors.push(error.message));
+    await desktop.route(origin+'/**',mockCockpit);
+    await desktop.goto(origin+'/');
+    assert.equal(await desktop.locator('#keyboardHint').isVisible(),true);
+    await desktop.locator('[data-motion=stand]:enabled').waitFor();
+    const beforeKeys=writes.length;
+    await desktop.keyboard.press('w');
+    assert.equal(writes.length,beforeKeys,'A direction key must not arm the robot.');
+    Object.assign(robot,{mode:'policy',enabled:true,arming:false,arm_failed:false});
+    await desktop.locator('#moveStick[aria-disabled=false]').waitFor();
+    await desktop.keyboard.down('w');
+    await waitMotion(body=>body?.kind==='begin'&&body.twist[0]>0);
+    await desktop.keyboard.down('a');await desktop.keyboard.down('q');
+    await waitMotion(body=>body?.kind==='drive'&&body.twist.every(axis=>axis>0));
+    await desktop.keyboard.up('a');await desktop.keyboard.up('q');
+    await desktop.keyboard.up('w');
+    await waitMotion(body=>body?.kind==='release');
+
+    await desktop.keyboard.down('s');await desktop.keyboard.down('e');
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]<0&&body.twist[2]<0);
+    await desktop.keyboard.press('Space');
+    await waitMotion(body=>body?.kind==='stop');
+    await desktop.keyboard.up('s');await desktop.keyboard.up('e');
+    await desktop.keyboard.down('w');
+    await waitMotion(body=>body?.kind==='begin'&&body.twist[0]>0);
+    await desktop.evaluate(()=>window.dispatchEvent(new Event('blur')));
+    await waitMotion(body=>body?.kind==='release');
+    const beforeRepeat=writes.length;
+    await desktop.keyboard.down('w');
+    await desktop.waitForTimeout(120);
+    assert.equal(writes.length,beforeRepeat,'A held key cannot resume after focus loss.');
+    await desktop.keyboard.up('w');
+
+    await desktop.locator('#moreActions').click();
+    assert.equal(await desktop.locator('#poseDialog button[data-motion]').count(),6);
+    const beforeModal=writes.length;
+    await desktop.keyboard.press('w');
+    assert.equal(writes.length,beforeModal);
+    for(const kind of ['head_left','head_right','head_center','mouth_open','mouth_close','default_pose']){
+      await desktop.locator(`#poseDialog [data-motion="${kind}"]:enabled`).click();
+      await waitMotion(body=>body?.kind===kind);
+    }
+    await desktop.getByRole('dialog',{name:'More actions'}).getByRole('button',{name:'Close',exact:true}).click();
+    await desktop.locator('#openDuckSounds').click();
+    assert.equal(await desktop.locator('[data-duck-sound]').count(),7);
+    for(const kind of ['greet','wheee']){
+      await desktop.locator(`[data-duck-sound="${kind}"]:enabled`).click();
+      await waitMotion(body=>body?.source==='duck-'+kind);
+      await desktop.locator(`[data-duck-sound="${kind}"][aria-pressed=true]:disabled`).waitFor();
+      media.audio.state='idle';
+      await desktop.locator(`[data-duck-sound="${kind}"]:enabled`).waitFor();
+    }
+    if(output)await desktop.screenshot({path:path.join(output,'desktop-duck-calls.png')});
+    await desktop.close();
+    assert.deepEqual(errors,[]);
+    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and eight layouts; touch, desktop keyboard, motion presets, and duck calls.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

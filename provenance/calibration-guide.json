@@ -1,0 +1,108 @@
+{
+  "scope": "Static reference assets and calibration-page UI; no changes to calibration firmware, motion, IMU, gains or models.",
+  "assembly_photo": {
+    "page": "https://www.xgorobot.com/duck-developer-guide/06-assembly.html",
+    "image": "https://www.xgorobot.com/duck-developer-guide/assets/06-assembly-01.png",
+    "sha256": "946823c282a693e1ca0660ae56ffa3b4630138437591c1c4eee3200b7eb192ca",
+    "size": [
+      2560,
+      1440
+    ],
+    "crops": {
+      "legs": [
+        96,
+        432,
+        797,
+        1143
+      ],
+      "neck": [
+        844,
+        432,
+        1759,
+        1143
+      ],
+      "head": [
+        1806,
+        432,
+        2465,
+        1143
+      ]
+    },
+    "description": "Original white servo ID tags are retained. Neck/head crops are joined with a 20-pixel gap. The page dims the opposite leg; no generated identification tags replace the photo labels."
+  },
+  "calibration_guide": "https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html",
+  "urdf": {
+    "repository": "https://github.com/LuwuDynamics/xgoduck_rl",
+    "commit": "326d77a1122870bdefa2c36403937502c958e69c",
+    "path": "src/mjlab_microduck/robot/xgoduck/urdf/XGODUCK.urdf",
+    "sha256": "230387bfa7f35d6bf720328c7da289a170c014ff17fe9f95b790374bb196effc",
+    "mesh_sha256": {
+      "assets/head_pitch.stl": "aef526ce7a58f65e4efca3f6c4a0abcd6b4a2e54a51b3949502d325472fdfcb1",
+      "assets/head_roll.stl": "dcbe8ae093a842399e94eecc6f41a533575df9e8367f26690d737a9d38f8b327",
+      "assets/head_yaw.stl": "a509eadd3172b79826b635bdb1b239b567b71f1fcf6c665eb9d2d3fc455cebe1",
+      "assets/left_ankle.stl": "305c7e2900136c4d3e525ebdde4dd8b64c254ab3e92a4eb6c296ec1d84af0566",
+      "assets/left_hip_pitch.stl": "5948191de26a4f209b7dcc7d18e9b1928920c01b687368cf77769d14553fa356",
+      "assets/left_hip_roll.stl": "4745eb3c27645971c1a92a067cffafb024934660f0bd887415e73462f65440d4",
+      "assets/left_hip_yaw.stl": "34bcf92d98d9ca2fef20ee5ef70d05ca71e05079e88a08d30d7a791e208be508",
+      "assets/left_knee.stl": "0a879a561f2d46b8f91f201e4530cfa1b8de6fc6263f3dcf041b3479f14de832",
+      "assets/neck_pitch.stl": "48fd73c630b929a68dd7a192bee3920f5eed478d48948067f49223abb9297984",
+      "assets/right_ankle.stl": "1f2a6b317277be4b6f22802e6fa74b8f0ffab502cb8bd36dacb9e13ab0896a2f",
+      "assets/right_hip_pitch.stl": "e580ffa06a66c0143a0eebdb9f346304bde98c754dec1af2e9ad2318038f71a7",
+      "assets/right_hip_roll.stl": "6f709cd1e2caf44c9c6dde112a8e8d8ac0bf1ef97b3542801b9c9deed08cd09c",
+      "assets/right_hip_yaw.stl": "a27fa340a4f7ae5a6fbb0224feb2203cb1c62827a20db786da022cb9c9abd12d",
+      "assets/right_knee.stl": "644e3fcc3b9b4815f8a5185aa2c4597cc54afcfdc876e42d5f9f04c0838c830d",
+      "assets/trunk_base.stl": "7df63591596f4cf627c80e78ac5e37dff889c67f63c9f2a726e61899d3c358c3"
+    },
+    "pose": "All 14 articulated URDF joints at zero. The hip-pitch upper link is horizontal in the side view; the lower-leg link is vertical. Reference geometry must be checked against actual assembly.",
+    "mouth": "ID 34 has no articulated jaw in the URDF. Its picture marks the closed-mouth reference on the head mesh; it is not a simulated jaw joint."
+  },
+  "canonical_motor_ids": [
+    10,
+    11,
+    12,
+    13,
+    14,
+    20,
+    21,
+    22,
+    23,
+    24,
+    30,
+    31,
+    32,
+    33,
+    34
+  ],
+  "sha256": {
+    "assets/calibrate.html": "6895e932bd0e548721f9ccc5fa22295d27c395b1f2a9f72ab8439eea618ebe08",
+    "assets/calibrate.js": "ed2a3205d887775795bf9051de3b1ada3d1f548fa32136af5254543d9e4eb035",
+    "assets/calibrate.css": "2a8c99f004d5da8981e897ee144909b346c3c077387acf9d485aff6fd97a4bb8",
+    "assets/calibrate-joints.json": "374301c5c61b45323a86feabae9c9df3b7a74c76e92b06632104b8d82b6de533",
+    "assets/cal-photo-head.webp": "f5462e5783a75c89bcfa83109d11d281164de49df29e01a6811064342b591909",
+    "assets/cal-photo-legs.webp": "973617f39f5046f4b1b9f1f908b6f9bf496d5ee0ad5a25335e5b51d4b6f1866b",
+    "tools/make-calibration-art.py": "3fd1f4c09fe30f4a7d45a35a05c654c33f9e019ea30da05b1e78cfd1f0256681",
+    "tools/make-calibration-photos.py": "66923de6baae9411a752299c2f02594fd21d61f350feb5415b335c39fa701336",
+    "assets/cal-10-pose.svg": "da0c61d1d83105869690a593fc9526936263cb0254a61e7f03c1e33f64523bce",
+    "assets/cal-11-pose.svg": "455a2ec52f0e8d3ed97d8147ad06a80d009e117bd5617c8000611a120f9221c3",
+    "assets/cal-12-pose.svg": "d478ed4994279b0874d0ee2694f978d5396bbeda364bc27b0dd2f16e91c34879",
+    "assets/cal-13-pose.svg": "2bb074dd680c29cacb1a5e44c75a43cfcaf30032dab790f704069f005e254d26",
+    "assets/cal-14-pose.svg": "13aaf5e042b776bcf3232249da06fb9891b12337b99c4c37efb617bfc49cefbb",
+    "assets/cal-20-pose.svg": "2dc19dabee917ebecf085bb94ffc25d26e88f668c84278db9d051cf316910555",
+    "assets/cal-21-pose.svg": "57e521c115f4f897140348b7cbf863222e13ba802970ba87186857b83e98380e",
+    "assets/cal-22-pose.svg": "bfe557c719162e97d996d4a015fb044359fa1b4a8b00e4da978ff4ed1aded0b2",
+    "assets/cal-23-pose.svg": "a516392d926e2598ed38220508625d459c4687aa2504ed05ab9ec86661a9dd72",
+    "assets/cal-24-pose.svg": "8f17a8fdb45e312616544511a3cc972c77f5cff1efad75c3116a9d0a73804af3",
+    "assets/cal-30-pose.svg": "7b863176d0b5a8f0414b294c14e7ac4cb96b26b2b9a3f0c7346b41e1c2d3c40f",
+    "assets/cal-31-pose.svg": "5954824b2671908949fc46bd7c6560aac03a9102f6ab31863c5c3f3a91728014",
+    "assets/cal-32-pose.svg": "13a3f1a011305f557cf2a63665199087db0fab9e888e1d353425368466b3205c",
+    "assets/cal-33-pose.svg": "0c99788a4d40ea43db7a4241d8280d2f544cbea7860c6b5949f95f09e5a3d88b",
+    "assets/cal-34-pose.svg": "9ff3028068644a84d2de34dd800a14af28a773c2bb9550983fb0dc90f0cab550"
+  },
+  "ui_status": "Center set / 已设中位 confirms calibration, not physical torque or holding. The existing MCU enable/goal sequence is unchanged; no torque register readback is inferred from its acknowledgement.",
+  "imu_section": {
+    "image": "assets/imu-calibration-pose.png",
+    "endpoint": "/api/imu-calibration",
+    "position": "Above the servo centering guide",
+    "workflow": "Start the existing standing IMU sample after unloading. Display the result from status and pause servo centering while sampling."
+  }
+}

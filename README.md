@@ -111,54 +111,53 @@ to distinguish backend, Bridge and sensor failures. Record an absent sensor as n
 when confirmed, or mark the hardware check as pending.
 If servos are not wired yet, mark feedback as pending. On failure, inspect logs. Report the actual results.
 After the App installs and starts successfully, point me back to this README for steps 5–8.
-Guide me through configuring and numbering the servos, assembling XGO Duck, calibrating and trying
-its first walk, then binding an account and selecting an agent. If I have already completed any
-of these steps, point me to the next unfinished one.
+Guide me through configuring and numbering the servos, assembling XGO Duck, calibrating the IMU
+and servos, checking Default pose, then binding an account and selecting an agent. If I have already
+completed any of these steps, point me to the next unfinished one.
 ```
 
 ## 5. Configure and number the servos
 
-1. Open the **Network URL** in App Lab’s Python log or visit `http://<board-ip>:9527/`. Support an assembled Duck before opening **Servo setup**. The page releases all servos on entry and leaves them unloaded on exit.
-2. Connect one servo at a time when changing IDs. Click **Scan all IDs**, select a result and click **Read**. Use **Change ID**, scan again to verify and then label the servo. Use **10–14** for the left leg, **20–24** for the right leg, **30–33** for the neck and head, and **34** for the mouth.
-3. To tune a servo, enter KP and KD and click **Set KpKd**. The inputs start at **5** and **10**. This writes and verifies both the saved and live gains. To reset a center, move the unloaded joint to its mechanical center and click **Reset Mid**. Turn off servo power before connecting the next servo.
-4. **All-servo voltage / overcurrent protection** applies to every connected servo. Click **Enable**, then set the current limit separately with **Set protection current**. The current input starts at **1.5 A**. For an assembled Duck, check the existing IDs and settings. [Official servo setup guide](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+[Follow the official guide to configure and number the servos](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
 
 ## 6. Assemble XGO Duck
 
-Check the servo labels and mounting directions before assembling the base, legs, feet, head and neck, battery bracket and circuit board. Connect cables before securing parts. Check left and right orientation, cable routing and screws before closing the housing. [Official assembly steps](https://www.xgorobot.com/duck-developer-guide/06-assembly.html) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
+[Follow the official illustrated assembly guide](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
 
-### Camera and ToF wiring
-
-The camera USB cable connects to the UNO Q through the right-angle USB-C plug. The red-and-black two-wire plug at the same end connects to the blue carrier. The ToF cable connects to the Qwiic port underneath the UNO Q. The photo also labels the two speaker leads and the fill light lead.
+[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
 
 <img src="docs/images/wiring/overview-en.png" alt="XGO Duck physical wiring diagram for the UNO Q, carrier, camera, ToF module, speakers and fill light" width="960">
 
-To get help checking the assembly, attach the PPTX and photos of your Duck and copy this prompt.
+## 7. IMU and servo calibration
 
-```text
-Use this illustrated guide to help me check servo IDs, left/right orientation, cable routing and screw sizes:
-https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx
-Slide 1 shows the IDs. Slides 3–15 cover the base, legs and feet. Slides 16–25 cover the upper assembly
-and circuit board. Cite the slide number and ask me to check anything unclear on the physical Duck.
-```
+Open `http://<board-ip>:9527/` and check that **15/15** servos are online. Support Duck on a table or in a calibration stand, then click **Calibration** in the top bar. Opening this page releases the servos.
 
-## 7. Calibrate, stand and try walking
+### Calibrate the IMU first
 
-### Servo mechanical centers
+1. Use the pose photo in **IMU calibration** at the top of the page. Support Duck with the UNO Q upright, the battery connector pointing up, and the board’s bottom edge against a level table. If you have started setting servo centers, click **Unload all** first.
+2. Click **Calibrate IMU** and hold still for about **1.5 seconds**, until **IMU calibration saved** appears. The app saves the accelerometer offsets and gyro bias together and loads them on restart. [IMU calibration details](docs/imu-calibration.md)
 
-1. Open `http://<board-ip>:9527/` and confirm feedback from all 15 servos. Support Duck and open **Calibration** to release the servos.
-2. Use a calibration stand or the front and side views to set each joint by hand. Move one joint to its mechanical center and click its **Set center & hold** button. That joint holds its center while the uncalibrated joints stay free.
-3. After setting all joints, click **Unload all** and remove Duck from the stand if used. Click **Exit** to close calibration, then return to **Control**. [Official calibration and walking guide](https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html)
+<img src="docs/images/calibration/imu-en.png" alt="IMU calibration button, board position photo and saved status at the top of the Calibration page" width="960">
 
-### Standing IMU calibration
+If the IMU card is missing, use **Calibrate IMU** at the bottom of **Control** and refer to the official diagrams for the servo poses. [Official calibration guide](https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html)
 
-1. On **Control** at port 9527, click **Torque off** and find **IMU calibration** under **IMU and servos**. Support Duck as shown. Hold the board upright with the battery connector pointing straight up and the bottom edge against a level tabletop.
-2. Click **Calibrate IMU** and keep the board still for about **1.5 seconds** until the page reports that it saved the result. One sample run measures both accelerometer offsets and gyro bias. They take effect immediately and load on restart. Recalibrate after changing the board or its mounting orientation.
-3. Repeat this procedure if upgrading from the earlier rotation-based calibration. A successful run backs up the previous record. [IMU posture and result guide](docs/imu-calibration.md)
+### Set each servo’s mechanical center
 
-### Stand and test
+1. The page groups the servos into **Head & neck (30–34)**, **Left leg (10–14)** and **Right leg (20–24)**. Left and right are from Duck’s perspective. Find the joint by its white ID tag in the photo.
+2. Position the joint by hand to match its zero-pose diagram, using the green dashed line for alignment. Click **Set center** and wait for **Center set** before moving to the next joint. Click any photo or diagram to enlarge it.
+3. Once the session count reaches **15/15**, click **Unload all**, then **Exit**. If you are using a calibration stand, take Duck out after unloading. The centers stay saved in the servos. [Joint diagrams and controls](docs/calibration-guide.md)
 
-Support Duck on a level surface and try **Default pose** first. Once it stands steadily, choose **Walk / get up** and try a short straight walk. Start at **0.10 m/s** and keep the test at or below **0.15 m/s**. Stop if Duck shakes, veers or loses balance. The troubleshooting prompt at the end can guide these checks.
+<img src="docs/images/calibration/servos-en.png" alt="Servo groups, head and neck photos with white ID tags, and joint cards with diagrams and Set center buttons" width="960">
+
+### Check Default pose on the Control page
+
+After both calibrations, place Duck on a level surface and support it. Return to **Control** and click **Default pose** under **Mode**. Once the servos engage and Duck stands steadily, compare its neck, legs and feet with the photo below.
+
+<img src="docs/images/calibration/default-pose-en.png" alt="Default pose button and enabled status in the Control page Mode section" width="920">
+
+Default standing pose for Duck with roller feet and standard feet.
+
+<img src="docs/images/default-pose-reference.jpg" alt="Two assembled XGO Ducks in the default standing pose, one with roller feet and one with standard feet" width="900">
 
 ## 8. Bind an account and select an agent
 
@@ -213,50 +212,17 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 
 - **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
 - **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
+- In the cockpit, **More actions** adds head turns, beak controls and Default pose. **Duck calls** plays seven different sounds through Duck’s speaker.
+- On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
 - Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
 - **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
-- With a ToF sensor connected, the cockpit displays an 8×8 distance map. Forward travel slows within 15 cm and stops at 10 cm by default. If the board starts without ToF, remote and voice control can drive forward. An installed sensor going offline or reporting stale data pauses forward travel. [Avoidance settings](docs/forward-avoidance.md)
+- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward travel slows within 15 cm and stops at 10 cm by default. If ToF is absent or offline, you can issue a new forward command without distance-based avoidance. Stale or invalid readings while the sensor reports ranging still pause forward travel. [Avoidance settings](docs/forward-avoidance.md)
 
-## Updates and troubleshooting
+## FAQ
 
-- Support Duck and turn torque off before updating. **Run may compile and flash the STM32 sketch again.**
-- Keep the existing App's `data/` when updating the same robot: it contains identity, volume, calibration and controller settings. Do not copy another robot's identity or calibration. Repeat one-time setup if the App directory or host support scripts change.
-- For first-Run download failures, check the board's internet connection. For missing audio, test the speaker and microphone in cockpit settings.
-- See the [installation guide](docs/ai-chat-en.md) for migration and toolchain help, and the [hardware guide](https://github.com/LuwuDynamics/xgoduck_hardware) for assembly and calibration.
+### 1. Duck shakes or walks unsteadily
 
-To build the package yourself, run `python3 tools/package-ai-app.py` in the repository on your computer. Import the resulting `dist/xgoduck_ai.zip` using the same App Lab steps.
-
-## AI prompt for unstable walking
-
-Use this for shaking, veering, or loss of balance. Stop Duck first and stay beside it to support it. The assistant can read status and logs while you check the posture, handle the joints and walk-test Duck.
-
-```text
-My XGO Duck walks unsteadily. Board IP: [fill in]. Symptom: [cannot stand / shakes / veers / other].
-First read /api/status on port 9527 and the relevant logs. Check for fresh Bridge feedback,
-all 15 servo IDs, protection events and ToF speed limiting. Tell me what the data shows.
-I will handle the physical Duck during the checks.
-
-1. Servo centers. Ask me to support Duck, then open Calibration on port 9527. Confirm the
-   centers set with a stand or by hand. If needed, I will align each joint and click
-   Set center & hold. Click Unload all when done.
-   Diagrams at https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html
-2. Accelerometer and gyro. Check imu_calibration in /api/status. Reuse a valid result
-   for the same board and mounting orientation. To recalibrate, have me hold the board
-   upright with the battery connector pointing up and its bottom edge against the tabletop.
-   Exit servo calibration, return to Control on port 9527 and click Torque off. Click
-   Calibrate IMU under IMU and servos and keep still for about 1.5 seconds.
-   Confirm saved status and at least 90 samples. Check that acc_corrected is near
-   [0, 0, -9.8] m/s² and gyro_corrected is near [0, 0, 0] °/s. A successful result applies
-   immediately and backs up the previous file in the same directory.
-3. Gains. Have me support Duck before opening Servo setup. Read all 15 servos with torque
-   off. Use KP=5 and KD=10 as the troubleshooting baseline. List any differing IDs and their
-   current values. Apply and verify Set KpKd after I confirm.
-
-After I confirm the walk test, check Default pose. For standard feet, confirm that Skating
-mode is Off. Select Walk / get up, wait for steady standing and try a short straight walk
-at 0.10 m/s on level ground. Keep linear speed at or below 0.15 m/s. Check Heading hold and
-the actual commands if Duck veers. Stop if Duck shakes or loses balance. Report the result
-and the next specific check.
-```
+1. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos. The updated page has IMU calibration at the top and photos with servo IDs and joint reference poses below.
+2. Support Duck, open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify. The updated page shows saved and runtime values separately.
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

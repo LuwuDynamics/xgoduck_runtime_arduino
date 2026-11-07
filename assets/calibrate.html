@@ -1,27 +1,37 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calibration · XGO Duck</title><link rel="stylesheet" href="style.css?v=20261019">
+<title>Calibration · XGO Duck</title><link rel="stylesheet" href="style.css?v=20261019"><link rel="stylesheet" href="calibrate.css?v=20261107-3">
 <main class="page-calibrate">
 <header>
-  <div><small>ARDUINO UNO Q</small><h1>Calibration</h1></div>
+  <div><small>ARDUINO UNO Q</small><h1 id="title">Calibration</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/">Control</a><a href="/calibrate.html" aria-current="page">Calibration</a><a href="/servo.html">Servo setup</a></nav>
+    <nav class="nav"><a href="/" data-label="navControl">Control</a><a href="/calibrate.html" aria-current="page" data-label="navCalibration">Calibration</a><a href="/servo.html" data-label="navServo">Servo setup</a></nav>
+    <button id="language" type="button">中文</button>
     <button class="stop" id="exit">Exit</button>
   </div>
 </header>
-<p id="message" role="status">Entering calibration and unloading all servos…</p>
-<section>
-  <h2>Procedure</h2>
-  <div class="buttons">
-    <button id="start">Unload all</button>
-    <button id="exit2">Exit</button>
+<section class="cal-imu" id="imu-panel" aria-labelledby="imu-title">
+  <div>
+    <h2 id="imu-title" data-label="imuTitle">IMU calibration</h2>
+    <p data-label="imuInstructions">Support Duck with the board upright and its battery connector facing up. Rest the board’s bottom edge on a level table, then calibrate and hold still for about 1.5 seconds.</p>
+    <button id="imu-start" type="button" data-label="imuStart" disabled>Calibrate IMU</button>
+    <progress id="imu-progress" max="1" value="0" aria-labelledby="imu-title" hidden></progress>
+    <p id="imu-status" role="status">Waiting for IMU feedback…</p>
   </div>
-  <p class="hint">Opening this page unloads all motors. Align each joint by hand, then choose Set center &amp; hold. Use Unload all to readjust. Exit releases the motors.</p>
+  <button id="imu-picture" type="button" class="cal-enlarge cal-imu-picture" data-picture="imu-calibration-pose.png" aria-label="Enlarge IMU posture guide">
+    <img id="imu-pose" src="imu-calibration-pose.png" width="910" height="1155" alt="Board upright with the battery connector pointing up">
+  </button>
 </section>
-<section>
-  <h2>Joints <span id="mode">—</span></h2>
-  <div id="joints" class="cal-list"></div>
-</section>
+<p id="message" role="status">Entering calibration and unloading all servos…</p>
+<section id="intro" class="cal-intro"></section>
+<div id="zonebar" class="cal-bar"></div>
+<div id="zones"></div>
+<section id="finish" class="cal-finish"></section>
 </main>
-<script src="calibrate.js?v=20261105-joints1"></script>
+<dialog id="picture-dialog" class="cal-picture-dialog" aria-label="Calibration picture">
+  <button id="picture-close" type="button">Close picture</button>
+  <img id="picture-image" alt="">
+</dialog>
+<noscript><p>Enable JavaScript to use calibration. / 请启用 JavaScript 后再进行标定。</p></noscript>
+<script src="calibrate.js?v=20261107-guide5"></script>
 </html>

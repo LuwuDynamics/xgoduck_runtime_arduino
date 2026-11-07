@@ -18,6 +18,13 @@ REMOTE_TWIST_LIMITS = (.15, .1, 1.)
 COCKPIT_TWIST_LIMITS = (.15, .3, 1.)
 COCKPIT_LEASE_S = .4
 COCKPIT_ACTIONS = ('stand', 'sit', 'pick', 'roulade', 'left_kick', 'right_kick')
+COCKPIT_POSES = {
+    'head_left': ('head', .3),
+    'head_right': ('head', -.3),
+    'head_center': ('head', 0.),
+    'mouth_open': ('mouth', 20.),
+    'mouth_close': ('mouth', 0.),
+}
 WALK_ACTIONS = ('move', 'turn', 'pick', 'roulade', 'left_kick', 'right_kick')
 TIMED_MODEL_ACTIONS = ('pick', 'roulade', 'left_kick', 'right_kick')
 STAND_TIMEOUT_S = 5.
@@ -294,7 +301,8 @@ class MotionAccess:
         if (not isinstance(controller_id, str) or not re.fullmatch(r'[a-f0-9]{24}', controller_id)
                 or type(sequence) is not int or not 0 < sequence < 2**53):
             raise ValueError('Invalid cockpit command sequence.')
-        if kind not in (*COCKPIT_ACTIONS, 'begin', 'drive', 'release', 'stop', 'torque_off'):
+        if kind not in (*COCKPIT_ACTIONS, *COCKPIT_POSES, 'default_pose',
+                        'begin', 'drive', 'release', 'stop', 'torque_off'):
             raise ValueError('Unknown cockpit action.')
         drive = kind in ('begin', 'drive')
         if drive:
@@ -341,6 +349,24 @@ class MotionAccess:
                 return {'ok': True, 'paused': True}
 
             status = c.status()
+            if kind == 'default_pose':
+                self._require_feedback(status, required_ids=(), resume_hold=True)
+                return dict(self.web_mode('hold'), ok=True)
+            if kind in COCKPIT_POSES:
+                axis, value = COCKPIT_POSES[kind]
+                if axis == 'head' and c.roller_mode:
+                    raise ValueError('Head presets require Walk mode. 转头动作需要普通行走模式。')
+                pose = {'head': [None, None, value, None]} if axis == 'head' else {'mouth': value}
+                movement = self.movement_state(status, local_action=True,
+                                               required_ids=self._required_ids(axis, pose))
+                if not movement['movement_ready']:
+                    raise ValueError(movement['movement_block_reason'])
+                if axis == 'head':
+                    pose['head'] = self._head_targets(pose)
+                result = c.command(**pose, source=c.input_source)
+                if axis == 'mouth' and 'ignored' not in result:
+                    self.speech_mouth.override('explicit action owns mouth', restore=False)
+                return result
             payload = {'twist': [0.] * 3, 'head': [0.] * 4, 'mouth': 0.}
             if kind == 'stand':
                 self._require_feedback(status, required_ids=self._required_ids(kind, payload),

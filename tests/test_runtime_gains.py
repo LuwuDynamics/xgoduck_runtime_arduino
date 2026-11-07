@@ -69,6 +69,19 @@ class RuntimeGainsTest(unittest.TestCase):
             with self.assertRaises(ValueError):reader.read(34)
             self.assertEqual(c.commands,[])
 
+    def test_confirmed_servo_setup_can_read_runtime_values_without_writing_or_exiting(self):
+        c,reader=self.setup_controller(mode='servo_debug')
+        c.enabled=False
+        c.feedback=SimpleNamespace(calibrating=False,servo_debugging=True)
+        before=dict(c.user_gains)
+        result=reader.read(33)
+        self.assertEqual((result['kp'],result['kd']),before[33])
+        self.assertTrue(result['runtime'])
+        self.assertEqual([command[1] for command in c.commands],[wire.SERVO_READ_RUN_GAINS])
+        self.assertEqual(c.user_gains,before)
+        self.assertEqual((c.mode,c.enabled,c.generation),('servo_debug',False,12))
+        self.assertIsNone(c.servo_expected_reply)
+
     def test_missing_mcu_fails_the_read_without_writing_a_profile_or_changing_body_state(self):
         c,reader=self.setup_controller(missing=True)
         with self.assertRaises(TimeoutError):reader.read(34)

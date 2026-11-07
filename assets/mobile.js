@@ -3,6 +3,8 @@
   let media=null,robot=null,gamepad=null,streaming=false,cameraBusy=false,lightBusy=false,mediaBusy=false,usbBusy=false,volumeDirty=false;
   let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
+  let duckCall=null;
+  const duckSounds=[...document.querySelectorAll('[data-duck-sound]')];
   const dialog=$('config');
   // Port 80 opens the cockpit; the original desktop page stays on port 9527.
   const desktopURL=new URL('/',location.href);desktopURL.port='9527';
@@ -61,6 +63,7 @@
     $('speakerTest').classList.toggle('active',!!speakerPlaying);$('speakerTest').setAttribute('aria-pressed',String(!!speakerPlaying));
     $('speakerLabel').textContent=t(speakerTesting&&mediaBusy?'speakerPreparing':speakerPlaying?'stopSpeakerTest':'testSpeaker');
     $('speakerTest').title=t(speakerPlaying?'speakerPlayingHint':'speakerTestHint');
+    renderDuckSounds(a,busy);
     $('applyVolume').disabled=busy||!a?.available||!volumeDirty;
     $('testSpeaker').disabled=$('testMic').disabled=busy||!a?.available||a.state!=='idle';
     $('volume').disabled=busy||!a?.available;$('voiceFile').disabled=busy||!a?.available||a.state!=='idle';
@@ -130,6 +133,27 @@
     try{media=await api('media/'+path,body);return true;}
     catch(error){notify(message(error));return false;}finally{mediaBusy=false;render();}
   }
+  function renderDuckSounds(audio,busy){
+    if(duckCall?.phase==='playing'&&!busy&&audio?.state==='idle'){
+      duckCall.phase=audio.error?'failed':'done';
+    }
+    const active=duckCall?.phase==='loading'||duckCall?.phase==='playing';
+    for(const button of duckSounds){
+      button.disabled=!!busy||!audio?.available||audio.state!=='idle';
+      button.setAttribute('aria-pressed',String(active&&duckCall.kind===button.dataset.duckSound));
+    }
+    const key=!audio?.available?'duckSpeakerMissing':active?'duckSoundPlaying'
+      :busy||audio.state!=='idle'?'audioBusy':duckCall?.phase==='failed'?'duckSoundFailed'
+      :duckCall?.phase==='done'?'duckSoundDone':'duckSoundHint';
+    const text=t(key,{sound:duckCall?t(duckCall.label):''}),status=$('duckSoundStatus');
+    if(status.textContent!==text)status.textContent=text;
+  }
+  for(const button of duckSounds)button.onclick=async()=>{
+    if(button.disabled)return;
+    duckCall={kind:button.dataset.duckSound,label:button.dataset.i18n,phase:'loading'};
+    const ok=await mediaAction('audio/play',{source:'duck-'+duckCall.kind});
+    duckCall.phase=ok?'playing':'failed';render();
+  };
   $('applyVolume').onclick=async()=>{if(await mediaAction('audio/volume',{volume:+$('volume').value}))volumeDirty=false;render();};
   $('testSpeaker').onclick=()=>mediaAction('audio/play',{source:'music'});
   $('speakerTest').onclick=async()=>{

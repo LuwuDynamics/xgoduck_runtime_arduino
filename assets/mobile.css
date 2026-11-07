@@ -92,6 +92,32 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   white-space:nowrap;
 }
 .motion-toolbar{grid-area:actions;min-width:0;max-width:100%;justify-self:center}
+.keyboard-hint{display:none;justify-content:center;margin:0 0 6px;color:#d0e6df;font-size:11px}
+@media(any-hover:hover) and (any-pointer:fine){
+  .keyboard-hint{display:flex;flex-wrap:wrap;gap:4px 12px}
+}
+.keyboard-hint>span{display:inline-flex;align-items:center;gap:3px}
+.keyboard-hint>[hidden]{display:none}
+.keyboard-hint kbd{
+  padding:2px 4px;
+  border:1px solid #a5d9cb50;
+  border-radius:4px;
+  background:#0d202af0;
+  color:#edfff7;
+}
+.preset-dialog{
+  width:min(440px,calc(100vw - 24px));
+  height:fit-content;
+  max-height:calc(100dvh - 24px);
+  overflow:auto;
+  overscroll-behavior:contain;
+}
+.preset-dialog .dialog-head{padding:16px 18px 10px}
+.preset-body{padding:0 18px 16px}
+.preset-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.preset-buttons button{min-height:44px;padding:8px;font-size:13px}
+.preset-buttons button[aria-pressed="true"]{color:#b5f5d4;border-color:#8cdecf}
+.preset-body p{margin:10px 0 0;color:#c0d3d7;font-size:12px;line-height:1.5}
 #motionStatus{
   min-height:1.3em;
   margin:0 0 6px;
@@ -104,16 +130,18 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   pointer-events:auto;
 }
 #motionStatus[data-warning]{color:#ffd6a3}
-.motion-actions{
+.motion-action-row{
   display:flex;
   justify-content:safe center;
+  align-items:center;
   gap:5px;
-  overflow-x:auto;
-  scrollbar-width:thin;
   padding:3px;
   pointer-events:auto;
 }
-.motion-actions button{
+.motion-actions,.motion-tools{display:flex;gap:5px}
+.motion-actions{min-width:0;overflow-x:auto;scrollbar-width:thin}
+.motion-tools{flex:none}
+.motion-action-row button{
   flex:none;
   min-width:42px;
   min-height:42px;
@@ -129,7 +157,7 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   background:#1a3b33f5;
   border-color:#8cdecf65;
 }
-.motion-actions .stop-action{color:#ffd4c0;border-color:#d0a18d61}
+.motion-tools .stop-action{color:#ffd4c0;border-color:#d0a18d61}
 .bottom .intercom{grid-area:audio;width:auto;min-width:0;max-width:100%;justify-self:end;pointer-events:auto}
 .bottom .intercom-actions{display:flex;gap:6px;justify-content:end;flex-wrap:wrap}
 .bottom .intercom-actions .talk-button{
@@ -159,8 +187,8 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
   .motion-sticks{padding-inline:9vw}
   .stick-label{font-size:10px}
   .motion-toolbar{width:100%}
-  .motion-actions{gap:3px}
-  .motion-actions button{min-width:38px;padding-inline:5px;font-size:11px}
+  .motion-action-row,.motion-actions,.motion-tools{gap:3px}
+  .motion-action-row button{min-width:38px;padding-inline:5px;font-size:11px}
   .bottom .flight-state{display:flex}
   .flight-state .stop{align-self:start;margin:2px 0 0}
   .bottom .flight-state .eyebrow{display:none}
@@ -181,7 +209,7 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
     align-self:end;
     max-width:calc(100% - 2 * var(--stick-size) - 16px);
   }
-  .motion-actions button{padding-inline:8px}
+  .motion-action-row button{padding-inline:8px}
   .bottom .flight-state{
     display:grid;
     grid-template-columns:auto auto;

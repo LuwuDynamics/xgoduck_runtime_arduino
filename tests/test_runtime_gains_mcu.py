@@ -77,6 +77,9 @@ int main(){
  assert(savedWrites==0&&torqueWrites==0);
  p.op=SERVO_ENTER;applyServoOp(p);assert(lastReply.ok&&hostMode==HOST_SERVO_DEBUG);
  assert(savedWrites==0&&liveWrites==0&&liveKp==7&&liveKd==19);
+ p.op=SERVO_READ_RUN_GAINS;applyServoOp(p);
+ assert(lastReply.ok&&readAddress==50&&lastReply.kp==7&&lastReply.kd==19);
+ assert(hostMode==HOST_SERVO_DEBUG&&savedWrites==0&&liveWrites==0);
  p.op=SERVO_SET_PERM_KP_KD;p.kp=9;p.kd=23;
  receive(p);assert(servoPending);
  applyServoOp(p);assert(lastReply.ok&&savedWrites==3&&savedKp==9&&savedKd==23);

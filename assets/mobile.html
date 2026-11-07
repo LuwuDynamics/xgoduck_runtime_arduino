@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=motion1">
+<title>小鸭驾驶舱</title><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=motion3">
 <link rel="stylesheet" href="mobile-tof.css?v=motion1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 </head>
@@ -84,15 +84,27 @@
       </div>
     </div>
     <div class="motion-toolbar">
+      <div id="keyboardHint" class="keyboard-hint" role="group" aria-label="键盘快捷键" data-i18n-aria-label="keyboardControls">
+        <span><kbd>W</kbd><kbd>S</kbd><span data-i18n="keyboardTravel">前进 / 后退</span></span>
+        <span id="keyboardStrafe"><kbd>A</kbd><kbd>D</kbd><span data-i18n="keyboardStrafe">侧移</span></span>
+        <span><kbd>Q</kbd><kbd>E</kbd><span data-i18n="keyboardTurn">转向</span></span>
+        <span><kbd data-i18n="keyboardSpace">空格</kbd><span data-i18n="keyboardStop">停止</span></span>
+      </div>
       <p id="motionStatus" role="status" data-i18n="waitingFeedback">等待反馈</p>
-      <div class="motion-actions" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
-        <button type="button" class="stand-action" data-motion="stand" data-i18n="actionStand" disabled>站起来</button>
-        <button type="button" data-motion="sit" data-i18n="actionSit" disabled>坐下</button>
-        <button type="button" data-motion="pick" data-i18n="actionPick" disabled>叼东西</button>
-        <button type="button" data-motion="roulade" data-i18n="actionRoll" disabled>翻滚</button>
-        <button type="button" data-motion="left_kick" data-i18n="actionKickLeft" disabled>左脚踢球</button>
-        <button type="button" data-motion="right_kick" data-i18n="actionKickRight" disabled>右脚踢球</button>
-        <button type="button" class="stop-action" data-motion="stop" data-i18n="actionStop" disabled>停止移动</button>
+      <div class="motion-action-row" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
+        <div class="motion-actions">
+          <button type="button" class="stand-action" data-motion="stand" data-i18n="actionStand" disabled>站起来</button>
+          <button type="button" data-motion="sit" data-i18n="actionSit" disabled>坐下</button>
+          <button type="button" data-motion="pick" data-i18n="actionPick" disabled>叼东西</button>
+          <button type="button" data-motion="roulade" data-i18n="actionRoll" disabled>翻滚</button>
+          <button type="button" data-motion="left_kick" data-i18n="actionKickLeft" disabled>左脚踢球</button>
+          <button type="button" data-motion="right_kick" data-i18n="actionKickRight" disabled>右脚踢球</button>
+        </div>
+        <div class="motion-tools">
+          <button id="moreActions" type="button" aria-haspopup="dialog" data-i18n="moreActions">更多动作</button>
+          <button id="openDuckSounds" type="button" aria-haspopup="dialog" data-i18n="duckSounds">鸭叫</button>
+          <button type="button" class="stop-action" data-motion="stop" data-i18n="actionStop" disabled>停止移动</button>
+        </div>
       </div>
     </div>
     <div class="flight-state"><span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span><button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button></div>
@@ -106,6 +118,41 @@
   </div>
   <div id="notice" class="toast" role="status" hidden></div>
 </main>
+<dialog id="poseDialog" class="preset-dialog" aria-labelledby="poseTitle">
+  <div class="dialog-head">
+    <h2 id="poseTitle" data-i18n="moreActions">更多动作</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="closeDialog">×</button></form>
+  </div>
+  <div class="preset-body">
+    <div class="preset-buttons">
+      <button type="button" data-motion="head_left" data-i18n="actionHeadLeft" disabled>向左转头</button>
+      <button type="button" data-motion="head_right" data-i18n="actionHeadRight" disabled>向右转头</button>
+      <button type="button" data-motion="head_center" data-i18n="actionHeadCenter" disabled>头部回中</button>
+      <button type="button" data-motion="mouth_open" data-i18n="actionMouthOpen" disabled>张嘴</button>
+      <button type="button" data-motion="mouth_close" data-i18n="actionMouthClose" disabled>闭嘴</button>
+      <button type="button" data-motion="default_pose" data-i18n="modeHold" disabled>默认姿态</button>
+    </div>
+    <p id="poseStatus" role="status"></p>
+  </div>
+</dialog>
+<dialog id="duckSoundDialog" class="preset-dialog" aria-labelledby="duckSoundTitle">
+  <div class="dialog-head">
+    <h2 id="duckSoundTitle" data-i18n="duckSounds">鸭叫</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="closeDialog">×</button></form>
+  </div>
+  <div class="preset-body">
+    <div class="preset-buttons">
+      <button type="button" data-duck-sound="greet" data-i18n="duckGreet" disabled>打招呼</button>
+      <button type="button" data-duck-sound="inquire" data-i18n="duckInquire" disabled>疑问</button>
+      <button type="button" data-duck-sound="alarm" data-i18n="duckAlarm" disabled>警觉</button>
+      <button type="button" data-duck-sound="peck" data-i18n="duckPeck" disabled>啄叫</button>
+      <button type="button" data-duck-sound="chirp" data-i18n="duckChirp" disabled>轻鸣</button>
+      <button type="button" data-duck-sound="coo" data-i18n="duckCoo" disabled>低鸣</button>
+      <button type="button" data-duck-sound="wheee" data-i18n="duckWheee" disabled>兴奋</button>
+    </div>
+    <p id="duckSoundStatus" role="status"></p>
+  </div>
+</dialog>
 <dialog id="bindingDialog" aria-labelledby="bindingTitle" aria-describedby="bindingIntro">
   <div class="dialog-head"><div><span class="eyebrow">AI INTERACTION</span><h2 id="bindingTitle" data-i18n="bindingTitle">AI 交互绑定</h2></div><button id="closeBinding" class="icon-button" type="button" aria-label="关闭绑定窗口" data-i18n-aria-label="closeBinding">×</button></div>
   <div class="binding-body">
@@ -143,5 +190,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=hey-ducky1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion2"></script><script src="mobile.js?v=motion1"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=motion3"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion3"></script><script src="mobile.js?v=motion3"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>
