@@ -39,16 +39,10 @@ class ForwardAvoidanceTest(unittest.TestCase):
         self.assertEqual(self.guard.limit([0, 0, 1]), [0, 0, 1])
         self.monitor.status.assert_not_called()  # All control calls use a cache.
 
-    def test_obstacle_release_needs_three_distinct_clear_frames(self):
+    def test_current_far_frame_clears_a_previous_near_reading(self):
         self.guard.update(frame(100))
         self.assertFalse(self.guard.status()['forward_ready'])
         self.guard.update(frame(1000, 2))
-        for _ in range(10):
-            self.guard.update(frame(1000, 2))
-        self.assertFalse(self.guard.status()['forward_ready'])
-        self.guard.update(frame(1000, 3))
-        self.assertFalse(self.guard.status()['forward_ready'])
-        self.guard.update(frame(1000, 4))
         self.assertTrue(self.guard.status()['forward_ready'])
 
     def test_exact_ten_fifteen_cm_boundaries_and_31cm_uses_full_requested_speed(self):
@@ -60,34 +54,39 @@ class ForwardAvoidanceTest(unittest.TestCase):
                 self.assertEqual(guard.status()['stop_distance_mm'], 100)
                 self.assertEqual(guard.status()['slow_distance_mm'], 150)
 
-    def test_release_at_fifteen_cm_needs_three_frames_without_old_forty_cm_lock(self):
+    def test_move_away_from_near_obstacle_slows_then_allows_full_speed(self):
         self.guard.update(frame(100))
-        self.guard.update(frame(149, 2))
-        self.assertFalse(self.guard.status()['forward_ready'])
-        for seq in (3, 4):
-            self.guard.update(frame(150, seq))
-            self.assertFalse(self.guard.status()['forward_ready'])
-        self.guard.update(frame(150, 5))
-        self.assertTrue(self.guard.status()['forward_ready'])
+        self.guard.update(frame(125, 2))
+        self.assertEqual(self.guard.limit([.2, 0, 0]), [.1, 0, 0])
+        self.guard.update(frame(150, 3))
         self.assertEqual(self.guard.limit([.2, 0, 0]), [.2, 0, 0])
 
-    def test_invalid_frame_breaks_clear_confirmation(self):
-        self.guard.update(frame(80))
-        self.guard.update(frame(1000, 2))
-        self.guard.update(frame(None, 3))
-        for seq in (4, 5):
-            self.guard.update(frame(1000, seq))
-            self.assertFalse(self.guard.status()['forward_ready'])
-        self.guard.update(frame(1000, 6))
+    def test_only_side_returns_allow_forward_and_a_single_valid_front_return_is_used(self):
+        data = frame(None)
+        for row in data['grid_mm']:
+            row[0:2] = [749, 1029]
+        self.guard.update(data)
+        self.assertFalse(self.guard.status()['available'])
         self.assertTrue(self.guard.status()['forward_ready'])
+        self.assertEqual(self.guard.limit([.15, 0, 0]), [.15, 0, 0])
+        for seq, mm, expected in ((2, 800, .2), (3, 125, .1), (4, 80, 0), (5, None, .2)):
+            data['seq'] = seq
+            data['grid_mm'][3][3] = mm
+            self.guard.update(data)
+            with self.subTest(mm=mm):
+                self.assertEqual(self.guard.status()['front_distance_mm'], mm)
+                self.assertEqual(self.guard.limit([.2, 0, 0])[0], expected)
 
-    def test_stale_age_stops_forward_even_when_background_worker_is_stuck(self):
-        self.guard.update(frame())
+    def test_stale_near_reading_no_longer_limits_forward(self):
+        self.guard.update(frame(80))
+        self.assertFalse(self.guard.status()['forward_ready'])
         self.now += .7
         status = self.guard.status()
-        self.assertFalse(status['forward_ready'])
-        self.assertIn('过期', status['blocking_reason'])
-        self.assertEqual(self.guard.limit([.2, 0, 0]), [0, 0, 0])
+        self.assertFalse(status['available'])
+        self.assertTrue(status['forward_ready'])
+        self.assertIsNone(status['front_distance_mm'])
+        self.assertEqual(status['blocking_reason'], '')
+        self.assertEqual(self.guard.limit([.2, 0, 0]), [.2, 0, 0])
         self.assertEqual(self.guard.limit([-.1, 0, 0]), [-.1, 0, 0])
 
     def test_absent_and_offline_allow_forward_and_valid_frames_restore_avoidance(self):
@@ -106,21 +105,21 @@ class ForwardAvoidanceTest(unittest.TestCase):
                 self.guard.update(frame(80, 3))
                 self.assertEqual(self.guard.limit([.2, .1, .5]), [0, .1, .5])
 
-    def test_unknown_state_errors_and_invalid_measurements_fail_closed(self):
+    def test_unknown_state_errors_and_invalid_measurements_do_not_limit_forward(self):
         self.guard.update(ABSENT)
         for data in ({}, dict(state='unavailable', error_message='Router timed out'),
                      dict(state='error', error_message='sensor initialization failed'),
                      frame(None), frame(0), frame(float('nan')), frame(True)):
             with self.subTest(data=str(data)[:100]):
                 self.guard.update(data)
-                self.assertFalse(self.guard.status()['forward_ready'])
+                self.assertTrue(self.guard.status()['forward_ready'])
                 self.assertIsNone(self.guard.status()['front_distance_mm'])
         for field, value in [('fresh', False), ('seq', None), ('seq', 0), ('seq', True),
                              ('age_ms', None), ('age_ms', float('inf')), ('age_ms', -1),
                              ('age_ms', 1001), ('state', 'initializing')]:
-            data = frame(); data[field] = value
+            data = frame(80); data[field] = value
             self.guard.update(data)
-            self.assertFalse(self.guard.status()['forward_ready'], (field, value))
+            self.assertTrue(self.guard.status()['forward_ready'], (field, value))
 
     def test_default_region_ignores_edge_floor_but_uses_nearest_valid_front_zone(self):
         data = frame(20)
@@ -221,7 +220,7 @@ class ForwardControllerTest(unittest.TestCase):
         self.assertEqual(self.c.mode, 'policy')
         self.assertTrue(self.c.feedback.enabled)
         self.assertNotEqual(self.wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], self.wire.DISARM)
-        for seq in (3, 4, 5): self.guard.update(frame(1000, seq))
+        self.guard.update(frame(None, 3))
         self.assertTrue(self.guard.status()['forward_ready'])
         self.feedback(); self.c.step()
         self.assertEqual(self.c.twist[0], 0)
@@ -231,7 +230,7 @@ class ForwardControllerTest(unittest.TestCase):
         self.assertEqual(self.c.twist[0], .2)
 
     def test_forward_rejection_ignores_inactive_owner_and_allows_reverse_and_turn(self):
-        self.guard.update(frame(None, 2))
+        self.guard.update(frame(80, 2))
         self.assertIn('ignored', self.c.command(twist=[.2, 0, 0], source='gamepad'))
         self.assertEqual(self.guard.status()['stop_count'], 0)
         self.assertTrue(self.c.command(twist=[.2, 0, 0])['forward_blocked'])

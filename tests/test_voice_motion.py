@@ -1813,6 +1813,12 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertIsNone(data['front_distance_cm'])
         self.assertIn('过期', data['message'])
         self.assertNotIn('error', reply)
+        self.tof_readback = dict(sensor=dict(state='ranging', fresh=True, seq=8),
+                                 front=dict(available=False, forward_ready=True))
+        reply, data = self.call_mcp(self.mcp(), 'Duck.GetToF')
+        self.assertFalse(reply['isError'])
+        self.assertIsNone(data['front_distance_mm'])
+        self.assertEqual(data['message'], '当前没有有效的前方测距。')
 
     def test_tof_ipc_authentication_failure_still_reports_real_tool_error(self):
         mcp = self.mcp()

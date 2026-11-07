@@ -119,14 +119,16 @@ class DuckThing(Thing):
     def read_tof(self):
         data = request(self.port, self.token, '/tof')
         sensor, front = data['sensor'], data['front']
-        distance = front.get('front_distance_mm') if front.get('available') else None
-        return dict(status='success', unit='mm', available=bool(front.get('available')),
+        available = bool(front.get('available'))
+        distance = front.get('front_distance_mm') if available else None
+        message = '前方测距可用。' if available else '当前没有有效的前方测距。'
+        return dict(status='success', unit='mm', available=available,
                     front_distance_mm=distance,
                     front_distance_cm=round(distance/10, 1) if distance is not None else None,
                     front=front,
                     sensor={k: sensor.get(k) for k in ('state', 'fresh', 'seq', 'age_ms', 'valid_zones',
                             'center_mm', 'min_mm', 'max_mm', 'resolution', 'frequency_hz', 'grid_mm')},
-                    message=front.get('blocking_reason') or sensor.get('error_message') or '前方测距可用。')
+                    message=front.get('blocking_reason') or sensor.get('error_message') or message)
 
     def action(self, **body):
         result = request(self.port, self.token, '/action', dict(body, session=self.session, issued_at=self.clock()))

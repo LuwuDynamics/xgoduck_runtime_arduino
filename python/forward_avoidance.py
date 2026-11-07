@@ -6,6 +6,7 @@ from pathlib import Path
 import threading
 import time
 
+# Accept the former clearance and coverage settings in existing board files.
 DEFAULTS = dict(enabled=True, stop_mm=100., slow_mm=150., clear_margin_mm=50.,
                 max_age_ms=600., rows=[2, 6], columns=[2, 6], min_valid_zones=3)
 
@@ -59,7 +60,6 @@ class ForwardAvoidance:
         self.frame, self.received = {}, self.clock()
         self.distance, self.valid = None, 0
         self.speed = .2
-        self.range_blocked, self.clear_frames, self.last_seq = False, 0, None
         self.stop_count, self.last_stop = 0, None
 
     def _thresholds(self):
@@ -79,21 +79,6 @@ class ForwardAvoidance:
                         if not isinstance(value, bool) and isinstance(value, (int, float)) and math.isfinite(value) and value > 0:
                             values.append(float(value))
             self.valid, self.distance = len(values), min(values) if values else None
-            seq = frame.get('seq')
-            fresh = self._available(frame.get('age_ms'))
-            if fresh and seq != self.last_seq:
-                self.last_seq = seq
-                stop, _ = self._thresholds()
-                if self.distance <= stop:
-                    self.range_blocked, self.clear_frames = True, 0
-                elif self.distance >= stop+self.settings['clear_margin_mm']:
-                    self.clear_frames += 1
-                    if self.clear_frames >= 3:
-                        self.range_blocked = False
-                else:
-                    self.clear_frames = 0
-            elif not fresh:
-                self.clear_frames = 0
 
     def _available(self, age):
         seq = self.frame.get('seq')
@@ -101,7 +86,7 @@ class ForwardAvoidance:
                     and self.frame.get('fresh') is True and type(seq) is int and seq > 0
                     and not isinstance(age, bool) and isinstance(age, (int, float))
                     and math.isfinite(age) and 0 <= age <= self.settings['max_age_ms']
-                    and self.valid >= self.settings['min_valid_zones'])
+                    and self.distance is not None)
 
     def _snapshot(self, speed=None):
         if speed is not None and speed > 0:
@@ -112,28 +97,20 @@ class ForwardAvoidance:
                if not isinstance(age, bool) and isinstance(age, (int, float)) and math.isfinite(age) else None)
         enabled = self.settings['enabled']
         available = self._available(age)
-        if available and self.distance <= stop:
-            self.range_blocked, self.clear_frames = True, 0
         reason, scale, state = '', 1., 'clear'
         sensor_state = self.frame.get('state')
         if not enabled:
             state = 'disabled'
-        elif not self.config_error and sensor_state in ('absent', 'offline'):
-            # An explicitly absent or disconnected sensor cannot guard forward travel.
+        elif self.config_error:
+            scale, state = 0., 'unavailable'
+            reason = '避障配置无效：'+self.config_error
+        elif sensor_state in ('absent', 'offline'):
             state = sensor_state
         elif not available:
-            scale, state = 0., 'unavailable'
-            if self.config_error:
-                reason = '避障配置无效：'+self.config_error
-            elif age is not None and age > self.settings['max_age_ms']:
-                reason = f'ToF 前方测距已过期（{age/1000:.1f} 秒），已暂停前进；恢复后请重新发指令。'
-            elif self.frame.get('fresh') and self.valid < self.settings['min_valid_zones']:
-                reason = 'ToF 帧在更新，但前方有效测距不足，已暂停前进。'
-            else:
-                reason = 'ToF 前方测距未就绪，已暂停前进。'+str(self.frame.get('error_message') or '')[:180]
-        elif self.range_blocked:
+            state = 'unavailable'
+        elif self.distance <= stop:
             scale, state = 0., 'blocked'
-            reason = f'前方约 {self.distance/10:.0f} 厘米有障碍或尚未确认清空，已停止前进并保持平衡；可后退或原地转向。'
+            reason = f'前方约 {self.distance/10:.0f} 厘米有障碍，已停止前进并保持平衡。可以后退或原地转向。'
         elif self.distance < slow:
             scale, state = max(0., min(1., (self.distance-stop)/(slow-stop))), 'slowing'
         return dict(enabled=enabled, available=available, state=state, scale=scale,

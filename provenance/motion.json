@@ -58,8 +58,8 @@
     "assets/servo.js": "c900c2c41c13e210ed0c73697830a0a4ae615762f8b37baffe1042483015cbde",
     "assets/style.css": "2fe3e90bfc1febddb4455317a07363c43fa5d95fadd38e14ff67af24381b5e15",
     "python/controller.py": "71a4237695a1533b2bf7288fcff437ef6cddcaa58793f8f4c029bde811f9e49c",
-    "python/duck_thing.py": "1ee87bad4b26525bc0391c1cfd6888579f1479c2e0d2daae158245a1316f2016",
-    "python/forward_avoidance.py": "ca22e74c131f453813676e0a7bb72342ad403050c7548138526e92839cf2f120",
+    "python/duck_thing.py": "78af6d2a0e2d53866dc68427d1e0b1cff822d61b43bb7e20777a01eb5cde1d02",
+    "python/forward_avoidance.py": "585e44926c1d023f048d0b4f8dbf3a883882cdfb3406409c5085207a51feff3c",
     "python/gamepad.py": "78daad9e936df6c27a2ee9fc2be7921144a0b14efb2136a2d7377796662c12d2",
     "python/heading.py": "322f28038ae4e70fa5b585cef5b9617c50dfc6fa93f68d8550ed0eac59a036cb",
     "python/main.py": "ba08c0f42d665c2b610861d97c6cceb5b0778ebe9461f8139bde3e5d6687fbf1",
@@ -420,7 +420,7 @@
       "ballkick_right",
       "roller"
     ],
-    "integration": "Existing MCP stand/move/pick/roulade plus Sit, LeftKick, RightKick and SetWalkingMode. Cached forward-only walking/roller input limit; front ToF slows/stops travel. Confirmed absence or explicit offline state allows forward. Unknown state, other sensor faults and stale or invalid measurements pause forward. Cancel blocked MCP jobs/queue and require new command after recovery; held controls must release. Preserve torque, core controller math, special-model inputs, MCU, all model files and original web assets. Background monitor renews its private read-only lease; no hardware RPC or file I/O in the control loop. MCP comment and wire-size test use verified CN packet budget 16000 bytes, 60 tools, including JSON escaping/envelope."
+    "integration": "Existing MCP stand/move/pick/roulade plus Sit, LeftKick, RightKick and SetWalkingMode. Cached forward-only walking/roller input limit uses the nearest current valid front ToF return. Missing, stale or invalid measurements leave forward input available. A stop cancels blocked MCP jobs and requires a new command. Held controls must release. The background monitor renews its read-only lease. MCP comment and wire-size test use the verified CN packet budget of 16000 bytes and 60 tools, including JSON escaping and envelope."
   },
   "tof_mcp_outcome_overlay": {
     "previous_sha256": {
