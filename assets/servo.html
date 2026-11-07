@@ -1,11 +1,12 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261107-1">
+<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261107-1">
 <main class="page-servo">
 <header>
   <div><small>ARDUINO UNO Q</small><h1 data-zh="舵机设置">Servo setup</h1></div>
   <div class="header-actions">
     <nav class="nav"><a href="/" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" aria-current="page" data-zh="舵机设置">Servo setup</a></nav>
+    <button id="language" type="button">中文</button>
     <button class="stop" id="exit" data-zh="退出">Exit</button>
   </div>
 </header>
@@ -70,5 +71,5 @@
   <p class="hint" data-zh="「启用 / 禁用」只改变电压与过流保护的开关，「设置保护电流」只改变过流阈值。两项设置都会广播到所有舵机，无需扫描或选择 ID。过热保护保持开启，已保存的电压限值保持原值。电流分辨率为 6.5 mA。广播写入后，舵机不会逐个返回确认。">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
 </section>
 </main>
-<script src="servo.js?v=20261107-servo-i18n"></script>
+<script src="panel-language.js"></script><script src="servo.js?v=20261107-servo-language"></script>
 </html>

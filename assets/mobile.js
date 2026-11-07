@@ -136,6 +136,7 @@
   function renderDuckSounds(audio,busy){
     if(duckCall?.phase==='playing'&&!busy&&audio?.state==='idle'){
       duckCall.phase=audio.error?'failed':'done';
+      if(audio.error)notify(t('duckSoundFailed'));
     }
     const active=duckCall?.phase==='loading'||duckCall?.phase==='playing';
     for(const button of duckSounds){
@@ -147,6 +148,7 @@
       :duckCall?.phase==='done'?'duckSoundDone':'duckSoundHint';
     const text=t(key,{sound:duckCall?t(duckCall.label):''}),status=$('duckSoundStatus');
     if(status.textContent!==text)status.textContent=text;
+    $('duckCalls')?.setAttribute('title',text);
   }
   for(const button of duckSounds)button.onclick=async()=>{
     if(button.disabled)return;

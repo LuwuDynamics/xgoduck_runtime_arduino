@@ -69,7 +69,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       }
       const name=url.pathname==='/'?'mobile.html':url.pathname.slice(1),file=path.join(root,name);
       if(!fs.existsSync(file))return route.fulfill({status:404,body:''});
-      const type=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.html')?'text/html':'application/json';
+      const type=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.html')?'text/html':name.endsWith('.png')?'image/png':'application/json';
       return route.fulfill({contentType:type,body:fs.readFileSync(file)});
     };
     await page.route(origin+'/**',mockCockpit);
@@ -78,6 +78,10 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
+    assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'),'/xgo-favicon.png');
+    assert.equal(await page.locator('#portraitHint').isVisible(),true);
+    assert.equal(await page.locator('#moveStick').isHidden(),true);
+    assert.equal(await page.locator('#duckCalls').isHidden(),true);
     assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'电压 7.8 V');
     Object.assign(battery,{voltage_v:7.3,low:true});
     await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 7.3 V"]').waitFor();
@@ -147,6 +151,8 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.locator('#clean').click();assert.equal(await page.locator('.tof-layer').isVisible(),false);
     await page.locator('#restoreHud').click();assert.equal(await page.locator('.tof-layer').isVisible(),true);
 
+    await page.setViewportSize({width:844,height:390});
+    assert.equal(await page.locator('#portraitHint').isHidden(),true);
     Object.assign(battery,{voltage_v:8.1,low:false});
     Object.assign(robot,{mode:'policy',enabled:false,recovery:{phase:'getup',angle_deg:110}});
     const motionText=fragment=>page.waitForFunction(fragment=>
@@ -191,10 +197,12 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     blockForward=false;
     await touch('touchStart',[right]);
     await waitMotion(body=>body?.kind==='drive'&&body.twist[2]<0);
-    await page.evaluate(()=>window.dispatchEvent(new Event('blur')));
+    await page.setViewportSize({width:390,height:844});
     await waitMotion(body=>body?.kind==='release');
+    assert.equal(await page.locator('#portraitHint').isVisible(),true);
     await touch('touchEnd');
     await cdp.detach();
+    await page.setViewportSize({width:844,height:390});
     await page.locator('[data-motion=pick]').click();
     await waitMotion(body=>body?.kind==='pick');
     await page.locator('[data-motion=stop]').click();
@@ -206,10 +214,21 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     if(output)fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh','en']){
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
-      for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['desktop',1280,800]]){
+      for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['small-landscape',667,375],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
         const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
+        const portrait=height>width;
+        assert.equal(await page.locator('#portraitHint').isVisible(),portrait);
+        assert.equal(await page.locator('#moveStick').isVisible(),!portrait);
+        assert.equal(await page.locator('#duckCalls').isVisible(),!portrait);
+        const actionRows=await page.locator('.cockpit-action-row').evaluateAll(rows=>rows.map(row=>
+          [...row.children].map(button=>button.getBoundingClientRect().toJSON())));
+        assert.deepEqual(actionRows.map(row=>row.length),[7,6,7]);
+        for(let i=1;i<actionRows.length;i++)
+          assert(actionRows[i-1][0].bottom<=actionRows[i][0].top,`${language}/${name}: action rows overlap`);
+        for(const row of actionRows)for(const box of row)
+          assert(box.x>=0&&box.y===row[0].y&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: action off screen`);
         const bounds=await page.evaluate(()=>({panel:document.getElementById('tofPanel').getBoundingClientRect().toJSON(),top:document.querySelector('.top').getBoundingClientRect().bottom,bottom:document.querySelector('.bottom').getBoundingClientRect().top,values:['tofCenter','tofNearest'].map(id=>document.getElementById(id).getBoundingClientRect().toJSON())}));
         assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);
         for(const value of bounds.values)assert(value.top>=bounds.panel.top&&value.bottom<=bounds.panel.bottom,`${language}/${name}: ToF distance clipped`);
@@ -254,18 +273,16 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(writes.length,beforeRepeat,'A held key cannot resume after focus loss.');
     await desktop.keyboard.up('w');
 
-    await desktop.locator('#moreActions').click();
-    assert.equal(await desktop.locator('#poseDialog button[data-motion]').count(),6);
-    const beforeModal=writes.length;
-    await desktop.keyboard.press('w');
-    assert.equal(writes.length,beforeModal);
     for(const kind of ['head_left','head_right','head_center','mouth_open','mouth_close','default_pose']){
-      await desktop.locator(`#poseDialog [data-motion="${kind}"]:enabled`).click();
+      await desktop.locator(`.motion-action-rows [data-motion="${kind}"]:enabled`).click();
       await waitMotion(body=>body?.kind===kind);
     }
-    await desktop.getByRole('dialog',{name:'More actions'}).getByRole('button',{name:'Close',exact:true}).click();
-    await desktop.locator('#openDuckSounds').click();
-    assert.equal(await desktop.locator('[data-duck-sound]').count(),7);
+    const beforeModal=writes.length;
+    await desktop.locator('#settings').click();
+    await desktop.keyboard.press('w');
+    assert.equal(writes.length,beforeModal);
+    await desktop.locator('#closeConfig').click();
+    assert.equal(await desktop.locator('#duckCalls [data-duck-sound]').count(),7);
     for(const kind of ['greet','wheee']){
       await desktop.locator(`[data-duck-sound="${kind}"]:enabled`).click();
       await waitMotion(body=>body?.source==='duck-'+kind);
@@ -276,6 +293,6 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     if(output)await desktop.screenshot({path:path.join(output,'desktop-duck-calls.png')});
     await desktop.close();
     assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and eight layouts; touch, desktop keyboard, motion presets, and duck calls.');
+    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and ten layouts; rotation, touch, keyboard, motion presets, and duck calls.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

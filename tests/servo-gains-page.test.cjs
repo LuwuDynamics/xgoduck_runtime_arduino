@@ -20,7 +20,7 @@ async function setup(t,viewport={width:1100,height:900},locale='en-US'){
     const request=route.request(),url=new URL(request.url());
     if(!url.pathname.startsWith('/api/')){
       const file=path.join(__dirname,'../assets',url.pathname);
-      const contentType={'.html':'text/html','.css':'text/css','.js':'text/javascript'}[path.extname(file)];
+      const contentType={'.html':'text/html','.css':'text/css','.js':'text/javascript','.png':'image/png'}[path.extname(file)];
       return route.fulfill({status:200,body:await readFile(file),contentType});
     }
     const body=request.postDataJSON()||{},action=body.action,id=body.target_id;
@@ -137,5 +137,15 @@ test('Chinese locale translates navigation, scan progress and runtime readback f
   await read(page);
   assert.deepEqual(await values(page),['5','10','—','—']);
   assert.match(await page.locator('#message').textContent(),/读取运行值失败。等待舵机指令回包超时/);
+  const servoCommands=state.calls.filter(call=>call.path==='/api/servo').length;
+  await page.getByRole('button',{name:'Switch to English'}).click();
+  assert.equal(await page.locator('html').getAttribute('lang'),'en');
+  assert.match(await page.locator('#scan-status').textContent(),/^Stopped.*2 found/);
+  assert.match(await page.locator('#message').textContent(),/Runtime read failed: servo reply timeout/);
+  assert.equal(await page.locator('#scan-progress').getAttribute('aria-label'),'Servo scan progress');
+  assert.deepEqual(await values(page),['5','10','—','—']);
+  await page.getByRole('button',{name:'切换为中文'}).click();
+  assert.match(await page.locator('#message').textContent(),/读取运行值失败。等待舵机指令回包超时/);
+  assert.equal(state.calls.filter(call=>call.path==='/api/servo').length,servoCommands);
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
 });

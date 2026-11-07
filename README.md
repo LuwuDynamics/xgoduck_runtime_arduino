@@ -212,7 +212,7 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 
 - **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
 - **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
-- In the cockpit, **More actions** adds head turns, beak controls and Default pose. **Duck calls** plays seven different sounds through Duck’s speaker.
+- The cockpit shows two rows of actions and a row of seven duck calls. Tap a call to play it through Duck’s speaker. On a phone, rotate to landscape to use these controls.
 - On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
 - Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
 - **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.

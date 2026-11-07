@@ -13,6 +13,7 @@
   });
   const driveKeys = new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
   const heldKeys = new Set();
+  const portraitPhone = window.matchMedia('(orientation:portrait) and (pointer:coarse) and (max-width:600px)');
   let robot = null, gamepadActive = false, sequence = 0, gesture = null, pending = null, notice = null, noticeTimer;
   const deadzone = value => Math.abs(value) <= .15 ? 0 : value;
 
@@ -67,9 +68,11 @@
     for (const stick of sticks) stick.pad.setAttribute('aria-disabled', String(!state.ready || !!pending));
     for (const button of actions) {
       const kind = button.dataset.motion;
+      const headAction = kind.startsWith('head_');
       button.disabled = kind === 'stop' ? !robot || state.exclusive
         : kind === 'stand' || kind === 'default_pose' ? !state.usable || !!state.active || !!pending || robot?.arming === true
-        : !state.ready || !!pending || roller && kind.startsWith('head_');
+        : !state.ready || !!pending || roller && headAction;
+      if (headAction) button.title = roller ? t('poseRoller') : '';
       button.toggleAttribute('data-active', kind === state.active || kind === 'sit' && state.seated);
     }
     const feedback = robot?.battery?.low || state.exclusive ? null : notice;
@@ -89,9 +92,6 @@
       ? t('motionAccepted', {action:t(names[feedback.kind])})
       : t(key, {action:action ? t(names[action]) : ''}));
     if (status.textContent !== text) status.textContent = text;
-    const poseStatus = $('poseStatus');
-    const poseText = pending || feedback || !state.ready ? text : t(roller ? 'poseRoller' : 'poseHint');
-    if (poseStatus.textContent !== poseText) poseStatus.textContent = poseText;
     status.title = text;
     status.toggleAttribute('data-warning', !!(feedback?.text || gesture?.forwardBlocked
       || robot?.battery?.low || key === 'motionArmFailed'));
@@ -183,7 +183,7 @@
   }
 
   function keyboardBlocked(target) {
-    return document.body.classList.contains('clean') || document.querySelector('dialog[open]')
+    return portraitPhone.matches || document.body.classList.contains('clean') || document.querySelector('dialog[open]')
       || target.closest?.('input, textarea, select, [contenteditable], [role="textbox"]');
   }
 
@@ -232,13 +232,9 @@
   }
   for (const button of actions) button.addEventListener('click', () => action(button.dataset.motion));
   $('torqueOff').addEventListener('click', () => action('torque_off'));
-  for (const [button, dialog] of [['moreActions','poseDialog'], ['openDuckSounds','duckSoundDialog']]) {
-    $(button).addEventListener('click', () => {
-      release();
-      showNotice(null);
-      $(dialog).showModal();
-    });
-  }
+  portraitPhone.addEventListener('change', () => {
+    if (portraitPhone.matches) {release(); render();}
+  });
   for (const id of ['clean','settings','padLink','openBinding']) $(id).addEventListener('click', release);
   for (const event of ['blur','pagehide']) window.addEventListener(event, release);
   document.addEventListener('visibilitychange', () => {if (document.hidden) release();});

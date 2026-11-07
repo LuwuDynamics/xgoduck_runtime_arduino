@@ -48,14 +48,14 @@
     "integration": "Stable control/calibration/servo web files and MCU protocol. Retain AI source ownership and independent ToF task. AppController blocks arming for nondefault legacy software zeros until all hardware centers are acknowledged. Chat/media/dual-mic/wake/mouth remain."
   },
   "sha256": {
-    "assets/app.js": "73dd468b2e651fa2bae02eb2d0f4015686e6ea8b12c650a1799951eabbc0f650",
-    "assets/calibrate.html": "6895e932bd0e548721f9ccc5fa22295d27c395b1f2a9f72ab8439eea618ebe08",
+    "assets/app.js": "5827abd2ae554414f6d738508d663a7fb115f2a2129cf3dfb70be78d9327fff6",
+    "assets/calibrate.html": "b4d545d4fe7440b0fe3569fedf737753701be75da59a7cf6db5a39a21095c55c",
     "assets/calibrate.js": "ed2a3205d887775795bf9051de3b1ada3d1f548fa32136af5254543d9e4eb035",
     "assets/imu-calibration-pose.png": "eb0415f86555cab9fb6f70d017b55aff6ad9dc6ec8e81775bac0a20177ff1da5",
-    "assets/index.html": "2f062d2d8c9a2bde0c4ea9165a11bbb0df8768085bbf3dc2bdbfbe876faa3f05",
+    "assets/index.html": "03ec70878b86ca7fb10e8edb0d8b0071abe2b057425a512604f9af542954d85b",
     "assets/servo.css": "cbf9e517f31e9d7bf656cfc62a4f40c44240669bdab042354a8df5f4b47f4eae",
-    "assets/servo.html": "ee1e3f388ec0011b6ce044ad05642c78d056ddb17bbb0aeba9c43f636d2b7ecd",
-    "assets/servo.js": "20c067b8b7d527f40c5f45c1d21ce978d80035260c201df2bb5d03f8f7a1ea94",
+    "assets/servo.html": "d2b114cb5781e3f4e6e452aef3952577965ea517e507d54219c423bf4774602c",
+    "assets/servo.js": "c900c2c41c13e210ed0c73697830a0a4ae615762f8b37baffe1042483015cbde",
     "assets/style.css": "2fe3e90bfc1febddb4455317a07363c43fa5d95fadd38e14ff67af24381b5e15",
     "python/controller.py": "71a4237695a1533b2bf7288fcff437ef6cddcaa58793f8f4c029bde811f9e49c",
     "python/duck_thing.py": "1ee87bad4b26525bc0391c1cfd6888579f1479c2e0d2daae158245a1316f2016",
@@ -91,7 +91,9 @@
     "sketch/tof_sensor.h": "72f4463bdfd8da5d307281fa988cd4a6f0d8e6b90f7bda8643ff947ace106303",
     "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
     "tools/bridge_patch.py": "a07d6e63ea15d3de21351e342b4f46d3af678ca90dc9f1723ee2cf853dbddde0",
-    "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2"
+    "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2",
+    "assets/panel-language.js": "ec9aca56887d6255f3332d4a9487ffa400cccb8b2282c6440b1e26081ebbdeef",
+    "assets/xgo-favicon.png": "a625472972c22b00cdd4bd4c73ff8721ec8618e1d7b14a1a3274b49a388114cb"
   },
   "stable_exact_files": [
     "assets/imu-calibration-pose.png",
@@ -171,14 +173,14 @@
     "reset_imu_calibration": "Clear the AI arming interlock when a saved calibration is explicitly disabled."
   },
   "preserved_sha256": {
-    "assets/mobile-i18n.js": "1e11b171d7efb54714fe715370bf494c27a01375365b6e171b223db581ca911c",
+    "assets/mobile-i18n.js": "6843de57843cd7ae50370d0d5395395c8e6efcb638a0358520f851767f45765e",
     "assets/mobile-tof.css": "ac5f78f9ae4052430216824a92a8417c6d6774ec71e63ee0f9458aca2d609466",
     "assets/mobile-tof.js": "d439753765a76894bf678d4b4fbc5863000ee3ff86590d7069baa14dba641c2f",
     "python/tof_status.py": "a727dc9cb694c79d2437d6b75632e38064b4ae5357f17b037bc048e1a2b9505b",
-    "assets/audio.html": "fdad8d6cd2309b9daaf807fbcc386ba2230220678e4101fdd6eefafe7bc9a278",
+    "assets/audio.html": "a63053a9105807807e448093e34f8c920bb305738d84a480b5d77045adc31f15",
     "assets/camera.js": "55178712a1d151347873f45802a75276b6913d7a079a05cf26f1cb837b30d5e9",
     "assets/gamepad.css": "7747776e0867a91f1ea8c7ceaae6df1f2ba22363e8051b8947343d972dbb319f",
-    "assets/gamepad.html": "c9276ae743edae26acc4c6ff78b3f5131d95728cf26d9c4ff6fb0e4d27dc61ce",
+    "assets/gamepad.html": "2ea43fb480b403f125e8449adc35128d100d01ecf57e00b8cce2652598817f6f",
     "assets/gamepad.js": "9a6d163ed9a7c98ac4c7ff73bace57126fdbc6374d55ecbda72559c70d8e4ed9",
     "assets/media-audio.js": "bb4cb14b4a14da30b9c944f4ffbf2e38532353c3d653ffabbeb51f349e0ea57a",
     "assets/media-camera.js": "4ac86f9095fc1f69a61e9ea2dcf0c3b3dc8a1a14736329de04b868b1758ce9b4",
@@ -187,10 +189,10 @@
     "assets/mobile-fullscreen.js": "ffdef3bf57edd8b814a8a4b18563a9cf77eeaa90ca63384da580e58cd950ce92",
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
-    "assets/mobile.css": "2d1acb9c2bce213a2d08f2a4e809315621febf912a6b49e7116a41f4dcc89dd1",
-    "assets/mobile.html": "e5732dd916ee1ab9c7e72b095ebd440d8719cce5741bac39155d3bab67e25a2b",
-    "assets/mobile.js": "a2e37703c3997e95c51b9d5cddfe2547438ef0720e0be76761c192fcf90f2dc7",
-    "assets/mobile-motion.js": "6e1d1d87cf0b78ecefb234cf0575a5baf6302da4d19f8c290596f3d6846b6ddb",
+    "assets/mobile.css": "25ceec23eb58fa62152689eb76ff55b6efae6812e7797e312820f8a0bfa1a21f",
+    "assets/mobile.html": "d22d0134c82d13e4b642fa566a05f071380b055703ece2aafc216d4d1f522016",
+    "assets/mobile.js": "fe0060a76b1587ab3d4ea35fc95e5daa6c38a2b3afaf41b3295a542ebc545f11",
+    "assets/mobile-motion.js": "db885e824df38eca55b1e6b9f4828cc1747191fff5bdd34ba0a76bfe7ef180fd",
     "assets/mobile.webmanifest": "fdf83e18252c8cdf4b76ed93f04a3b0ad05637e44a42d07f9c435b1bb386ba12",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
     "python/app_paths.py": "9f854ee38ff303c435b337585a951f68bc811b393744fc1924cdf4ba121c763b",
@@ -551,7 +553,7 @@
     ]
   },
   "control_page_locale_overlay": {
-    "scope": "Control page at port 9527. The primary browser language selects simplified Chinese for zh, English otherwise. Localized labels, feedback, and common errors use the existing motion and calibration APIs.",
+    "scope": "Control page at port 9527. The primary browser language selects simplified Chinese for zh, English otherwise. Localized labels, feedback, and common errors use the existing motion and calibration APIs. The manual switch translates the current status and labels in place.",
     "files": [
       "assets/index.html",
       "assets/app.js",
@@ -559,7 +561,7 @@
     ]
   },
   "servo_page_locale_overlay": {
-    "scope": "Servo setup uses simplified Chinese for a Chinese primary browser language and English otherwise. Navigation, setup, scanning, gain readback, and protection messages follow that locale. The calibration navigation uses 标定.",
+    "scope": "Servo setup uses simplified Chinese for a Chinese primary browser language and English otherwise. Navigation, setup, scanning, gain readback, and protection messages follow that locale. The calibration navigation uses 标定. The manual switch keeps the current scan and readback results.",
     "files": [
       "assets/servo.html",
       "assets/servo.js",
@@ -568,7 +570,7 @@
     ]
   },
   "cockpit_keyboard_and_presets_overlay": {
-    "scope": "Desktop keys and cockpit sticks share the bounded movement lease. Head and beak presets use the Mini Program targets. Default pose uses the existing Hold mode. Seven synthesized calls use the local USB audio handoff.",
+    "scope": "Desktop keys and cockpit sticks share the bounded movement lease. Head and beak presets use the Mini Program targets. Default pose uses the existing Hold mode. Seven synthesized calls use the local USB audio handoff. The cockpit displays two rows of motion controls and a row of duck calls. On narrow touch screens the portrait view prompts for landscape and releases active steering.",
     "previous_sha256": {
       "python/forward_avoidance.py": "507b65843b8172452d2a1c6c2bbbd7ea9e228961a46823609f66252d1536f0b7",
       "assets/mobile.html": "5929022dd1728ca1bd449f1d063b83d049fd8ca79a887c53020d89a1a799a563",
@@ -579,5 +581,9 @@
       "python/motion_access.py": "fdbebe6a2bcb4f00c98716d645d010a44d868433df036bb42174c4d1dc40ad73",
       "python/voice_media.py": "f07934b91a1bb0446b49648a4c3d149685603939be9f26bd7b9593b4e1ec4996"
     }
+  },
+  "website_favicon": {
+    "asset": "assets/xgo-favicon.png",
+    "source": "https://www.xgorobot.com/images/logo.png"
   }
 }

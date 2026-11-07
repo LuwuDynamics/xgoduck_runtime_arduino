@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="stylesheet" href="style.css?v=20261107-control-i18n">
+<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=20261107-control-i18n">
 <main>
-<header><div><small>ARDUINO UNO Q</small><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a></nav><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
+<header><div><small>ARDUINO UNO Q</small><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a></nav><button id="language" type="button">中文</button><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
 <p id="message" data-zh="正在连接…">Connecting…</p>
 <section class="metrics"><article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article><article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article><article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article><article><small data-zh="电压">Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
 <section>
@@ -47,4 +47,4 @@
     </figure>
   </div>
 </section>
-</main><script src="app.js?v=20261107-control-i18n"></script></html>
+</main><script src="panel-language.js"></script><script src="app.js?v=20261107-control-language"></script></html>
