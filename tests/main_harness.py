@@ -45,7 +45,6 @@ class HardwareHandler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         if self.path == '/prepare-usb':
             assert body == {}
-            assert self.server.host
             self.server.checks += 1
         else:
             assert self.path == '/provision' and isinstance(body['enabled'], bool)
@@ -76,7 +75,7 @@ class Bridge:
 
     @classmethod
     def provide(cls, name, callback):
-        assert ACTIVE_HARDWARE.host, 'Bridge opened before USB preparation completed'
+        assert ACTIVE_HARDWARE.checks == 1, 'Bridge opened before USB role verification completed'
         cls.callbacks[name] = callback
 
     @classmethod
@@ -119,7 +118,9 @@ def main():
     global ACTIVE_HARDWARE
     report = Path(sys.argv[1])
     mode = sys.argv[2]
+    usb_host = sys.argv[3] == 'host'
     helper = HardwareServer(os.environ['DUCK_GAMEPAD_SOCKET'], HardwareHandler)
+    helper.host = usb_host
     ACTIVE_HARDWARE = helper
     threading.Thread(target=helper.serve_forever, daemon=True).start()
     stop_feedback = threading.Event()
@@ -155,7 +156,7 @@ def main():
                     unchanged = client.post('/api/voice/region', json={'cloud_region': 'cn'}, headers={'X-Device-Test': '1'})
                     assert unchanged.status_code == 200 and not unchanged.json()['changed']
                     assert not Bridge.servo_ops, 'Server selection touched servo parameters'
-                    assert helper.host and helper.switches == 0 and helper.checks == 1
+                    assert helper.host == usb_host and helper.switches == 0 and helper.checks == 1
                     assert client.get('/api/status').json()['full_robot_ready']
                     from local_ipc import request
                     wait_for(lambda: state['tof'].status()['fresh'])

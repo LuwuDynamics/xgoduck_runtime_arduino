@@ -86,7 +86,7 @@ Python 控制器、`wire.py` 和 STM32 sketch 必须成套更新；仅覆盖 Pyt
 
 1. 安装 [Arduino App Lab](https://www.arduino.cc/en/uno-q)，用 USB-C **数据线**连接裸板和电脑，按 [Arduino UNO Q 用户手册](https://docs.arduino.cc/tutorials/uno-q/user-manual/)完成板子命名、Wi-Fi 和 Linux 账户密码设置。首次安装需要板子能联网下载系统包、Arduino 依赖、容器和 Python 依赖。
 2. 记录板子局域网 IP，在电脑终端验证 `ssh arduino@<板子IP>`。密码使用你自己在 App Lab 中设置的密码；本项目没有统一出厂密码。App Lab 的 Network 模式也应能连接。
-3. 准备能供电的 USB-C Host Hub，后续接 USB 麦克风、USB 扬声器和可选摄像头。**硬件支持安装会切 USB Host，电脑的 USB/ADB 连接会断开**，所以先确认 Wi-Fi/SSH 可用，通过 Wi-Fi/SSH 安装。无需显示器。
+3. 准备能供电的 USB-C Host Hub，后续接 USB 麦克风、USB 扬声器和可选摄像头。**安装时 USB 探测可能中断电脑的 USB/ADB 连接**，请通过 Wi-Fi/SSH 安装。无需显示器。
 4. 装配、供电、舵机 ID 和校准按 [硬件指南](https://github.com/LuwuDynamics/xgoduck_hardware/blob/master/README_CN.md)及主 README 完成。首次软件检查先保持舵机扭矩关闭。
 
 ## 3. 获取 App，并保留旧机器人的数据
@@ -138,9 +138,9 @@ bash tools/install-ai-support.sh
 - 通过官方 `arduino-app-cli properties set default <App目录>` 设置开机默认 App，并启用 `arduino-app-cli.service`；启动顺序在硬件辅助服务之后。
 - 关闭旧 `duck-device-test.service` 的用户级自启，避免抢占 9528 和 USB 音频。有旧豆包配置时仅首次复制一份，保留原文件。
 - 安装并启用 nginx 网页入口，打开 `http://<板子IP>/` 即进入移动驾驶页，无需端口号和页面后缀。已有安装可单独运行 `sudo bash tools/install-mobile-web.sh`；该步骤可在 App 运行时执行。
-- 如已安装旧 `duck-gamepad.service`、`duck-usb-device.service` 或 `duck-usb-host.service`，停用其自启，由新辅助服务接管，避免重复读取手柄或晚启动的旧 USB 服务反向切换模式；旧 unit 文件保留。
+- 停用旧手柄和 USB 角色服务的自启，包括此前的 `xgoduck-ai-usb-host.service`。新服务接管后，旧 unit 文件仍可用于回退。
 
-脚本可重复执行；App 目录改变或硬件辅助代码升级后需重跑。**先停止所有 App，通过 Wi-Fi/SSH 执行。安装脚本会准备 USB Host，需要时重启共享 router，但不启动 App、不烧写 MCU。** 运行中的 App 会使安装器直接拒绝继续。安装器启用 `xgoduck-ai-usb-host.service`，以后每次开机在 App CLI 和容器启动之前完成 Host 准备。
+脚本可重复执行；App 目录改变或硬件辅助代码升级后需重跑。**先停止所有 App，通过 Wi-Fi/SSH 执行。** 安装器运行并启用 `xgoduck-ai-usb-startup.service`，需要时重启共享 router，App 启动和 MCU 上传由后续的 Run 完成。
 
 ## 5. 设置 Bridge 速率，首次运行一次
 
@@ -155,7 +155,7 @@ arduino-app-cli app start "$PWD"
 
 **Run 是启动整个 App 的构建和运行流程，Arduino 工具可能编译并上传其中的 sketch。** 本分支没有修改 STM32 源码，但 Run 不能被当作保证不上传 MCU 的纯 Python 更新。2 Mbps router 设置是全局设置；换用其他 Bridge 速率的 App 前按[技术参考](technical_reference.md#running)恢复。
 
-Host 准备在 **App 容器创建之前** 完成。开机 oneshot 服务先暂停 USB 串口监视器、代理及 Arduino router，解除 gadget 的 UDC 绑定，停止 `adbd.service`，切换 Host，再恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART；重启 router 又会更换容器绑定的 socket、重置 MCU，因此不能在运动进程或容器已经启动后才做准备。已是 Host 且 ADB 未运行时不重启 router。App 入口只检查 Host 已就绪，未就绪时退出并提示重跑安装器，不尝试热切换。
+USB 探测在 **App 容器创建之前** 完成。开机先开 Host，最多等待 5 秒识别 USB 摄像头或音频接口。检测到音视频设备就保留 Host，否则切回 Device，包括只接了空 Hub 的情况。切换角色前，开机服务暂停 USB 串口监视器、代理及 Arduino router。确定角色后恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART，重启 router 又会更换容器绑定的 socket、重置 MCU。App 入口只检查当前 USB 角色。驾驶舱手动切换后，单独重启 App 会沿用所选模式，下次整机开机重新探测。
 
 切回 Device 后恢复原本启用或运行的 ADB 和 USB 串口监视器，不改变其 enable/mask 设置。只写 USB mode 而保留 ADB 运行，会让 ADB 在 Host 模式下反复重启。不要同时运行旧的 Host 启动脚本，也不要在运动中切换 USB 模式；本次修补隔离 App 启动时的切换，不替换系统内核。安装支持只补装缺少的依赖，不主动升级已经安装的系统包。
 
@@ -258,7 +258,7 @@ duck_previous_app="/home/arduino/ArduinoApps/你的旧Duck目录"
 cd ~/ArduinoApps/xgoduck_ai
 arduino-app-cli app stop "$PWD"
 arduino-app-cli properties set default "$duck_previous_app"
-sudo systemctl disable --now xgoduck-ai-hardware.service xgoduck-ai-usb-host.service
+sudo systemctl disable --now xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
 sudo rm -f /etc/systemd/system/arduino-app-cli.service.d/xgoduck-ai.conf
 sudo systemctl daemon-reload
 ```
@@ -278,7 +278,7 @@ sudo systemctl daemon-reload
 
 系统另有前述 root 硬件辅助服务，采集时还会按需调用 `arecord/aplay/v4l2-ctl`。业务进程通过仅容器回环地址的 9530/9531 通信，每次 App 启动使用临时令牌。聊天不直接打开 Bridge/UART。聊天进程故障会撤回动作并重启，运动主进程退出时清理聊天及录音子进程。
 
-网页仍在 `http://<板子IP>:9527/`，原诊断接口在 9528。网页录音、监听、播放和对讲使用音频时先释放聊天声卡，结束后恢复聊天；摄像头共享，原页面结构不变。系统开机先准备 USB Host，App 和聊天单独重启都不再次切换。
+网页仍在 `http://<板子IP>:9527/`，原诊断接口在 9528。网页录音、监听、播放和对讲使用音频时先释放聊天声卡，结束后恢复聊天；摄像头共享，原页面结构不变。
 
 语音可以通过 `self.audio_speaker.set_volume` 设置 0–100% 音量，与网页共用持久值。AEC 默认关闭，可用 `self.set_aec` 开启，实际效果需 USB 音频验收。
 
@@ -391,7 +391,7 @@ curl -fsS http://127.0.0.1:9527/api/voice/status | python3 -m json.tool
 | `waiting_audio` | Host 模式、Hub 供电、USB capture/playback 声卡及持久选择；MCP 仍可在线 |
 | 手机找不到设备 | 硬件服务是否启动、是否已联网并绑定而停止广播、蓝牙是否可用；原系统/驱动故障需单独排查 |
 | 开机不运行 | 默认 App 是否指向这个目录，首次联网 Run 是否完成，官方 daemon 日志和 App Lab 控制台 |
-| 安装后 USB 连接消失 | 支持安装已准备 Host，使用提前验证的 Wi-Fi/SSH；后续接 Host Hub |
+| 安装后 USB 连接消失 | 用 Wi-Fi/SSH 查看 `journalctl -u xgoduck-ai-usb-startup.service -b`。如当前为 Host，可在驾驶舱关闭 Host 后连接电脑 |
 | 重启后 9528 被占用 | 检查并关闭旧 `duck-device-test.service` 自启 |
 
 硬件服务可独立于聊天和 USB 音频广播。若首次离线启动时 App CLI 在进入 Python 前因缺少依赖失败，成功配网后只对**当前仍是默认的本 App**尝试恢复一次；已经运行过又被手动 Stop 的 App 不会被这个恢复逻辑擅自重启。建议首次依赖完整缓存后再做离线冷启动验收。

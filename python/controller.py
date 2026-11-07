@@ -24,10 +24,10 @@ ROULADE_START_TIMEOUT_S = 0.5
 SITSTAND_STAND_S = 1.0
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
-LOW_BATTERY_MV = 6600
+LOW_BATTERY_MV = 6000
 BATTERY_REARM_MV = 7600
 BATTERY_SAMPLE_MAX_AGE_S = .4
-LOW_BATTERY_CONFIRM_S = 1.
+LOW_BATTERY_CONFIRM_S = 5.
 BATTERY_REARM_CONFIRM_S = 2.
 BATTERY_WARNING_TIMEOUT_S = 12.0
 LEG_FEEDBACK_MASK = 0x3ff  # The first ten bits of the hardware servo order.
@@ -1359,8 +1359,7 @@ class Controller:
             result['mcu_runtime'] = dict(self.diagnostics)
             voltage = self._battery_voltage(now)
             result['battery'] = dict(voltage_v=voltage / 1000 if voltage is not None else None,
-                                     low=self.battery_phase != 'normal' or
-                                         voltage is not None and voltage <= LOW_BATTERY_MV,
+                                     low=self.battery_phase != 'normal',
                                      phase=self.battery_phase)
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']

@@ -19,7 +19,7 @@ Choose **XGO Duck (master)** for browser motion control, servo setup and calibra
 | Media and ranging | — | USB camera preview, snapshots, live microphone monitoring, speaker test, and optional ToF ranging and forward obstacle avoidance |
 | Web access | `http://<board-ip>:9527/` for motion control | `http://<board-ip>/` for the cockpit and Link AI, with motion control on port `9527` |
 
-Both apps use a 2 Mbps Bridge. For XGO Duck AI, download `xgoduck_ai.zip` in step 3 and follow step 4 to prepare USB Host, the cockpit and automatic startup.
+Both apps use a 2 Mbps Bridge. For XGO Duck AI, download `xgoduck_ai.zip` in step 3 and follow step 4 to set up USB detection, the cockpit and automatic startup.
 
 ## 1. Set up Wi-Fi
 
@@ -62,7 +62,7 @@ I will enter the password at the terminal prompt.
    sudo bash tools/router-2m.sh
    ```
 
-3. The first script installs host dependencies, prepares USB Host, the cockpit and autostart, and precompiles the MCU sketch. The second sets the shared Router Bridge serial rate to **2 Mbps**. Switching to USB Host disconnects computer USB/ADB access.
+3. The first script installs host dependencies, sets up USB detection, the cockpit and autostart, and precompiles the MCU sketch. The second sets the shared Router Bridge serial rate to **2 Mbps**. Use Wi-Fi SSH because the USB probe may interrupt computer USB/ADB access.
 4. Stay online. Connect through **Network** in App Lab, open **XGO Duck AI**, and click **Run**. The first run may compile and upload the STM32 sketch while it prepares dependencies. Later power-ups start the App automatically. [XGO Duck AI installation and update details](docs/ai-chat-en.md)
 
 <a name="ai-assisted-install"></a>
@@ -197,7 +197,7 @@ I will sign in, grant Bluetooth access, bind Duck and change regions myself.
 
 ### Startup sounds
 
-Later power-ups prepare USB Host and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
+Later power-ups detect USB audio and video and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
 
 | Order | Meaning | Example |
 | --- | --- | --- |
@@ -216,6 +216,7 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 - On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
 - Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
 - **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
+- On power-up, Duck tries USB Host for up to 5 seconds of device detection. It keeps Host if a USB camera or audio device is detected and switches to Device otherwise. For accessories plugged in after boot, use the **USB Host** switch at the top of the cockpit over Wi-Fi after stopping Duck. Switching interrupts the current USB connection.
 - The cockpit displays an 8×8 distance map with a working ToF sensor. Forward travel slows within 15 cm and stops at 10 cm by default. If ToF is absent or offline, you can issue a new forward command without distance-based avoidance. Stale or invalid readings while the sensor reports ranging still pause forward travel. [Avoidance settings](docs/forward-avoidance.md)
 
 ## FAQ

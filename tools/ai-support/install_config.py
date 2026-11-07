@@ -12,8 +12,8 @@ def write_units(root, identity, system=Path('/etc/systemd/system')):
     system = Path(system)
     unit = f'''[Unit]
 Description=XGO Duck AI USB, gamepad and BluFi support
-After=bluetooth.service NetworkManager.service adbd.service sys-kernel-config.mount xgoduck-ai-usb-host.service
-Wants=bluetooth.service NetworkManager.service sys-kernel-config.mount xgoduck-ai-usb-host.service
+After=bluetooth.service NetworkManager.service adbd.service sys-kernel-config.mount xgoduck-ai-usb-startup.service
+Wants=bluetooth.service NetworkManager.service sys-kernel-config.mount xgoduck-ai-usb-startup.service
 
 [Service]
 Type=simple
@@ -35,17 +35,17 @@ WantedBy=multi-user.target
 '''
     system.mkdir(parents=True, exist_ok=True)
     (system / 'xgoduck-ai-hardware.service').write_text(unit)
-    (system / 'xgoduck-ai-usb-host.service').write_text('''[Unit]
-Description=Prepare XGO Duck USB Host before the App container
-After=adbd.service sys-kernel-config.mount
-Wants=sys-kernel-config.mount
+    (system / 'xgoduck-ai-usb-startup.service').write_text('''[Unit]
+Description=Detect XGO Duck USB audio and video before the App container
+After=adbd.service sys-kernel-config.mount sys-kernel-debug.mount
+Wants=sys-kernel-config.mount sys-kernel-debug.mount
 Before=xgoduck-ai-hardware.service arduino-app-cli.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/usb_prepare.py
-TimeoutStartSec=30
+TimeoutStartSec=60
 NoNewPrivileges=true
 ProtectSystem=strict
 ReadWritePaths=-/sys/kernel/debug/usb/4e00000.usb/mode
@@ -60,8 +60,8 @@ WantedBy=multi-user.target
     dropin = system / 'arduino-app-cli.service.d'
     dropin.mkdir(parents=True, exist_ok=True)
     (dropin / 'xgoduck-ai.conf').write_text(f'''[Unit]
-After=xgoduck-ai-hardware.service xgoduck-ai-usb-host.service
-Wants=xgoduck-ai-hardware.service xgoduck-ai-usb-host.service
+After=xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
+Wants=xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
 
 [Service]
 ExecStartPre=/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/sketch_cache.py {quote(root)}

@@ -12,6 +12,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const page=await context.newPage(),errors=[],writes=[];
     page.on('pageerror',error=>errors.push(error.message));
     const media={camera:{available:true,running:false,ready:false,device:'/dev/video2',frames:0,fps:0,error:'',light:{supported:true,enabled:false,error:''}},audio:{available:true,volume:100,state:'idle'}};
+    const usb={available:true,host:true,mode:'host'};
     const battery={voltage_v:7.8,low:false};
     const robot={mode:'shadow',enabled:false,feedback_hz:100,control_ready:true,battery,
       recovery:{phase:'walk',angle_deg:0},input_source:'web'};
@@ -19,6 +20,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
     let tofHTTP=200,tofDelay=0,blockForward=false;
     let holdNext=false,releaseStatus,capturedStatus;
+    let holdNextUsb=false,releaseUsbStatus,capturedUsbStatus;
     await page.addInitScript(()=>{
       window.__phoneMicCalls=0;window.__liveOpened=0;window.__liveClosed=0;
       Object.defineProperty(navigator,'mediaDevices',{configurable:true,value:{getUserMedia:async()=>{window.__phoneMicCalls++;throw Error('Phone capture must not be requested.');}}});
@@ -46,6 +48,12 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
             if(body.kind==='torque_off')Object.assign(robot,{mode:'off',enabled:false});
             return route.fulfill({json:{ok:true,forward_blocked:blockForward&&body.twist?.[0]>0}});
           }
+          if(url.pathname==='/api/gamepad/usb'){
+            assert.equal(request.headers()['x-duck-gamepad'],'1');
+            assert.equal(typeof body.host,'boolean');
+            Object.assign(usb,{host:body.host,mode:body.host?'host':'device'});
+            return route.fulfill({json:{usb}});
+          }
           if(url.pathname==='/api/media/camera/light')media.camera.light.enabled=body.enabled;
           else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:true,fps:30});
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
@@ -58,7 +66,11 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           if(tofDelay)await new Promise(resolve=>setTimeout(resolve,tofDelay));
           return route.fulfill({status:tofHTTP,json:snapshot});
         }
-        if(url.pathname==='/api/gamepad/status')return route.fulfill({json:{input:{connected:false},control:{enabled:false},usb:{available:true,host:true}}});
+        if(url.pathname==='/api/gamepad/status'){
+          const snapshot={...usb};
+          if(holdNextUsb){holdNextUsb=false;capturedUsbStatus();await new Promise(resolve=>releaseUsbStatus=resolve);}
+          return route.fulfill({json:{input:{connected:false},control:{enabled:false},usb:snapshot}});
+        }
         if(url.pathname==='/api/media/status'){
           const snapshot=structuredClone(media);
           if(holdNext){holdNext=false;capturedStatus();await new Promise(resolve=>releaseStatus=resolve);}
@@ -82,6 +94,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#portraitHint').isVisible(),true);
     assert.equal(await page.locator('#moveStick').isHidden(),true);
     assert.equal(await page.locator('#duckCalls').isHidden(),true);
+    assert.equal(await page.locator('#usbHostQuick[aria-checked="true"]').innerText(),'USB Host：已开启');
     assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'电压 7.8 V');
     Object.assign(battery,{voltage_v:7.3,low:true});
     await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 7.3 V"]').waitFor();
@@ -120,6 +133,22 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       ['/api/media/camera/light',{enabled:true}],['/api/media/camera/start',{}],
       ['/api/media/camera/light',{enabled:false}],['/api/media/camera/stop',{}]
     ]);
+
+    const capturedUsb=new Promise(resolve=>capturedUsbStatus=resolve);holdNextUsb=true;
+    await Promise.race([capturedUsb,new Promise((_,reject)=>setTimeout(()=>reject(Error('No USB status poll')),4000))]);
+    await page.locator('#usbHostQuick').click();
+    await page.locator('#usbHostQuick[aria-checked="false"]:enabled').waitFor();
+    assert.equal(await page.locator('#usbHostQuick').innerText(),'USB Host: Off');
+    assert.deepEqual(writes.at(-1),{path:'/api/gamepad/usb',body:{host:false}});
+    releaseUsbStatus();await page.waitForTimeout(100);
+    assert.equal(await page.locator('#usbHostQuick').getAttribute('aria-checked'),'false','An older poll must not undo a USB switch.');
+    await page.locator('#settings').click();
+    assert.equal(await page.locator('#usbHost').getAttribute('aria-checked'),'false');
+    await page.locator('#usbHost').click();
+    await page.locator('#usbHost[aria-checked="true"]:enabled').waitFor();
+    await page.locator('#closeConfig').click();
+    assert.equal(await page.locator('#usbHostQuick').innerText(),'USB Host: On');
+    assert.deepEqual(writes.at(-1),{path:'/api/gamepad/usb',body:{host:true}});
 
     await page.locator('#listen').click();await page.getByRole('button',{name:/Stop listening/}).waitFor();
     await page.locator('#language').click();await page.getByRole('button',{name:/停止监听/}).waitFor();
@@ -177,11 +206,13 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const move=await page.locator('#moveStick').boundingBox(),turn=await page.locator('#turnStick').boundingBox();
     const left={x:move.x+move.width*.31,y:move.y+move.height*.31,id:1};
     const right={x:turn.x+turn.width*.74,y:turn.y+turn.height*.5,id:2};
+    let nextWrite=writes.length;
     const waitMotion=predicate=>new Promise((resolve,reject)=>{
       const deadline=Date.now()+3500;
       const timer=setInterval(()=>{
-        if(predicate(writes.at(-1)?.body)){clearInterval(timer);resolve();}
-        else if(Date.now()>=deadline){clearInterval(timer);reject(Error('No matching cockpit command'));}
+        const match=writes.findIndex(({body},index)=>index>=nextWrite&&predicate(body));
+        if(match>=0){nextWrite=match+1;clearInterval(timer);resolve();}
+        else if(Date.now()>=deadline){clearInterval(timer);reject(Error('No matching cockpit command for '+predicate));}
       },15);
     });
     await touch('touchStart',[left,right]);
@@ -216,7 +247,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
       for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['small-landscape',667,375],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
-        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
+        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','usbHostQuick','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
         const portrait=height>width;
         assert.equal(await page.locator('#portraitHint').isVisible(),portrait);
@@ -293,6 +324,6 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     if(output)await desktop.screenshot({path:path.join(output,'desktop-duck-calls.png')});
     await desktop.close();
     assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en, camera/light, audio cleanup, fullscreen, ToF and ten layouts; rotation, touch, keyboard, motion presets, and duck calls.');
+    console.log('PASS: zh/en, camera/light, USB Host switching, audio cleanup, fullscreen, ToF and ten layouts, plus rotation, touch, keyboard, motion presets and duck calls.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

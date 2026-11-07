@@ -205,6 +205,8 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
 @media(orientation:landscape) and (max-height:500px){
   #cockpit{--stick-size:clamp(66px,21dvh,100px)}
   .top{column-gap:8px}
+  .device-controls{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .device-controls .control-group{flex:none}
   .status-row,.top-actions{gap:5px}
   .status-row .chip{padding-inline:7px;font-size:10px}
   .bottom{grid-template-areas:"sticks sticks" "robot audio";grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
@@ -229,6 +231,6 @@ html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:1
 @media(orientation:landscape) and (max-height:420px) and (max-width:740px){
   .brand>span:last-child,.status-row .optional,#batteryLabel,#bindingRegionChip{display:none}
   .device-controls,.control-group{gap:5px}
-  .control-group button{padding-inline:7px;font-size:10px}
+  .control-group button{padding-inline:6px;font-size:10px}
   .cockpit-action-row button{padding-inline:3px;font-size:11px}
 }

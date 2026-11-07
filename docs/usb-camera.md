@@ -1,6 +1,6 @@
 # USB 摄像头与音频页面
 
-`ai-chat-audio-video-tof` 的 **XGO Duck AI** 新 App 已把音视频接口并入聊天进程，并在安装及开机时、App 容器创建之前准备 USB Host。请按 [AI App 安装说明](ai-chat.md) 部署；下文的独立 `duck-device-test.service` 和手动 Host 默认行为用于原 Duck App。
+`ai-chat-audio-video-tof` 的 **XGO Duck AI** 已把音视频接口并入聊天进程。安装及开机时先在 App 容器创建前开启 USB Host，检测到摄像头或 USB 音频设备就保留 Host，否则切回 Device。下文的独立 `duck-device-test.service` 和手动 Host 开关用于原 Duck App。 [AI App 安装说明](ai-chat.md)
 
 Duck 的主控制页（9527 端口）包含 USB camera 面板，点击开启后显示连续 MJPEG 视频流，可以保存 JPEG 照片。请求采集 640×480 / 30 fps，页面显示的是摄像头实测采集帧率，实际速度受设备曝光及网络影响。页面在后台会断开预览，20 秒无人观看后后台释放摄像头。
 
@@ -44,7 +44,7 @@ sudo systemctl restart duck-gamepad.service
 
 现有本地 Unix socket 工作进程只接受固定 USB mode 节点的布尔开关，并协调固定的 ADB/USB 串口服务：Host 前停止监视器与代理、解绑并停止 ADB/gadget，Device 后恢复原本启用或运行的服务。网页只接受同源带专用请求头的布尔开关值。没有新增 TCP 服务，不改变舵机、策略或 Bridge 频率。用 `sudo cat /sys/kernel/debug/usb/4e00000.usb/mode` 检查实际模式。
 
-当前 UNO Q 系统在 USB 模式切换时可能产生内核告警并扰动 UART；不要在运动中切换。新 AI App 的开机服务会在容器创建前暂停 router、完成 Host 切换并恢复通信；App 本身只检查就绪，不热切换，详见 [AI App 安装说明](ai-chat.md)。旧 App 的手动开关没有这一启动流程。
+当前 UNO Q 系统在 USB 模式切换时可能产生内核告警并扰动 UART。请在小鸭停止运动后切换。AI App 的开机服务会在容器创建前暂停 router、完成 USB 角色选择并恢复通信。App 本身启动时只检查角色。 [AI App 安装说明](ai-chat.md)
 
 ## 验证
 

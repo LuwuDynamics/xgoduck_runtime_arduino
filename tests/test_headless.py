@@ -437,10 +437,11 @@ class HostConfigurationTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('After=xgoduck-ai-hardware.service', (target / 'arduino-app-cli.service.d/xgoduck-ai.conf').read_text())
             self.assertIn('ExecStartPre=/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/sketch_cache.py "/home/arduino/Duck 100%% App"',
                           (target / 'arduino-app-cli.service.d/xgoduck-ai.conf').read_text())
-            usb = (target / 'xgoduck-ai-usb-host.service').read_text()
+            usb = (target / 'xgoduck-ai-usb-startup.service').read_text()
             self.assertIn('Type=oneshot', usb)
+            self.assertIn('RemainAfterExit=yes', usb)
             self.assertIn('Before=xgoduck-ai-hardware.service arduino-app-cli.service', usb)
-            self.assertIn('xgoduck-ai-usb-host.service', unit)
+            self.assertIn('xgoduck-ai-usb-startup.service', unit)
 
     async def test_first_boot_retry_is_only_for_our_default_and_never_after_manual_stop(self):
         with tempfile.TemporaryDirectory() as directory:

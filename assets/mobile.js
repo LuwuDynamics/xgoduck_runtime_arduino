@@ -1,10 +1,11 @@
 (() => {
   const $=id=>document.getElementById(id), t=window.DuckI18n.t;
   let media=null,robot=null,gamepad=null,streaming=false,cameraBusy=false,lightBusy=false,mediaBusy=false,usbBusy=false,volumeDirty=false;
-  let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,activePanel='quick',speakerTesting=false;
+  let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,usbRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
   let duckCall=null;
   const duckSounds=[...document.querySelectorAll('[data-duck-sound]')];
+  const usbButtons=[$('usbHostQuick'),$('usbHost')];
   const dialog=$('config');
   // Port 80 opens the cockpit; the original desktop page stays on port 9527.
   const desktopURL=new URL('/',location.href);desktopURL.port='9527';
@@ -73,9 +74,14 @@
     $('listenLabel').textContent=t(live?'stopListening':'listen');$('listen').title=t(live?'stopListenHint':'listenHint');
     $('voiceState').textContent=audioState==='listenIdle'?'':t(audioState,audioValues);
     const usb=gamepad?.usb;
-    $('usbHost').disabled=usbBusy||!usb?.available;$('usbHost').setAttribute('aria-checked',String(!!usb?.host));
-    $('usbHost').textContent=t(usbBusy?'usbSwitching':usb?.host?'usbOn':'usbOff');
-    $('usbStatus').textContent=usb?.error?message(usb.error):t(!usb?'usbUnavailable':usb.host?'usbHostMode':'usbDeviceMode');
+    const usbStatus=usb?.error?message(usb.error):t(!usb?.available?'usbUnavailable':usb.host?'usbHostMode':usb.mode==='device'?'usbDeviceMode':'usbOff');
+    for(const button of usbButtons){
+      button.disabled=usbBusy||!usb?.available;
+      button.setAttribute('aria-checked',String(!!usb?.host));
+      button.textContent=usbBusy?t('usbSwitching'):usb?.available?t(usb.host?'usbOn':'usbOff'):'USB Host';
+      button.title=usbStatus+' '+t('usbNotice');
+    }
+    $('usbStatus').textContent=usbStatus;
     $('frameHint').textContent=activePanel==='quick'?'':t(activePanel==='gamepad'?'gamepadHint':activePanel==='servo'?'servoHint':'calibrationHint');
     const want=cam?.running&&!document.hidden;
     if(want&&!streaming){streaming=true;$('feed').src='/api/media/camera/stream?t='+Date.now();}
@@ -120,12 +126,13 @@
     const doc=$('settingsFrame').contentDocument;if(!doc?.body)return;
     const style=doc.createElement('style');style.textContent='header{display:none!important}main{padding:8px 14px!important;max-width:100%!important}section{margin-top:10px!important}.audio-grid{grid-template-columns:1fr!important}body{font-size:14px}.servo-grid{overflow:auto}';doc.head.append(style);doc.querySelectorAll('a').forEach(link=>link.target='_top');
   }catch{}};
-  $('usbHost').onclick=async()=>{
+  async function switchUsb(){
     if(usbBusy||!gamepad?.usb?.available)return;
-    usbBusy=true;render();
+    usbBusy=true;usbRevision++;render();
     try{const data=await api('gamepad/usb',{host:!gamepad.usb.host});gamepad={...gamepad,usb:data.usb};}
     catch(error){notify(message(error));}finally{usbBusy=false;render();}
-  };
+  }
+  usbButtons.forEach(button=>button.onclick=switchUsb);
   $('volume').oninput=()=>{volumeDirty=true;$('volumeLabel').textContent=$('volume').value+'%';render();};
   async function mediaAction(path,body){
     if(mediaBusy||live)return false;
@@ -225,10 +232,11 @@
   async function poll(){
     try{
       if(document.hidden)return;
-      const revision=mediaRevision,results=await Promise.allSettled([api('status'),api('media/status'),api('gamepad/status')]);
+      const revision=mediaRevision,usbSnapshot=usbRevision;
+      const results=await Promise.allSettled([api('status'),api('media/status'),api('gamepad/status')]);
       robot=results[0].status==='fulfilled'?results[0].value:null;
       if(revision===mediaRevision&&!cameraBusy&&!lightBusy&&!mediaBusy)media=results[1].status==='fulfilled'?results[1].value:null;
-      if(!usbBusy)gamepad=results[2].status==='fulfilled'?results[2].value:null;
+      if(!usbBusy&&usbSnapshot===usbRevision)gamepad=results[2].status==='fulfilled'?results[2].value:null;
       window.DuckMotion?.update(robot,gamepad?.control?.enabled===true);
       render();
     }finally{setTimeout(poll,1500);}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=motion5">
+<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=usb-host1">
 <link rel="stylesheet" href="mobile-tof.css?v=motion1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 </head>
@@ -31,7 +31,8 @@
         <button id="lightOff" data-i18n="lightOff" disabled>关闭补光灯</button>
         <span id="lightState" class="control-state" role="status">补光灯：正在读取</span>
       </div>
-      <div class="control-group view-tools" role="group" aria-label="画面工具" data-i18n-aria-label="viewControls">
+      <div class="control-group view-tools" role="group" aria-label="画面与 USB 工具" data-i18n-aria-label="viewControls">
+        <button id="usbHostQuick" type="button" role="switch" aria-label="USB Host" aria-checked="false" disabled>USB Host</button>
         <button id="snapshot" data-i18n="savePhoto" data-i18n-aria-label="savePhoto" disabled>保存照片</button>
         <button id="clean" data-i18n="hideControls" data-i18n-aria-label="hideControls">隐藏控件</button>
       </div>
@@ -166,11 +167,11 @@
   <div class="dialog-head"><div><span class="eyebrow" data-i18n="pageTitle">小鸭驾驶舱</span><h2 data-i18n="settings">设置</h2></div><button id="closeConfig" class="icon-button" aria-label="关闭设置" data-i18n-aria-label="closeSettings">×</button></div>
   <nav class="settings-tabs" aria-label="设置" data-i18n-aria-label="settings"><button data-panel="quick" aria-current="page" data-i18n="general">常规</button><button data-panel="gamepad" data-i18n="gamepad">手柄</button><button data-panel="servo" data-i18n="servos">舵机</button><button data-panel="calibrate" data-i18n="calibration">校准</button></nav>
   <div id="quickPanel" class="quick-panel">
-    <section class="usb-settings"><h3 data-i18n="usbConnection">USB 连接</h3><p data-i18n="usbDescription">使用 USB 摄像头、音频设备或有线手柄时，请开启 Host 模式。</p><button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host</button><p id="usbStatus" role="status"></p><p data-i18n="usbNotice">请通过 Wi-Fi 操作；切换模式会中断当前 USB 连接。</p></section>
+    <section class="usb-settings"><h3 data-i18n="usbConnection">USB 连接</h3><p data-i18n="usbDescription">使用 USB 摄像头、音频设备或有线手柄时，请开启 Host 模式。</p><button id="usbHost" type="button" role="switch" aria-label="USB Host" aria-checked="false" disabled>USB Host</button><p id="usbStatus" role="status"></p><p data-i18n="usbNotice">请用 Wi-Fi 连接并在小鸭停止运动后切换。切换会中断当前 USB 连接。</p></section>
     <section><h3 data-i18n="speaker">扬声器</h3><div class="setting-row"><label for="volume" data-i18n="duckVolume">小鸭音量</label><output id="volumeLabel">—</output></div><input id="volume" type="range" min="0" max="100" value="100"><button id="applyVolume" data-i18n="applyVolume">应用音量</button><button id="testSpeaker" data-i18n="testSpeaker">测试扬声器</button><button id="testMic" data-i18n="listenMicrophone">监听小鸭麦克风</button><button id="stopAudio" data-i18n="stopAudio">停止音频</button><label class="file-button"><span data-i18n="sendAudioFile">发送音频文件</span><input id="voiceFile" type="file" accept="audio/*"></label><p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p></section>
     <section><h3 data-i18n="handheldView">手持视图</h3><p data-i18n="handheldDescription">横放手机适合配合手柄使用。全屏可隐藏浏览器栏；点击隐藏控件可获得更完整的画面。</p><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=motion5"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion5"></script><script src="mobile.js?v=motion5"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=usb-host1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion5"></script><script src="mobile.js?v=usb-host1"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

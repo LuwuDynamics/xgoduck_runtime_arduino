@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time UNO Q host setup and official default App.
-# Prepares USB Host; does not start the App or flash MCU. Use Wi-Fi/SSH.
+# Detects the startup USB role. App Lab Run starts the App and uploads the sketch.
 set -euo pipefail
 if [ "$(id -u)" != 0 ]; then
     exec sudo bash "$0" "$@"
@@ -100,16 +100,15 @@ from install_config import write_units
 write_units(root, cloud_id)
 PY
 systemctl daemon-reload
-# Replace only the legacy Duck helpers. Old USB oneshots can otherwise run
-# late in the boot and undo the App's Host selection. Keep their unit files
-# and the old App available for an explicit rollback.
-for unit in duck-gamepad.service duck-usb-device.service duck-usb-host.service; do
+# Retire the previous Duck boot policies before enabling USB detection.
+for unit in duck-gamepad.service duck-usb-device.service duck-usb-host.service \
+            xgoduck-ai-usb-host.service xgoduck-ai-usb-device.service; do
     if systemctl cat "$unit" >/dev/null 2>&1; then
         systemctl disable --now "$unit"
     fi
 done
-systemctl enable xgoduck-ai-usb-host.service xgoduck-ai-hardware.service
-systemctl restart xgoduck-ai-usb-host.service
+systemctl enable xgoduck-ai-usb-startup.service xgoduck-ai-hardware.service
+systemctl restart xgoduck-ai-usb-startup.service
 systemctl restart xgoduck-ai-hardware.service
 # Compatible with App CLI 0.10 as well as current versions. In newer releases
 # `app build` creates a frozen release, so it is not a portable cache-prep step.
@@ -123,6 +122,6 @@ fi
 bash "$app_root/tools/install-mobile-web.sh"
 echo 'Support and default App installed. On next boot XGO Duck AI starts automatically.'
 echo 'Mobile cockpit is available at http://<board-ip>/ on port 80.'
-echo 'USB Host is ready; USB/ADB computer access is disconnected. BluFi works without USB audio.'
+echo 'USB startup detection keeps Host for a camera or audio device. Use the cockpit over Wi-Fi to switch manually.'
 echo 'MCU compile and ELF checks passed. First Run still needs internet for container/Python dependencies.'
 echo 'After the first successful Run, verify an offline cold boot.'

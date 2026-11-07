@@ -1,5 +1,5 @@
 name: XGO Duck AI
-description: XGO Duck with independent motion and AI Chat Pro processes, the matching stable web cockpit and USB audio/video. USB Host is prepared before the App starts.
+description: XGO Duck with independent motion and AI Chat Pro processes, the matching stable web cockpit and automatic USB audio/video detection at boot.
 icon: 🦆
 ports: [9527, 9528]
 bricks:

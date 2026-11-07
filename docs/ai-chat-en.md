@@ -83,7 +83,7 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
 ## First installation
 
 1. Install [Arduino App Lab](https://www.arduino.cc/en/uno-q). Connect UNO Q to the computer using a USB-C **data** cable. Complete the board name, Wi-Fi and Linux password setup described in the [UNO Q manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/). The board needs internet access for system packages, Arduino libraries, containers and Python dependencies.
-2. Check `ssh arduino@<board-ip>` using the Linux password you chose. Also verify App Lab Network access. There is no shared password supplied by this project. Prepare a powered USB-C Host hub for the USB microphone, speaker and optional camera. **Support installation selects USB Host and disconnects the computer's USB/ADB connection**, so install over working Wi-Fi/SSH.
+2. Check `ssh arduino@<board-ip>` using the Linux password you chose. Also verify App Lab Network access. There is no shared password supplied by this project. Prepare a powered USB-C Host hub for the USB microphone, speaker and optional camera. **Install over Wi-Fi/SSH because USB detection may interrupt the computer's USB/ADB connection.**
 3. Get the `ai-chat-audio-video-tof` branch and package it on the computer:
 
    ```sh
@@ -111,9 +111,9 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
    bash tools/install-ai-support.sh
    ```
 
-   The installer first resolves the pinned MCU build dependencies as `arduino`, patches the Bridge cache, compiles and verifies the ELF without uploading. It then uses sudo for system packages and the host helper. It creates `data/native/`, installs root-owned helper code in `/usr/local/lib/xgoduck-ai-support/`, enables `xgoduck-ai-hardware.service`, and sets this directory as the official default App. It enables `xgoduck-ai-usb-host.service` before the official App CLI daemon on boot. It disables the old user media service to avoid audio/port conflicts, retaining existing Doubao settings. **Stop all Apps and install over Wi-Fi/SSH: installation selects Host and may restart the shared router, but does not start the App or flash the MCU.** Running Apps cause installation to refuse to continue. Rerun it after changing App paths or updating helper code.
+   The installer first resolves the pinned MCU build dependencies as `arduino`, patches the Bridge cache, compiles and verifies the ELF without uploading. It then uses sudo for system packages and the host helper. It creates `data/native/`, installs root-owned helper code in `/usr/local/lib/xgoduck-ai-support/`, enables `xgoduck-ai-hardware.service`, and sets this directory as the official default App. It runs and enables `xgoduck-ai-usb-startup.service` ahead of App CLI on boot. It disables the old user media service to avoid audio/port conflicts, retaining existing Doubao settings. **Stop all Apps and install over Wi-Fi/SSH.** USB detection may restart the shared router. The later Run step starts the App and handles MCU upload. Rerun the installer after changing App paths or updating helper code.
 
-   If installed, the old `duck-gamepad.service`, `duck-usb-device.service` and `duck-usb-host.service` are disabled as well. This prevents duplicate controller workers or an old late-starting USB service overriding Host mode. Their unit files and the old App are retained.
+   The installer disables the previous gamepad and USB role services, including `xgoduck-ai-usb-host.service`. Their unit files and the old App are retained for rollback.
 
    Host setup also installs and enables the nginx mobile entrance. Open `http://<board-ip>/` directly; no explicit port or page suffix is needed. On an existing installation, run `sudo bash tools/install-mobile-web.sh` independently while the App continues running.
 6. Set the original 2 Mbps Bridge rate and start the App:
@@ -129,7 +129,7 @@ Keep the board online until its first build and both business processes are runn
 
 Finish assembly, unique servo IDs and calibration according to the [hardware guide](https://github.com/LuwuDynamics/xgoduck_hardware) and main README before enabling motion.
 
-USB preparation completes **before the App container is created**. The boot oneshot pauses the USB serial path watcher, proxy and Arduino router, unbinds the gadget UDC, stops `adbd.service`, selects Host, then restores a previously running router. USB/FunctionFS transitions can disturb UART reception; restarting the router replaces Docker's mounted socket and resets the MCU. Both must therefore finish before the container starts. An already selected Host with inactive ADB does not restart the router. The App entry only verifies readiness; it exits with installer instructions if Host is not ready and never performs a hot switch.
+USB detection completes **before the App container is created**. Duck tries Host and waits up to 5 seconds for USB audio or video interfaces to enumerate. It keeps Host if it detects one and switches to Device otherwise, including when only an empty hub is attached. The boot service pauses the USB serial path watcher, proxy and Arduino router before switching roles and restores a previously running router after selecting the role. USB/FunctionFS transitions can disturb UART reception, and restarting the router replaces Docker's mounted socket and resets the MCU. The App entry verifies the current USB role. An App restart keeps a manual selection made in the cockpit. A full board reboot runs USB detection again.
 
 Switching back to Device restores previously active or enabled ADB and serial-monitor units without changing their enable/mask settings. Writing only the USB mode while leaving ADB running can cause repeated ADB restarts in Host mode. Keep the old Host boot scripts disabled and do not switch USB modes during motion. This startup workaround does not replace the system kernel. Support setup installs missing dependencies without proactively upgrading packages that are already installed.
 
@@ -232,7 +232,7 @@ duck_previous_app="/home/arduino/ArduinoApps/your-old-duck-directory"
 cd ~/ArduinoApps/xgoduck_ai
 arduino-app-cli app stop "$PWD"
 arduino-app-cli properties set default "$duck_previous_app"
-sudo systemctl disable --now xgoduck-ai-hardware.service xgoduck-ai-usb-host.service
+sudo systemctl disable --now xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
 sudo rm -f /etc/systemd/system/arduino-app-cli.service.d/xgoduck-ai.conf
 sudo systemctl daemon-reload
 ```
