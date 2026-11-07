@@ -87,7 +87,7 @@ Reuse a verified import. For an update, have me support Duck and confirm torque 
 the old App. Back up its directory and data/, then follow the migration notes in docs/ai-chat-en.md.
 Confirm other running Apps can be stopped. Keep Wi-Fi SSH available and stop all Apps.
 Use sketch/sketch.yaml, provenance/toolchain.json and python/requirements.txt for dependencies.
-Recorded board reference: Router 0.10.0, App CLI 0.13.0 and Python base image 0.12.0. Reuse compatible versions.
+Recorded board reference: Router 0.11.0, App CLI 0.13.0 and Python base image 0.12.0. Reuse compatible versions.
 Before the first start, run arduino-cli core list as arduino and check the installed arduino:zephyr core.
 If it is missing or differs from sketch/sketch.yaml, run arduino-cli core install arduino:zephyr@1.0.0
 and check again. Upload can pick up options from the older board core even if the sketch compiled successfully.

@@ -86,7 +86,7 @@ https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-
 更新时先请我扶稳小鸭并确认卸力，再停止旧 App，备份 App 目录和 data/，按 docs/ai-chat.md 迁移。
 先确认其他正在运行的 App 可以停止，保持 Wi-Fi SSH，再停止所有 App。
 按 sketch/sketch.yaml、provenance/toolchain.json、python/requirements.txt 准备依赖。
-实机版本参考为 Router 0.10.0、App CLI 0.13.0、Python 基础镜像 0.12.0，复用兼容版本。
+实机版本参考为 Router 0.11.0、App CLI 0.13.0、Python 基础镜像 0.12.0，复用兼容版本。
 首次启动前，以 arduino 用户执行 arduino-cli core list，检查板上已安装的 arduino:zephyr。
 如果缺失或与 sketch/sketch.yaml 不一致，先执行 arduino-cli core install arduino:zephyr@1.0.0
 并复查版本。Sketch 编译成功后，上传仍可能读到旧板级 core 的参数，所以这项检查要在启动前完成。
