@@ -177,6 +177,14 @@ def main():
                         raise AssertionError('Orphan test failed to kill the simulated motion process')
                     assert client.post('/api/mode', json={'mode': 'off'}).status_code == 200
                     if mode == 'normal':
+                        motion_port, token = state['motion_port'], state['token']
+                        session = time.monotonic_ns()
+                        request(motion_port, token, '/heartbeat', {'session': session})
+                        control = request(motion_port, token, '/state')['control']
+                        assert control['voice_motion_enabled'] and not control['remote_motion_enabled']
+                        change = request(motion_port, token, '/action', {
+                            'session': session, 'kind': 'walking_mode', 'walking_mode': 'walk'})
+                        assert change['status'] == 'completed'
                         Bridge.callbacks['duck_voltage'](wire.VOLTAGE.pack(
                             b'DQV1', 1, 0, wire.ALL_MASK, *([82] * 15)))
                         motion = client.get('/api/status').json()

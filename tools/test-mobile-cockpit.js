@@ -19,7 +19,8 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       recovery:{phase:'walk',angle_deg:0},input_source:'web'};
     const tof={state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
-    let tofHTTP=200,tofDelay=0,blockForward=false;
+    let tofHTTP=200,tofDelay=0,blockForward=false,failVolume=false;
+    let holdVolume=false,receivedVolume,releaseVolume;
     let holdNext=false,releaseStatus,capturedStatus;
     let holdNextUsb=false,releaseUsbStatus,capturedUsbStatus;
     await page.addInitScript(()=>{
@@ -58,6 +59,12 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           if(url.pathname==='/api/media/camera/light')media.camera.light.enabled=body.enabled;
           else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:true,fps:30});
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
+          else if(url.pathname==='/api/media/audio/volume'){
+            assert.equal(request.headers()['x-device-test'],'1');
+            if(failVolume)return route.fulfill({status:400,json:{error:'Speaker unavailable'}});
+            if(holdVolume){holdVolume=false;receivedVolume();await new Promise(resolve=>releaseVolume=resolve);}
+            media.audio.volume=body.volume;
+          }
           else if(url.pathname==='/api/media/audio/play'&&body.source.startsWith('duck-'))media.audio.state='playing';
           return route.fulfill({json:media});
         }
@@ -88,6 +95,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     };
     await page.route(origin+'/**',mockCockpit);
     await page.goto(origin+'/');
+    assert.equal(await page.locator('#controlPageLink').getAttribute('href'),'http://duck-mobile.test:9527/');
     assert.equal(page.url(),origin+'/');
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
@@ -101,6 +109,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#duckCalls').isHidden(),true);
     assert.equal(await page.locator('#usbHostQuick[aria-checked="true"]').innerText(),'USB Host：已开启');
     assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'电压 7.8 V');
+    assert.equal(await page.locator('#speakerVolume b').innerText(),'音量');
     Object.assign(battery,{voltage_v:7.3,low:true});
     await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 7.3 V"]').waitFor();
     assert.equal(new URL(await page.locator('.brand').getAttribute('href')).port,'9527');
@@ -121,6 +130,40 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.getByText('Phone microphone',{exact:true}).count(),0);
     await page.locator('#closeConfig').click();assert.equal(writes.length,0);
 
+    assert.equal(await page.locator('#speakerVolume b').innerText(),'Volume');
+    assert.equal(await page.locator('#speakerVolumeValue').innerText(),'100%');
+    await page.locator('#speakerVolume').click();
+    const slider=page.locator('#volume');
+    assert.equal(await slider.inputValue(),'100');
+    assert.equal(await page.evaluate(()=>document.activeElement.id),'volume');
+    assert.equal(await page.locator('#applyVolume').count(),0);
+    await slider.evaluate(input=>{input.value='65';input.dispatchEvent(new Event('input',{bubbles:true}));});
+    assert.equal(await page.locator('#volumeLabel').innerText(),'65%');
+    assert.equal(writes.length,0);
+    failVolume=true;
+    await slider.dispatchEvent('change');
+    await page.getByText('Could not save speaker volume. Adjust it again to retry.',{exact:true}).waitFor();
+    assert.equal(await slider.inputValue(),'100');
+    assert.equal(await page.locator('#speakerVolumeValue').innerText(),'100%');
+    failVolume=false;
+    const beforeVolume=writes.length;
+    const firstVolume=new Promise(resolve=>receivedVolume=resolve);holdVolume=true;
+    await slider.fill('70');await firstVolume;
+    try{
+      await slider.fill('55');await slider.fill('0');
+      assert.equal(writes.length,beforeVolume+1);
+      assert.equal(await page.locator('#volumeLabel').innerText(),'0%');
+    }finally{releaseVolume();}
+    await page.waitForFunction(()=>document.getElementById('speakerVolumeValue').textContent==='0%');
+    assert.deepEqual(writes.slice(beforeVolume),[70,0].map(volume=>({path:'/api/media/audio/volume',body:{volume}})));
+    const mobileActions=await page.locator('.speaker-actions').evaluate(row=>({
+      right:row.getBoundingClientRect().right,
+      buttons:[...row.children].map(button=>button.getBoundingClientRect().right),
+    }));
+    assert(mobileActions.buttons.every(right=>right<=mobileActions.right+1),'Audio buttons must fit the phone dialog.');
+    await page.locator('#closeConfig').click();
+
+    const beforeCamera=writes.length;
     const captured=new Promise(resolve=>capturedStatus=resolve);holdNext=true;
     await Promise.race([captured,new Promise((_,reject)=>setTimeout(()=>reject(Error('No status poll')),4000))]);
     await page.locator('#lightOn').click();await page.getByText('Light on',{exact:true}).waitFor();
@@ -134,7 +177,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.locator('#tofToggle').click();await page.waitForFunction(()=>!document.getElementById('welcome').hidden);
     assert.equal(await page.locator('#tofBody').isHidden(),true);
     await page.locator('#tofToggle').click();
-    assert.deepEqual(writes.map(x=>[x.path,x.body]),[
+    assert.deepEqual(writes.slice(beforeCamera).map(x=>[x.path,x.body]),[
       ['/api/media/camera/light',{enabled:true}],['/api/media/camera/start',{}],
       ['/api/media/camera/light',{enabled:false}],['/api/media/camera/stop',{}]
     ]);
@@ -252,7 +295,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
       for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['small-landscape',667,375],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
-        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','torqueOff','batteryVoltage','usbHostQuick','moveStick','turnStick','motionStatus'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
+        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','speakerVolume','torqueOff','batteryVoltage','controlPageLink','usbHostQuick','moveStick','turnStick','motionStatus','openWalkingHelp'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
         const badge=await versionBadge.boundingBox();
         assert(badge&&badge.x>=0&&badge.y>=0&&badge.x+badge.width<=width+1&&badge.y+badge.height<=height+1,
@@ -261,6 +304,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         assert.equal(await page.locator('#portraitHint').isVisible(),portrait);
         assert.equal(await page.locator('#moveStick').isVisible(),!portrait);
         assert.equal(await page.locator('#duckCalls').isVisible(),!portrait);
+        assert.equal(await page.locator('#openWalkingHelp').isVisible(),!portrait);
         const actionRows=await page.locator('.cockpit-action-row').evaluateAll(rows=>rows.map(row=>
           [...row.children].map(button=>button.getBoundingClientRect().toJSON())));
         assert.deepEqual(actionRows.map(row=>row.length),[7,6,7]);
@@ -272,6 +316,19 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);
         for(const value of bounds.values)assert(value.top>=bounds.panel.top&&value.bottom<=bounds.panel.bottom,`${language}/${name}: ToF distance clipped`);
         assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${language}/${name}: horizontal overflow`);
+        if(name==='small-landscape'){
+          await page.locator('#openWalkingHelp').click();
+          const help=page.locator('#walkingHelpDialog[open]');
+          assert.equal(await help.locator('h2').innerText(),language==='zh'?'走不稳或发抖':'Unsteady walking or shaking');
+          assert.equal(await help.locator('li').count(),3);
+          assert.match(await help.locator('li').first().innerText(),language==='zh'?/舵盘和固定螺丝/:/servo horns and retaining screws/);
+          assert.deepEqual(await help.locator('a').evaluateAll(links=>links.map(link=>link.href)),
+            ['http://duck-mobile.test:9527/calibrate.html','http://duck-mobile.test:9527/servo.html']);
+          const helpBox=await help.boundingBox();
+          assert(helpBox.y>=0&&helpBox.y+helpBox.height<=height+1,`${language}/${name}: walking help off screen`);
+          await help.locator('button').click();
+          assert.equal(await help.count(),0);
+        }
         if(output)await page.screenshot({path:path.join(output,language+'-'+name+'.png')});
       }
     }
@@ -282,6 +339,17 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     desktop.on('pageerror',error=>errors.push(error.message));
     await desktop.route(origin+'/**',mockCockpit);
     await desktop.goto(origin+'/');
+    await desktop.locator('#speakerVolume').click();
+    const audioBoxes=await desktop.locator('.speaker-actions > *').evaluateAll(buttons=>
+      buttons.map(button=>button.getBoundingClientRect().toJSON()));
+    assert.equal(audioBoxes.length,4);
+    assert(audioBoxes.every(box=>box.y===audioBoxes[0].y&&box.height===audioBoxes[0].height),'Upload and playback buttons must line up.');
+    const [chooser]=await Promise.all([
+      desktop.waitForEvent('filechooser'), desktop.locator('.speaker-actions .file-button').click(),
+    ]);
+    assert.equal(await chooser.element().getAttribute('id'),'voiceFile');
+    await chooser.setFiles([]);
+    await desktop.locator('#closeConfig').click();
     assert.equal(await desktop.locator('#keyboardHint').isVisible(),true);
     await desktop.locator('[data-motion=stand]:enabled').waitFor();
     const beforeKeys=writes.length;
@@ -312,6 +380,17 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(writes.length,beforeRepeat,'A held key cannot resume after focus loss.');
     await desktop.keyboard.up('w');
 
+    await desktop.keyboard.down('w');
+    await waitMotion(body=>body?.kind==='begin'&&body.twist[0]>0);
+    await desktop.locator('#openWalkingHelp').click();
+    await waitMotion(body=>body?.kind==='release');
+    await desktop.keyboard.up('w');
+    const whileHelpOpen=writes.length;
+    await desktop.keyboard.press('w');
+    assert.equal(writes.length,whileHelpOpen,'Walking help must not send movement commands.');
+    await desktop.keyboard.press('Escape');
+    assert.equal(await desktop.locator('#walkingHelpDialog[open]').count(),0);
+
     for(const kind of ['head_left','head_right','head_center','mouth_open','mouth_close','default_pose']){
       await desktop.locator(`.motion-action-rows [data-motion="${kind}"]:enabled`).click();
       await waitMotion(body=>body?.kind===kind);
@@ -331,7 +410,29 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     }
     if(output)await desktop.screenshot({path:path.join(output,'desktop-duck-calls.png')});
     await desktop.close();
+
+    const control=await browser.newPage({locale:'zh-CN',viewport:{width:800,height:800}});
+    control.on('pageerror',error=>errors.push(error.message));
+    await control.route(origin+'/**',mockCockpit);
+    await control.goto(origin+'/index.html');
+    const disclosure=control.locator('#walking-help');
+    const summary=disclosure.locator('summary');
+    assert.equal(await summary.innerText(),'走不稳？');
+    assert.equal(await disclosure.locator('.walking-help-body').isVisible(),false);
+    await summary.focus();
+    const modeWrites=writes.filter(call=>call.path==='/api/mode').length;
+    await control.keyboard.press('Space');
+    assert.equal(await disclosure.locator('.walking-help-body').isVisible(),true);
+    assert.equal(await disclosure.locator('li').count(),3);
+    assert.match(await disclosure.locator('li').first().innerText(),/舵盘和固定螺丝/);
+    assert.equal(writes.filter(call=>call.path==='/api/mode').length,modeWrites,'Space on walking help must not unload the servos.');
+    assert.deepEqual(await disclosure.locator('a').evaluateAll(links=>links.map(link=>link.getAttribute('href'))),
+      ['/calibrate.html','/servo.html']);
+    await control.locator('#language').click();
+    assert.equal(await summary.innerText(),'Unsteady walking?');
+    await control.close();
+
     assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en, camera/light, USB Host switching, audio cleanup, fullscreen, ToF and ten layouts, plus rotation, touch, keyboard, motion presets and duck calls.');
+    console.log('PASS: zh/en, camera/light, speaker volume, USB Host switching, audio cleanup, fullscreen, ToF and ten layouts, plus rotation, touch, keyboard, motion presets and duck calls.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -88,11 +88,12 @@ def prepare_cache(base, info, archive=None):
 def compile_sketch(cli, base, info):
     sketch = ROOT / 'sketch'
     build = ROOT / '.cache/sketch'
+    compile_command = [cli, 'compile', '--profile', 'default', '--jobs', '2']
     # Resolves libraries and tools without uploading or compiling unpatched RPC.
-    subprocess.run([cli, 'compile', '--profile', 'default', '--only-compilation-database',
+    subprocess.run([*compile_command, '--only-compilation-database',
                     '--build-path', str(ROOT / '.cache/ai-sketch-deps'), str(sketch)], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tools/prepare-bridge.py')], check=True)
-    subprocess.run([cli, 'compile', '--profile', 'default', '--clean',
+    subprocess.run([*compile_command, '--clean',
                     '--build-path', str(build), str(sketch)], check=True)
     for directory in tool_paths(base, info):
         readelf = directory / 'bin/arm-zephyr-eabi-readelf'

@@ -34,8 +34,7 @@ from forward_avoidance import ForwardAvoidance
 sys.setswitchinterval(0.001)
 controller = Controller(Bridge)
 voice_config = VoiceConfig()
-access = MotionAccess(controller, allowed=lambda: voice_config.get()['voice_motion_enabled'],
-                      remote_allowed=lambda: voice_config.get()['remote_motion_enabled'])
+access = MotionAccess(controller, remote_allowed=lambda: voice_config.get()['remote_motion_enabled'])
 token = secrets.token_urlsafe(32)
 mouth_path = PRIVATE / 'mouth.sock'
 os.environ['DUCK_MOUTH_SOCKET'] = str(mouth_path)

@@ -115,7 +115,7 @@ class WebControlTest(unittest.TestCase):
         self.assertEqual(self.command_mode(), wire.POLICY)
         self.assertEqual(self.c.inferred, 1)
 
-    def test_stale_sensor_feedback_holds_last_targets_until_explicit_resume(self):
+    def test_stale_sensor_feedback_holds_last_targets_and_resumes_without_travel(self):
         self.c.mode = 'policy'
         self.c.command(twist=[.1, 0., 0.])
         self.c.step()
@@ -133,11 +133,8 @@ class WebControlTest(unittest.TestCase):
         self.c.rx_time = time.monotonic()
         self.assertIn('ignored', self.c.command(twist=[.1, 0., 0.]))
         self.c.step()
-        self.assertTrue(self.c.fault_hold)
-        self.c.bridge.notify.assert_not_called()
-        self.c.set_mode('policy')
-        self.c.step()
         self.assertFalse(self.c.fault_hold)
+        self.assertEqual(self.c.mode, 'policy')
         self.assertEqual(self.c.twist, [0., 0., 0.])
         self.assertEqual(self.command_mode(), wire.POLICY)
 

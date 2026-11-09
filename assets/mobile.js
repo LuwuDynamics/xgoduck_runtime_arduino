@@ -1,15 +1,18 @@
 (() => {
   const $=id=>document.getElementById(id), t=window.DuckI18n.t;
-  let media=null,robot=null,gamepad=null,streaming=false,cameraBusy=false,lightBusy=false,mediaBusy=false,usbBusy=false,volumeDirty=false;
+  let media=null,robot=null,gamepad=null,streaming=false,cameraBusy=false,lightBusy=false,mediaBusy=false,usbBusy=false;
+  let volumeDirty=false,volumeSaving=false,pendingVolume=null;
   let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,usbRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
   let duckCall=null;
   const duckSounds=[...document.querySelectorAll('[data-duck-sound]')];
   const usbButtons=[$('usbHostQuick'),$('usbHost')];
-  const dialog=$('config');
+  const dialog=$('config'),volumeButton=$('speakerVolume'),volumeSlider=$('volume'),volumeStatus=$('volumeStatus');
+  $('applyVolume')?.remove(); // An older cached page may still contain this button.
   // Port 80 opens the cockpit; the original desktop page stays on port 9527.
   const desktopURL=new URL('/',location.href);desktopURL.port='9527';
-  document.querySelectorAll('[data-desktop-link]').forEach(link=>link.href=desktopURL.href);
+  document.querySelectorAll('[data-desktop-link]').forEach(link=>link.href=new URL(link.dataset.desktopLink||'/',desktopURL).href);
+  $('openWalkingHelp')?.addEventListener('click',()=>$('walkingHelpDialog').showModal());
   const modeKeys={shadow:'modeShadow',off:'modeOff',hold:'modeHold',policy:'modePolicy',calibrate:'modeCalibrate',servo_debug:'modeServo'};
   const errorKeys={
     '读取补光灯状态失败，请检查摄像头连接。':'lightReadFailed',
@@ -39,7 +42,8 @@
     batteryChip.setAttribute('aria-label',voltageLabel+' '+voltageText);
     batteryChip.title=t('voltageSource');
     batteryChip.classList.toggle('low-voltage',battery?.low===true);
-    $('videoStats').textContent=cam?.running&&cam.ready?t('cameraLive',{fps:cam.fps||0}):t(cam?.running?'cameraStarting':'cameraOff');
+    const previewFps=Number.isFinite(cam?.preview_fps_limit)?`≤${cam.preview_fps_limit}`:cam?.fps||0;
+    $('videoStats').textContent=cam?.running&&cam.ready?t('cameraLive',{fps:previewFps}):t(cam?.running?'cameraStarting':'cameraOff');
     $('robotMode').textContent=robot?(modeKeys[robot.mode]?t(modeKeys[robot.mode]):robot.mode):t('disconnected');
     $('telemetry').textContent=robot?t('feedback',{hz:Number(robot.feedback_hz||0).toFixed(0),torque:t(robot.enabled?'torqueOn':'torqueOff')}):t('waitingFeedback');
     $('padLink').textContent=t(gamepad?.input?.connected?(gamepad.control?.enabled?'gamepadActive':'gamepadReady'):'gamepadMissing');
@@ -53,8 +57,16 @@
     $('lightOn').setAttribute('aria-pressed',String(light?.enabled===true));$('lightOff').setAttribute('aria-pressed',String(light?.enabled===false));
     $('lightState').textContent=lightBusy?t('lightChanging'):light?.error?message(light.error):t(!cam?.available?'lightUnavailable':!light?.supported?'lightUnsupported':light.enabled===true?'lightEnabled':light.enabled===false?'lightDisabled':'lightUnknown');
     const fill=$('feed').classList.contains('fill');$('fit').setAttribute('aria-label',t(fill?'fitView':'fillView'));
-    if(!volumeDirty&&a?.volume!=null){$('volume').value=a.volume;$('volumeLabel').textContent=a.volume+'%';}
+    const volumeText=Number.isFinite(a?.volume)?a.volume+'%':'—';
     const busy=!!live||mediaBusy;
+    if(volumeButton){
+      $('speakerVolumeValue').textContent=volumeText;
+      volumeButton.disabled=busy||!a?.available;
+    }
+    if(!volumeDirty){
+      if(Number.isFinite(a?.volume))volumeSlider.value=a.volume;
+      $('volumeLabel').textContent=volumeText;
+    }
     if(speakerTesting&&!mediaBusy&&a?.state==='idle'){
       speakerTesting=false;audioStatus(a.error?'speakerTestFailed':'speakerTestDone');
       if(a.error)notify(message(a.error));
@@ -65,9 +77,9 @@
     $('speakerLabel').textContent=t(speakerTesting&&mediaBusy?'speakerPreparing':speakerPlaying?'stopSpeakerTest':'testSpeaker');
     $('speakerTest').title=t(speakerPlaying?'speakerPlayingHint':'speakerTestHint');
     renderDuckSounds(a,busy);
-    $('applyVolume').disabled=busy||!a?.available||!volumeDirty;
     $('testSpeaker').disabled=$('testMic').disabled=busy||!a?.available||a.state!=='idle';
-    $('volume').disabled=busy||!a?.available;$('voiceFile').disabled=busy||!a?.available||a.state!=='idle';
+    volumeSlider.disabled=!!live||(mediaBusy&&!volumeSaving)||!a?.available;
+    $('voiceFile').disabled=busy||!a?.available||a.state!=='idle';
     $('stopAudio').disabled=mediaBusy||(!live&&(!a?.available||a.state==='idle'));
     $('listen').disabled=!live&&(mediaBusy||!a?.available||a.state!=='idle');
     $('listen').classList.toggle('active',!!live);$('listen').setAttribute('aria-pressed',String(!!live));
@@ -133,12 +145,18 @@
     catch(error){notify(message(error));}finally{usbBusy=false;render();}
   }
   usbButtons.forEach(button=>button.onclick=switchUsb);
-  $('volume').oninput=()=>{volumeDirty=true;$('volumeLabel').textContent=$('volume').value+'%';render();};
+  volumeButton?.addEventListener('click',()=>{
+    settings();
+    volumeSlider.focus({preventScroll:true});volumeSlider.scrollIntoView({block:'center'});
+  });
+  volumeSlider.oninput=()=>{
+    volumeDirty=true;$('volumeLabel').textContent=volumeSlider.value+'%';volumeStatus?.replaceChildren();
+  };
   async function mediaAction(path,body){
     if(mediaBusy||live)return false;
     mediaBusy=true;mediaRevision++;render();
     try{media=await api('media/'+path,body);return true;}
-    catch(error){notify(message(error));return false;}finally{mediaBusy=false;render();}
+    catch(error){notify(message(error));return false;}finally{mediaRevision++;mediaBusy=false;render();}
   }
   function renderDuckSounds(audio,busy){
     if(duckCall?.phase==='playing'&&!busy&&audio?.state==='idle'){
@@ -163,7 +181,24 @@
     const ok=await mediaAction('audio/play',{source:'duck-'+duckCall.kind});
     duckCall.phase=ok?'playing':'failed';render();
   };
-  $('applyVolume').onclick=async()=>{if(await mediaAction('audio/volume',{volume:+$('volume').value}))volumeDirty=false;render();};
+  volumeSlider.onchange=async()=>{
+    pendingVolume=+volumeSlider.value;
+    if(volumeSaving)return;
+    volumeSaving=true;
+    // Serialize writes to the speaker and keep only the latest queued setting.
+    while(pendingVolume!==null){
+      const volume=pendingVolume;
+      pendingVolume=null;
+      const saved=await mediaAction('audio/volume',{volume});
+      if(pendingVolume===null&&+volumeSlider.value===volume){
+        volumeDirty=false;
+        volumeStatus?.replaceChildren(saved?'':t('volumeSaveFailed'));
+        if(saved)notify('');
+      }
+    }
+    volumeSaving=false;
+    render();
+  };
   $('testSpeaker').onclick=()=>mediaAction('audio/play',{source:'music'});
   $('speakerTest').onclick=async()=>{
     if(mediaBusy||live||!media?.audio.available)return;

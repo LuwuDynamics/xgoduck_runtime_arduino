@@ -1,6 +1,6 @@
 # XGO Duck AI
 
-English · [简体中文](README_CN.md)
+English · [简体中文](README_CN.md) · [Changelog](docs/CHANGELOG.md)
 
 Voice chat, motion control, USB audio/video and ToF ranging for XGO Duck on Arduino UNO Q. Use a browser for everyday operation; Duck does not need a display.
 
@@ -69,7 +69,7 @@ I will enter the password at the terminal prompt.
 
 ### Let AI handle steps 3–4
 
-This prompt was tested in Codex and DeepSeek Harness, and the App installed successfully in both. Allow 30 minutes to 1 hour, depending on download speed.
+The App installed successfully with this prompt in Codex, DeepSeek Harness, and Cursor. The Cursor test on a 2 GB board used single-job compilation. Allow 30 minutes to 1 hour, depending on download speed.
 
 Copy the prompt and fill in the **board IP, SSH username and password** in your own AI session. An assistant with terminal access can then sign in directly over Wi-Fi SSH. If you already imported the App, it can continue from the actual installation directory.
 
@@ -223,7 +223,8 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 
 ### 1. Duck shakes or walks unsteadily
 
-1. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos. The updated page has IMU calibration at the top and photos with servo IDs and joint reference poses below.
-2. Support Duck, open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify. The updated page shows saved and runtime values separately.
+1. Stop moving, support Duck, and release servo torque. Check each servo's ID, mounting position, and order against the diagrams on the Calibration page. Check the servo horns and retaining screws for looseness.
+2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos. The page has IMU calibration at the top and photos with servo IDs and joint reference poses below.
+3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

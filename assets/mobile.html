@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=app-version1">
+<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=walking-help">
 <link rel="stylesheet" href="mobile-tof.css?v=app-version1">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
@@ -95,7 +95,10 @@
         <span><kbd>Q</kbd><kbd>E</kbd><span data-i18n="keyboardTurn">转向</span></span>
         <span><kbd data-i18n="keyboardSpace">空格</kbd><span data-i18n="keyboardStop">停止</span></span>
       </div>
-      <p id="motionStatus" role="status" data-i18n="waitingFeedback">等待反馈</p>
+      <div class="motion-status-row">
+        <p id="motionStatus" role="status" data-i18n="waitingFeedback">等待反馈</p>
+        <button id="openWalkingHelp" type="button" aria-haspopup="dialog" aria-controls="walkingHelpDialog" data-i18n="walkingHelp">走不稳？</button>
+      </div>
       <div class="cockpit-action-rows">
         <div class="motion-action-rows" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
           <div class="cockpit-action-row">
@@ -129,10 +132,17 @@
       </div>
       <p id="portraitHint" class="portrait-hint" data-i18n="rotatePhone">横过手机后操作小鸭。</p>
     </div>
-    <div class="flight-state"><span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span><button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button></div>
+    <div class="flight-state">
+      <span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span>
+      <div class="flight-actions">
+        <button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button>
+        <a id="controlPageLink" class="desktop-link" href="/index.html" data-desktop-link data-i18n="controlPage" data-i18n-aria-label="desktopControl" aria-label="打开桌面控制页">控制台</a>
+      </div>
+    </div>
     <div class="intercom" role="group" aria-label="实时音频" data-i18n-aria-label="liveAudio">
       <div class="intercom-actions">
         <button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><b id="speakerLabel">测试扬声器</b></button>
+        <button id="speakerVolume" class="talk-button secondary" type="button" aria-haspopup="dialog" aria-controls="config" disabled><b data-i18n="volume">音量</b><span id="speakerVolumeValue">—</span></button>
         <button id="listen" class="talk-button secondary listen-only" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">↓</span><b id="listenLabel">实时监听</b></button>
       </div>
       <div class="voice-line"><span id="voiceState" role="status"></span></div>
@@ -140,6 +150,20 @@
   </div>
   <div id="notice" class="toast" role="status" hidden></div>
 </main>
+<dialog id="walkingHelpDialog" aria-labelledby="walkingHelpTitle">
+  <div class="dialog-head">
+    <h2 id="walkingHelpTitle" data-i18n="walkingHelpTitle">走不稳或发抖</h2>
+    <form method="dialog"><button class="icon-button" type="submit" aria-label="关闭行走帮助" data-i18n-aria-label="walkingHelpClose">×</button></form>
+  </div>
+  <div class="walking-help-body">
+    <p data-i18n="walkingHelpStop">先停止移动并扶稳小鸭。</p>
+    <ol>
+      <li><strong data-i18n="walkingHelpInstall">检查舵机安装</strong><p data-i18n="walkingHelpInstallStep">卸力后按编号图核对每个舵机的 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。</p></li>
+      <li><a href="/calibrate.html" data-desktop-link="/calibrate.html" data-i18n="walkingHelpCalibration">打开标定</a><p data-i18n="walkingHelpCalibrationStep">先标定 IMU，再按参考图重新标定全部 15 个舵机。</p></li>
+      <li><a href="/servo.html" data-desktop-link="/servo.html" data-i18n="walkingHelpServo">打开舵机设置</a><p data-i18n="walkingHelpServoStep">扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。</p></li>
+    </ol>
+  </div>
+</dialog>
 <dialog id="bindingDialog" aria-labelledby="bindingTitle" aria-describedby="bindingIntro">
   <div class="dialog-head"><div><span class="eyebrow">AI INTERACTION</span><h2 id="bindingTitle" data-i18n="bindingTitle">AI 交互绑定</h2></div><button id="closeBinding" class="icon-button" type="button" aria-label="关闭绑定窗口" data-i18n-aria-label="closeBinding">×</button></div>
   <div class="binding-body">
@@ -172,10 +196,22 @@
   <nav class="settings-tabs" aria-label="设置" data-i18n-aria-label="settings"><button data-panel="quick" aria-current="page" data-i18n="general">常规</button><button data-panel="gamepad" data-i18n="gamepad">手柄</button><button data-panel="servo" data-i18n="servos">舵机</button><button data-panel="calibrate" data-i18n="calibration">校准</button></nav>
   <div id="quickPanel" class="quick-panel">
     <section class="usb-settings"><h3 data-i18n="usbConnection">USB 连接</h3><p data-i18n="usbDescription">使用 USB 摄像头、音频设备或有线手柄时，请开启 Host 模式。</p><button id="usbHost" type="button" role="switch" aria-label="USB Host" aria-checked="false" disabled>USB Host</button><p id="usbStatus" role="status"></p><p data-i18n="usbNotice">请用 Wi-Fi 连接并在小鸭停止运动后切换。切换会中断当前 USB 连接。</p></section>
-    <section><h3 data-i18n="speaker">扬声器</h3><div class="setting-row"><label for="volume" data-i18n="duckVolume">小鸭音量</label><output id="volumeLabel">—</output></div><input id="volume" type="range" min="0" max="100" value="100"><button id="applyVolume" data-i18n="applyVolume">应用音量</button><button id="testSpeaker" data-i18n="testSpeaker">测试扬声器</button><button id="testMic" data-i18n="listenMicrophone">监听小鸭麦克风</button><button id="stopAudio" data-i18n="stopAudio">停止音频</button><label class="file-button"><span data-i18n="sendAudioFile">发送音频文件</span><input id="voiceFile" type="file" accept="audio/*"></label><p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p></section>
+    <section>
+      <h3 data-i18n="speaker">扬声器</h3>
+      <div class="setting-row"><label for="volume" data-i18n="duckVolume">小鸭音量</label><output id="volumeLabel" for="volume">—</output></div>
+      <input id="volume" type="range" min="0" max="100" value="100" disabled>
+      <p id="volumeStatus" class="muted" role="status"></p>
+      <div class="speaker-actions">
+        <button id="testSpeaker" type="button" data-i18n="testSpeaker">测试扬声器</button>
+        <button id="testMic" type="button" data-i18n="listenMicrophone">监听小鸭麦克风</button>
+        <button id="stopAudio" type="button" data-i18n="stopAudio">停止音频</button>
+        <label class="file-button"><span data-i18n="sendAudioFile">发送音频文件</span><input id="voiceFile" type="file" accept="audio/*"></label>
+      </div>
+      <p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p>
+    </section>
     <section><h3 data-i18n="handheldView">手持视图</h3><p data-i18n="handheldDescription">横放手机适合配合手柄使用。全屏可隐藏浏览器栏；点击隐藏控件可获得更完整的画面。</p><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=usb-host1"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=motion5"></script><script src="mobile.js?v=usb-host1"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=walking-help"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=walking-help"></script><script src="mobile.js?v=walking-help"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

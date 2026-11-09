@@ -235,7 +235,7 @@
   portraitPhone.addEventListener('change', () => {
     if (portraitPhone.matches) {release(); render();}
   });
-  for (const id of ['clean','settings','padLink','openBinding']) $(id).addEventListener('click', release);
+  for (const id of ['clean','settings','padLink','openBinding','openWalkingHelp']) $(id)?.addEventListener('click', release);
   for (const event of ['blur','pagehide']) window.addEventListener(event, release);
   document.addEventListener('visibilitychange', () => {if (document.hidden) release();});
   window.addEventListener('duck-languagechange', render);

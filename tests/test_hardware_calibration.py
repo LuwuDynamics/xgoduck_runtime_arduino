@@ -58,7 +58,7 @@ class HardwareCalibrationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'Set center & hold'):
                 c.set_sitstand(action)
         self.assertEqual(c.mode, 'shadow')
-        access = MotionAccess(c, allowed=lambda: True)
+        access = MotionAccess(c)
         access.heartbeat(101)
         with self.assertRaisesRegex(ValueError, '旧版软件零位'):
             access.start_action(kind='stand', session=101)

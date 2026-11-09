@@ -32,7 +32,8 @@
       <span class="servo-label" data-zh="设置 KP/KD">Set KP/KD</span>
       <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
       <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
-      <button id="set-gains" data-zh="写入 KP/KD" disabled>Set KpKd</button>
+      <button id="set-gains" data-zh="写入 KP/KD" aria-describedby="gains-restart-hint" disabled>Set KpKd</button>
+      <span id="gains-restart-hint" class="hint" data-zh="写入后断电重启，舵机会加载保存的 KP/KD。">After writing, power-cycle the Duck to reload the saved KP/KD.</span>
     </div>
     <div class="servo-row">
       <span class="servo-label" data-zh="新 ID">Change ID to</span>

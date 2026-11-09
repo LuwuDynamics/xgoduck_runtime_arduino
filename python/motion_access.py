@@ -51,8 +51,8 @@ def command_link_ready(status):
 
 
 class MotionAccess:
-    def __init__(self, controller, allowed=lambda: False, clock=time.monotonic, remote_allowed=lambda: False):
-        self.controller, self.allowed, self.clock = controller, allowed, clock
+    def __init__(self, controller, clock=time.monotonic, remote_allowed=lambda: False):
+        self.controller, self.clock = controller, clock
         self.remote_allowed = remote_allowed
         self.remote_sequences = {}
         self.remote_forward_stopped = set()
@@ -86,8 +86,6 @@ class MotionAccess:
     def _retire_remote_directions(self):
         for controller_id in self.remote_directions:
             self.remote_directions[controller_id] = 'awaiting_release'
-        if self._action_running() and self.action.get('remote_controller'):
-            self.remote_directions[self.action['remote_controller']] = 'awaiting_release'
 
     def _stop_gamepad_travel(self):
         if self.gamepad and self.gamepad.enabled:
@@ -100,7 +98,8 @@ class MotionAccess:
             self.controller.twist = [0.] * 3
             self.controller.generation += 1
 
-    def movement_state(self, status, *, ongoing=False, required_ids=LEG_IDS, local_action=False, allow_hold=False):
+    def movement_state(self, status, *, ongoing=False, required_ids=LEG_IDS, local_action=False,
+                       allow_hold=False, allow_seated=False):
         """Confirm standing before entry; allow normal gait tilt during a lease."""
         now = self.clock()
         recovery = status.get('recovery') or {}
@@ -115,9 +114,11 @@ class MotionAccess:
                 angle = None
         angle_known = (not isinstance(angle, bool) and isinstance(angle, (int, float))
                        and math.isfinite(angle) and angle >= 0)
-        tilt_limit = Recovery.FALL_DEG if ongoing else Recovery.STAND_DEG
+        sitstand = status.get('sitstand') or {}
+        seated_head = allow_seated and sitstand.get('phase') == 'sit'
+        tilt_limit = Recovery.FALL_DEG if ongoing or seated_head else Recovery.STAND_DEG
         if status.get('fault_hold'):
-            reason = '运动已暂停且保持扭矩，请先说“站起来”恢复，再执行行走或转向。'
+            reason = '运动反馈暂时中断，舵机保持上次目标位置。请等待反馈恢复后再移动。'
         elif status.get('arming'):
             reason = '正在等待 STM32 确认使能，请稍等后再移动。'
         elif not feedback_ready(status, required_ids):
@@ -136,11 +137,12 @@ class MotionAccess:
             reason = '鸭子趴倒、倾斜或姿态未知，请先完成站立。'
         elif (status.get('pick') or {}).get('active') or (status.get('roulade') or {}).get('active'):
             reason = '鸭子正在执行抓取或翻滚，请等待动作结束。'
-        elif any((status.get(name) or {}).get('active') for name in ('sitstand', 'left_kick', 'right_kick')):
+        elif ((sitstand.get('active') and not seated_head)
+              or any((status.get(name) or {}).get('active') for name in ('left_kick', 'right_kick'))):
             reason = '鸭子正在执行坐站或踢腿，请等待动作结束。'
         else:
             reason = ''
-        if reason or angle >= Recovery.STAND_DEG:
+        if reason or seated_head or angle >= Recovery.STAND_DEG:
             self.standing_since = None
         elif self.standing_since is None or now - self.standing_observed > .15:
             self.standing_since = now
@@ -182,7 +184,8 @@ class MotionAccess:
                           sit=self._required_ids('sit', {}),
                           left_kick=self._required_ids('left_kick', {}),
                           right_kick=self._required_ids('right_kick', {}))
-            return dict(owner=self.controller.input_source, voice_motion_enabled=bool(self.allowed()),
+            # Older status consumers still expect the voice permission field.
+            return dict(owner=self.controller.input_source, voice_motion_enabled=True,
                         remote_motion_enabled=bool(self.remote_allowed()),
                         action=dict(self.action) if self.action else None,
                         queued_actions=[dict(job) for job, _ in self.pending],
@@ -422,7 +425,7 @@ class MotionAccess:
                     self.remote_forward_stopped.discard(controller_id)
                     self.remote_directions.pop(controller_id, None)
                     self.remember_remote(controller_id, sequence)
-                    if self._action_running() and self.action.get('remote_controller') == controller_id:
+                    if self._locomotion_running() and self.action.get('remote_controller') == controller_id:
                         self._zero_twist()
                         self._finish_action('completed', result='Remote direction released.')
                     return {'status': 'completed', 'message': 'Remote direction released.'}
@@ -440,9 +443,8 @@ class MotionAccess:
                 raise ValueError('unsupported duck action')
             if getattr(self.controller, 'battery_phase', 'normal') != 'normal':
                 raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
-            if not (self.remote_allowed() if remote else self.allowed()):
-                raise ValueError('Remote motion disabled; enable it in the control page.' if remote else
-                                 'Voice motion disabled. 语音运动未开启，请先说“开启语音运动”；此开关本身不启动舵机。')
+            if remote and not self.remote_allowed():
+                raise ValueError('Remote motion disabled; enable it in the control page.')
             if self.controller.mode in ('calibrate', 'servo_debug'):
                 raise ValueError('Exit calibration / servo setup first.')
             if kind == 'default_pose':
@@ -460,7 +462,7 @@ class MotionAccess:
                 return dict(status='completed', walking_mode=selected, roller=result)
             if kind == 'stand' and getattr(self.controller, 'fault_hold', False):
                 self.cancel('explicit resume after motion pause')
-            renewing = (remote and self._action_running()
+            renewing = (remote and self._locomotion_running()
                         and self.action.get('remote_controller') == controller_id)
             busy = bool(self.pending or (self._action_running() and not renewing))
             if isinstance(duration, bool):
@@ -523,9 +525,9 @@ class MotionAccess:
                     job['command_' + key] = payload[key]
             if remote:
                 job['remote_controller'] = controller_id
+                self.remember_remote(controller_id, sequence)
+                self.remote_directions[controller_id] = 'held'
             if forward_latched or interrupted and payload['twist'][0] > 0:
-                if remote:
-                    self.remember_remote(controller_id, sequence)
                 return self._blocked_forward(job, ForwardBlocked(
                     ('前进已被 ToF 停止，请先松开方向键再重新前进；仍可后退或原地转向。' if forward_latched else
                      self.action['reason']),
@@ -535,8 +537,6 @@ class MotionAccess:
                            or c.input_source == 'gamepad' and any(c.twist)
                            or c.mode == 'policy' and (c.action_preparation or c.sitstand_phase == 'stand' or c.pick_active
                                                      or c.roulade_until or c.kick_until)):
-                self.remember_remote(controller_id, sequence)
-                self.remote_directions[controller_id] = 'paused'
                 return dict(status='paused', reason='当前动作占用腿部，暂缓方向控制。')
             manual_driving = (c.input_source != 'voice' or self._action_running()
                               and self.action.get('remote_controller'))
@@ -552,19 +552,12 @@ class MotionAccess:
                 self._log_action(job)
                 return dict(status='queued', action_id=job['id'], duration_s=duration, queue_position=len(self.pending))
             try:
-                started = self._begin_action(job, payload, ongoing=bool(renewing and self._locomotion_running()))
+                started = self._begin_action(job, payload, ongoing=bool(renewing))
             except ForwardBlocked as blocked:
-                if remote:
-                    self.remember_remote(controller_id, sequence)
                 return self._blocked_forward(job, blocked)
-            except ValueError:
-                if remote:
-                    self.remember_remote(controller_id, sequence)
-                raise
-            if remote:
-                self.remember_remote(controller_id, sequence)
-                self.remote_directions.pop(controller_id, None)
             if not started:
+                if remote:
+                    return dict(status='paused', reason=job['waiting_for'])
                 self._log_action(job)
                 return dict(status='queued', action_id=job['id'], duration_s=duration,
                             queue_position=1, reason=job['waiting_for'])
@@ -596,8 +589,7 @@ class MotionAccess:
                       and status.get('fault_hold_supported') is True
                       and status.get('fault_hold') is True)
         if status.get('fault_hold') and status.get('fault_hold_supported') and not can_resume:
-            raise ValueError('Motion paused with torque retained. 运动已暂停且保持扭矩；'
-                             '请先说“站起来”恢复，再执行行走或转向。')
+            raise ValueError('Waiting for motion feedback to recover. 运动反馈暂时中断，请等待恢复后重试。')
         if not command_link_ready(status) and not can_resume:
             raise ValueError('MCU command link is stale or watchdog paused motion. '
                              '运动命令未到达 STM32，暂不能启动；请先修复 Bridge 通信。')
@@ -605,8 +597,8 @@ class MotionAccess:
     def _begin_action(self, job, payload, *, ongoing=False, queued=False, after_roll=False):
         """One execution gate for immediate and queued actions; never poll hardware."""
         remote = bool(job.get('remote_controller'))
-        if not (self.remote_allowed() if remote else self.allowed()):
-            raise ValueError('Motion permission removed.')
+        if remote and not self.remote_allowed():
+            raise ValueError('Remote motion disabled.')
         c = self.controller
         if c.mode in ('calibrate', 'servo_debug'):
             raise ValueError('Exit calibration / servo setup first.')
@@ -618,10 +610,17 @@ class MotionAccess:
         avoidance = status.get('obstacle_avoidance') or {}
         if kind != 'stand':
             movement = self.movement_state(status, ongoing=ongoing, required_ids=required_ids,
-                                           local_action=kind in ('head', 'mouth'), allow_hold=kind == 'sit')
+                                           local_action=kind in ('head', 'mouth'), allow_hold=kind == 'sit',
+                                           allow_seated=kind == 'head')
             if not movement['movement_ready']:
-                if not remote and self._needs_stand(kind, status, required_ids):
+                if ((not remote or any(payload['twist']))
+                        and self._needs_stand(kind, status, required_ids, remote=remote)):
                     self._start_stand_before(job, payload, queued)
+                    return False
+                if remote and c.mode == 'policy' and (
+                        self.standing_since is not None or status.get('arming')
+                        or (status.get('enabled') is True and c.recovery.phase in ('default_pose', 'getup'))):
+                    job['waiting_for'] = movement['movement_block_reason']
                     return False
                 if not queued:
                     raise ValueError('Motion not ready. ' + movement['movement_block_reason'])
@@ -685,10 +684,14 @@ class MotionAccess:
         self._log_action(job)
         return True
 
-    def _needs_stand(self, kind, status, required_ids):
-        if kind not in WALK_ACTIONS or status.get('enabled') is not True or status.get('arming'):
+    def _needs_stand(self, kind, status, required_ids, *, remote=False):
+        if kind not in WALK_ACTIONS or status.get('arming'):
             return False
         c = self.controller
+        if remote and c.mode in ('off', 'shadow', 'hold'):
+            return True
+        if status.get('enabled') is not True:
+            return False
         if c.mode == 'hold':
             return self.movement_state(status, required_ids=required_ids, allow_hold=True)['movement_ready']
         recovery = status.get('recovery') or {}
@@ -698,15 +701,20 @@ class MotionAccess:
                 and 0 <= angle < Recovery.FALL_DEG)
 
     def _start_stand_before(self, job, payload, queued):
-        # Use the same verified stand transition and timeout as an explicit
-        # Stand call. The requested action still has its own ID and timer.
+        # Remote movement needs a fresh key renewal after standing. Only
+        # bounded voice actions stay queued across the stand transition.
         now = self.clock()
         stand = dict(id=uuid.uuid4().hex[:12], kind='stand', accepted_at=now,
-                     duration_s=STAND_TIMEOUT_S, command_twist=[0.] * 3, prepares_action=job['id'])
+                     duration_s=STAND_TIMEOUT_S, command_twist=[0.] * 3)
+        remote_controller = job.get('remote_controller')
+        if remote_controller:
+            stand['remote_controller'] = remote_controller
+        else:
+            stand['prepares_action'] = job['id']
         self._begin_action(stand, dict(twist=[0.] * 3, head=[0.] * 4, mouth=0.))
         self.standing_since = None
         job['waiting_for'] = '正在起立或切换到平衡模式，站稳后继续执行。'
-        if not queued:
+        if not queued and not remote_controller:
             self.pending.appendleft((job, payload))
 
     def _apply_action(self, kind, payload, source):
@@ -727,7 +735,7 @@ class MotionAccess:
                 c.set_mode('policy')
         elif kind == 'sit':
             action = c.set_sitstand('sit')
-        else:
+        elif kind != 'head' or c.sitstand_phase != 'sit':
             c.set_mode('policy')
         reply = c.command(**payload, source=source)
         if reply.get('forward_blocked'):
@@ -786,6 +794,10 @@ class MotionAccess:
 
     def _finish_action(self, state, *, job=None, **details):
         job = self.action if job is None else job
+        remote_controller = job.get('remote_controller')
+        if (job['kind'] == 'stand' and state in ('failed', 'cancelled')
+                and remote_controller in self.remote_directions):
+            self.remote_directions[remote_controller] = 'awaiting_release'
         elapsed = max(0., self.clock() - job['started_at']) if 'started_at' in job else 0.
         job.update(state=state, elapsed_s=round(elapsed, 3), **details)
         self.recent_actions.append(dict(job))
@@ -928,11 +940,12 @@ class MotionAccess:
                     self._finish_action('cancelled', reason='control source changed')
                 self._cancel_pending('control source changed')
                 return
-            allowed = self.remote_allowed if running and self.action.get('remote_controller') else self.allowed
             preparing_sit = (running and self.action.get('awaiting_model') and self.action['kind'] == 'sit'
                              and self.controller.mode == 'hold')
-            if (running and not allowed()) or self.voice_session is None or self.clock() - self.voice_seen > .8:
-                self.cancel('voice unavailable or motion disabled')
+            if self.voice_session is None or self.clock() - self.voice_seen > .8:
+                self.cancel('voice unavailable')
+            elif running and self.action.get('remote_controller') and not self.remote_allowed():
+                self.cancel('Remote motion disabled.')
             elif self.controller.mode != 'policy' and not preparing_sit:
                 self.cancel(status.get('last_error') or 'controller left policy mode')
             elif (status.get('fault_hold') or not feedback_ready(status, required_ids) or

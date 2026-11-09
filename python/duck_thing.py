@@ -21,14 +21,6 @@ class DuckThing(Thing):
                             [p('kind', 'greet/inquire/alarm/peck/chirp/coo/wheee', ValueType.STRING)],
                             lambda a: sound_player(a['kind'].get_value()))
         if settings is not None:
-            def enable(args):
-                value = args['enabled'].get_value()
-                if not isinstance(value, bool):
-                    raise ValueError('enabled must be boolean')
-                settings.update({'voice_motion_enabled': value})
-                return {'status': 'success', 'voice_motion_enabled': value, 'message': 'This does not arm motors.'}
-            self.add_method('EnableVoiceMotion', '仅按用户明确要求更改语音运动权限；不启动舵机',
-                            [p('enabled', 'true 开启，false 关闭', ValueType.BOOLEAN)], enable)
             def enable_remote(args):
                 value = args['enabled'].get_value()
                 if not isinstance(value, bool):
@@ -37,16 +29,16 @@ class DuckThing(Thing):
                 return {'status': 'success', 'remote_motion_enabled': value, 'message': 'This does not arm motors.'}
             self.add_method('EnableRemoteMotion', '开启或关闭手机 MCP 遥控权限；开启本身不会启动舵机',
                             [p('enabled', 'true 开启，false 关闭', ValueType.BOOLEAN)], enable_remote)
-        self.add_method('RemoteMove', '手机遥控续租；先查movement_ready。只移动已站稳的鸭子，不自动起身；stop停止该控制器',
+        self.add_method('RemoteMove', '手机方向键续租；需要时先零速起身，站稳后才响应新的方向租约；stop结束该控制器的方向移动',
             [p('direction', 'forward/backward/left/right/stop', ValueType.STRING), p('speed', '0–100 百分比'),
              p('seconds', '0.1–1 秒租约'), p('controller_id', '手机控制器会话 ID', ValueType.STRING),
              p('sequence', '会话内严格递增整数，停止也必须递增')],
             lambda a: self.remote_move(**{key: a[key].get_value()
                 for key in ('direction', 'speed', 'seconds', 'controller_id', 'sequence')}))
         self.add_method('GetStatus', '查询当前/排队/最近动作、模型及避障；接受不等于完成。按action_feedback_ready/head_feedback_ready判断所需关节；feedback_warning不阻止所有动作', [], lambda _: self.state())
-        self.add_method('Stand', '站起来/起立/站稳：进入零速平衡；坐下后通过坐站模型起立。先查GetStatus；权限关闭时请用户开启EnableVoiceMotion',
+        self.add_method('Stand', '站起来/起立/站稳：进入零速平衡；坐下后通过坐站模型起立。用GetStatus确认站稳',
                         [], lambda _: self.action(kind='stand'))
-        self.add_method('DefaultPose', '仅在明确要求默认姿势时使用：使能并保持预设关节角（hold），需要运动权限和有效反馈',
+        self.add_method('DefaultPose', '仅在明确要求默认姿势时使用：使能并保持预设关节角（hold），需要有效反馈',
                         [], lambda _: self.action(kind='default_pose'))
         self.add_method('Forward', '普通前进/往前走用normal，默认0.1 m/s；用户明确快点/大点步/最快时用fast，最高0.15 m/s，不能用0.2/0.4。'
                         '明确慢走或指定数值用Move。默认3秒，最长10秒；accepted只代表接受，需GetStatus查结果，'
@@ -64,7 +56,7 @@ class DuckThing(Thing):
         self.add_method('Turn', '转向后归零，可排队；普通左转+1、右转-1 rad/s，默认2–3秒；Roller限±0.25。查GetStatus，不代表测得角度',
                         [p('yaw_rate', '-1–1 rad/s；默认左转 +1、右转 -1，正值左转'), p('seconds', '0.1–10 秒，排队等待不计入')],
                         lambda a: self.action(kind='turn', twist=[0, 0, a['yaw_rate'].get_value()], duration=a['seconds'].get_value()))
-        self.add_method('SetHead', '保持头颈目标，弧度；左右扭头用head3；省略轴保持原值，不会自动回中，勿同时设四轴极值',
+        self.add_method('SetHead', '站立或保持坐姿时可转头，弧度；左右扭头用head3；省略轴保持原值，不会自动回中，勿同时设四轴极值',
                         [p('head1', '颈部俯仰，±0.5 rad', required=False),
                          p('head2', '头部俯仰，±0.5 rad', required=False),
                          p('head3', '左右转头 yaw，±0.5 rad', required=False),
@@ -168,5 +160,5 @@ class DuckThing(Thing):
         fraction = speed / 100
         twist = dict(forward=[fraction * .15, 0, 0], backward=[-fraction * .15, 0, 0],
                      left=[0, 0, fraction], right=[0, 0, -fraction], stop=[0, 0, 0])[direction]
-        return self.action(kind='stop' if direction == 'stop' else 'move', twist=twist, duration=seconds,
+        return self.action(kind='move' if any(twist) else 'stop', twist=twist, duration=seconds,
                            remote=True, controller_id=controller_id, sequence=sequence)

@@ -5,18 +5,21 @@ const vm = require('node:vm');
 const nodes = new Map(), win = {}, doc = {}, requests = [], beacons = [];
 const element = id => {
   if (!nodes.has(id)) nodes.set(id, {value: '0', textContent: '', firstElementChild: {style: {}},
-    insertAdjacentHTML() {}, setAttribute() {}, hasPointerCapture: () => false});
+    insertAdjacentHTML() {}, addEventListener() {},
+    setAttribute(name, value) { this[name] = value; }, hasPointerCapture: () => false});
   return nodes.get(id);
 };
 const context = {document: {hidden: false, documentElement: {}, getElementById: element, querySelectorAll: () => [],
   addEventListener: (name, fn) => doc[name] = fn},
   window: {addEventListener: (name, fn) => win[name] = fn},
   fetch: async (path, options) => {requests.push({path, body: JSON.parse(options.body)}); return {ok:true, json:async()=>({})};},
-  navigator: {sendBeacon: (path, body) => beacons.push({path, body})}, Blob,
+  navigator: {sendBeacon: (path, body) => beacons.push({path, body})}, Blob, URL,
+  location: {href: 'http://192.0.2.10:9527/'},
   setInterval() {}, console};
 for(const file of ['panel-language.js','app.js'])
   vm.runInNewContext(fs.readFileSync(require('node:path').join(__dirname,'../assets',file),'utf8'), context);
 (async () => {
+  assert.equal(element('cockpit-link').href, 'http://192.0.2.10/');
   const language=element('language');
   assert.equal(language.textContent,'中文');
   language.onclick();

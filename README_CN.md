@@ -1,6 +1,6 @@
 # XGO Duck AI
 
-[English](README.md) · 简体中文
+[English](README.md) · 简体中文 · [更新记录](docs/CHANGELOG.md)
 
 在 Arduino UNO Q 上运行小鸭的语音聊天、运动控制、USB 音视频和 ToF 测距。日常操作使用浏览器，不需要给小鸭连接屏幕。
 
@@ -69,7 +69,7 @@
 
 ### 让 AI 代装第 3～4 步
 
-这份提示词已在 Codex 和 DeepSeek Harness 中测试通过，均顺利完成 App 安装。预计用时 30 分钟到 1 小时，具体取决于下载速度。
+这份提示词已在 Codex、DeepSeek Harness 和 Cursor 中测试通过，均顺利完成 App 安装。Cursor 在 2 GB 板上的测试使用了单任务编译。预计用时 30 分钟到 1 小时，具体取决于下载速度。
 
 复制下面的提示词，在自己的 AI 会话里填入 **板子 IP、SSH 用户名和密码**。能执行终端命令的 AI 就可以通过 Wi-Fi SSH 直接登录板子。已经导入的 App 可以从实际安装目录继续。
 
@@ -218,7 +218,8 @@ App 安装并启动成功后，提醒我回到本 README，按顺序完成第 5 
 
 ### 1. 小鸭走不稳或发抖
 
-1. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)重新标定 IMU 和全部 15 个舵机。新版标定页顶部可以标定 IMU，下方有舵机实物编号和各关节的零位参考图。
-2. 扶稳小鸭，打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对。新版页面会分别显示保存值和运行值。
+1. 先停止移动，扶稳小鸭并卸力。按标定页的编号图核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
+2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)重新标定 IMU 和全部 15 个舵机。新版标定页顶部可以标定 IMU，下方有舵机实物编号和各关节的零位参考图。
+3. 打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对保存值和运行值。断电重启后，舵机会加载保存值。
 
 本项目基于 Pollen Robotics 的 [Microduck](https://github.com/pollen-robotics/microduck)。[硬件](https://github.com/LuwuDynamics/xgoduck_hardware) · [训练代码](https://github.com/LuwuDynamics/xgoduck_rl)

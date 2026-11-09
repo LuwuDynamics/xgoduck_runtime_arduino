@@ -291,7 +291,7 @@ class ForwardControllerTest(unittest.TestCase):
         self.assertEqual(self.c.twist, twist)
         self.access.cockpit_motion(driver, 2, 'release')
 
-        self.access.allowed = self.access.remote_allowed = lambda: True
+        self.access.remote_allowed = lambda: True
         self.access.heartbeat(101)
         for remote in ({}, dict(remote=True, controller_id='phone-1234', sequence=1)):
             result = self.access.start_action('move', session=101, twist=twist, duration=.7, **remote)

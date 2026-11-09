@@ -119,7 +119,7 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | left_kick / right_kick | Runs the selected kick for 0.4 s, then returns to the selected walking policy. |
 | Torque off | Disables position control. |
 
-Closing/backgrounding the page sends zero travel. One second without input clears travel while keeping balance; valid voice actions renew input only within their original deadline. Normal MCU commands do not expire. The MCU disarms if Bridge is unavailable or its IMU sample is older than 500 ms; Linux disarms on feedback older than 150 ms, invalid IMU, or total IMU age above 500 ms. App exit, gamepad disconnect and explicit Off unload. Calibration/servo setup has a separate 250 ms MCU host-heartbeat guard and a two-second host UI-heartbeat guard. Reconnection requires explicit arming and does not resume expired motion.
+Closing or backgrounding the page sends zero travel. One second without input clears travel while keeping balance. Voice actions renew input only within their original deadline. After 150 ms without fresh STM32 feedback, Linux pauses new targets and clears travel. The MCU holds the last targets while Bridge and its IMU are healthy. Fresh feedback with torque still enabled restores the current control mode. The MCU disarms if Bridge is unavailable or its IMU sample is older than 500 ms. Linux also disarms on invalid IMU data or total IMU age above 500 ms. App exit, gamepad disconnect and explicit Off unload. Calibration and servo setup have a separate 250 ms MCU host-heartbeat guard and a two-second host UI-heartbeat guard.
 
 The web joystick uses vx -0.18 to +0.2, vy ±0.3 and yaw ±1.0 for ordinary walking; Roller uses vx ±0.4, vy 0 and yaw ±0.25. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
 
@@ -150,7 +150,7 @@ Recovery, evaluated on the 50 Hz clock:
 
 Ordinary action smoothing uses leg α = 0.35 on `[0:5]` and `[9:14]`, and head α = 0.45 on `[5:9]`. Roller uses leg/head α = 0.4/0.5; kicks use 0/0. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly. IMU fusion uses source timestamps from the independent MCU IMU task. Gyro smoothing α = 0.5, joint-velocity α = 0.4, and gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%; there is no gyro bias subtraction. QMI axes are mapped once in firmware and the host undoes the reference device mapping before fusion.
 
-The matching master protocol includes MCU-timestamped IMU data and separate loop/Bridge diagnostics. Normal command TTL is retained in the packet ABI but disabled. Bridge loss or a stale IMU disarms the MCU; Linux also returns to inference-only on stale/invalid feedback. Explicit Stand/Policy/Hold with fresh feedback can arm again. The protocol uses DISARM/ARM/POLICY/HOLD; calibration and servo setup retain their independent heartbeat guards described above.
+The matching master protocol includes MCU-timestamped IMU data and separate loop/Bridge diagnostics. The packet ABI retains the disabled normal command TTL field. Following a feedback pause, Linux returns to inference-only if the MCU reports torque off or invalid IMU feedback. Explicit Stand, Policy or Hold with fresh feedback can arm again. The protocol uses DISARM/ARM/POLICY/HOLD. Calibration and servo setup use the independent heartbeat guards described above.
 
 ## Layout
 

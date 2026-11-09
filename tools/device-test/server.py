@@ -25,6 +25,7 @@ import doubao
 
 ROOT = Path(__file__).resolve().parent
 MAX_UPLOAD = 12 * 1024 * 1024
+CAMERA_PREVIEW_FPS = 15
 
 
 def melody(path):
@@ -422,6 +423,7 @@ class Bench:
                 running=bool(self.camera and self.camera.poll() is None), ready=self.jpeg is not None,
                 device=self.camera_device, frames=self.frames, error=self.camera_error,
                 light=self.camera_light_status(),
+                preview_fps_limit=CAMERA_PREVIEW_FPS,
                 fps=round((len(self.frame_times)-1)/(self.frame_times[-1]-self.frame_times[0]),1)
                     if len(self.frame_times)>1 and time.monotonic()-self.last_frame<2 else 0),
                 audio=dict(available=card is not None, card=card, volume=volume, volume_error=self.volume_error,
@@ -553,8 +555,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.end_headers()
         last = -1
+        next_send = 0.0
         try:
             while not b.closed:
+                delay = next_send - time.monotonic()
+                if delay > 0:
+                    time.sleep(delay)
                 with b.frame_ready:
                     b.frame_ready.wait_for(lambda: b.camera is not proc or b.frames != last, timeout=2)
                     if b.camera is not proc or proc.poll() is not None:
@@ -565,6 +571,7 @@ class Handler(BaseHTTPRequestHandler):
                         last = b.frames
                         continue
                     jpeg, last = b.jpeg, b.frames
+                next_send = time.monotonic() + 1 / CAMERA_PREVIEW_FPS
                 self.wfile.write(b'--duckframe\r\nContent-Type: image/jpeg\r\nContent-Length: '
                                  + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n')
                 self.wfile.flush()

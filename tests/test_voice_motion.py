@@ -44,11 +44,11 @@ class VoiceMotionTest(unittest.TestCase):
             fault_hold=self.c.fault_hold, fault_hold_supported=bool(self.c.feedback.flags & 32),
             arming=self.c.arm_pending or self.c._arm_ack_seq is not None,
             pick={'active': self.c.pick_active}, roulade={'active': bool(self.c.roulade_until)},
-            sitstand={'active': self.c.sitstand_phase != 'idle'},
+            sitstand={'active': self.c.sitstand_phase != 'idle', 'phase': self.c.sitstand_phase},
             left_kick={'active': bool(self.c.kick_until) and self.c.kick_side == 'left'},
             right_kick={'active': bool(self.c.kick_until) and self.c.kick_side == 'right'}))
-        self.now, self.allowed = 99., True
-        self.access = MotionAccess(self.c, allowed=lambda: self.allowed, clock=lambda: self.now)
+        self.now = 99.
+        self.access = MotionAccess(self.c, clock=lambda: self.now)
         self.access.heartbeat(101)
         self.access.tick()
         self.advance(1.)
@@ -230,11 +230,7 @@ class VoiceMotionTest(unittest.TestCase):
                     self.assertEqual(self.c.input_source, 'web')
                     self.assertFalse(self.c.arm_pending)
 
-    def test_stand_keeps_permission_calibration_and_remote_guards(self):
-        self.allowed = False
-        with self.assertRaisesRegex(ValueError, 'disabled'):
-            self.access.start_action(kind='stand', session=101)
-        self.allowed = True
+    def test_stand_keeps_calibration_and_remote_guards(self):
         self.c.input_source, self.c.mode = 'web', 'calibrate'
         with self.assertRaisesRegex(ValueError, 'calibration'):
             self.access.start_action(kind='stand', session=101)
@@ -246,31 +242,32 @@ class VoiceMotionTest(unittest.TestCase):
         self.access.start_action(kind='stand', session=101)
         self.assertEqual(self.c.twist, [0, 0, 0])
 
-    def test_mcp_stand_is_explicit_and_permission_error_is_readable_to_cloud(self):
+    def test_mcp_stand_works_directly_and_calibration_error_is_readable_to_cloud(self):
         mcp = self.mcp()
         tools = mcp.handle_message({'id': 1, 'method': 'tools/list'})['result']['tools']
         stand = next(t for t in tools if t['name'] == 'Duck.Stand')
         self.assertEqual(stand['inputSchema']['required'], [])
         self.assertEqual(stand['inputSchema']['properties'], {})
         self.assertLess(len(json.dumps(tools, ensure_ascii=False).encode()), 16000)
-        self.allowed = False
+        self.c.mode = 'calibrate'
         reply = mcp.handle_message({'id': 2, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
         self.assertTrue(reply['isError'])
         # The deployed cloud reads result.error before result.content on failure.
-        self.assertIn('开启语音运动', reply['error'])
+        self.assertIn('calibration', reply['error'])
         self.assertEqual(json.loads(reply['content'][0]['text'])['message'], reply['error'])
-        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.mode, 'calibrate')
         self.assertEqual(self.c.input_source, 'web')
-        self.allowed = True
+        self.c.mode, self.c.feedback.enabled = 'shadow', False
         reply = mcp.handle_message({'id': 3, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
         self.assertFalse(reply['isError'])
         self.assertNotIn('error', reply)
         self.assertEqual(self.access.action['kind'], 'stand')
+        self.assertEqual(self.c.mode, 'policy')
         self.assertEqual(self.c.twist, [0, 0, 0])
 
     def test_full_mcp_tools_list_with_camera_fits_deployed_gateway_packet_budget(self):
         mcp = self.mcp()
-        # Production also exposes the two permission tools when settings exist.
+        # Production also exposes the phone remote permission and duck sounds.
         mcp.thing_manager.add_thing(DuckThing(0, 'unused', settings=Mock(), sound_player=Mock()))
         mcp.self_provider = Mock()
         mcp.self_provider.mcp_camera_available.return_value = True
@@ -284,9 +281,9 @@ class VoiceMotionTest(unittest.TestCase):
         payload = sender.send_text.call_args.args[0].encode('utf-8')
         self.assertLess(len(payload) + 512, 16000)  # Reserve topic, QoS and header.
         self.assertLessEqual(len(reply['result']['tools']), 60)
-        self.assertIn('Duck.Stand', {t['name'] for t in reply['result']['tools']})
-        self.assertIn('Duck.DefaultPose', {t['name'] for t in reply['result']['tools']})
-        self.assertIn('Duck.Quack', {t['name'] for t in reply['result']['tools']})
+        names = {t['name'] for t in reply['result']['tools']}
+        self.assertTrue({'Duck.Stand', 'Duck.DefaultPose', 'Duck.Quack', 'Duck.EnableRemoteMotion'} <= names)
+        self.assertNotIn('Duck.EnableVoiceMotion', names)
 
     def test_mcp_default_pose_cancels_movement_and_selects_dashboard_hold_mode(self):
         self.access.remote_allowed = lambda: True
@@ -303,14 +300,9 @@ class VoiceMotionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'retired'):
             self.move(**(remote | {'sequence': 2}))
 
-    def test_mcp_default_pose_requires_motion_permission_and_live_command_link(self):
+    def test_mcp_default_pose_requires_live_command_link(self):
         self.c.mode, self.c.feedback.enabled = 'off', False
         mcp = self.mcp()
-        self.allowed = False
-        reply, _ = self.call_mcp(mcp, 'Duck.DefaultPose')
-        self.assertTrue(reply['isError'])
-        self.assertIn('Voice motion disabled', reply['error'])
-        self.allowed = True
         self.motion_status['mcu_watchdog'] = True
         reply, _ = self.call_mcp(mcp, 'Duck.DefaultPose')
         self.assertTrue(reply['isError'])
@@ -369,17 +361,17 @@ class VoiceMotionTest(unittest.TestCase):
                 self.assertEqual(data['motion_action'], self.access.action)
                 self.assertEqual(data['status'], 'success')
 
-    def test_mcp_forward_with_voice_permission_off_returns_reason_without_moving(self):
-        self.allowed = False
+    def test_mcp_forward_with_stale_voice_session_returns_reason_without_moving(self):
+        self.now += .81
         before = (self.c.mode, self.c.input_source, list(self.c.twist), self.c.bridge.notify.call_count)
         reply = self.mcp().handle_message({'id': 1, 'method': 'tools/call',
             'params': {'name': 'Duck.Move', 'arguments': {'direction': 'forward', 'speed': .05, 'seconds': 2}}})['result']
         self.assertTrue(reply['isError'])
-        self.assertIn('语音运动未开启', reply['error'])
+        self.assertIn('heartbeat is stale', reply['error'])
         self.assertNotEqual(reply['error'], 'None')
         self.assertEqual(before, (self.c.mode, self.c.input_source, self.c.twist, self.c.bridge.notify.call_count))
 
-    def test_direction_keys_never_arm_a_disarmed_fallen_or_recovering_duck(self):
+    def test_direction_rejects_unready_pose_or_waits_for_existing_recovery(self):
         self.access.remote_allowed = lambda: True
         states = [('shadow', False, 'walk', 0), ('off', False, 'walk', 0),
                   ('hold', True, 'walk', 0), ('policy', False, 'walk', 0),
@@ -390,13 +382,20 @@ class VoiceMotionTest(unittest.TestCase):
             self.c.mode, self.c.feedback.enabled = mode, enabled
             self.c.recovery.phase, self.c.recovery.angle_deg = phase, angle
             for remote in (False, True):
+                if remote and mode in ('shadow', 'off', 'hold'):
+                    continue  # Remote arming and mode switching are tested separately.
                 with self.subTest(mode=mode, enabled=enabled, phase=phase, angle=angle, remote=remote):
                     before = self.c.bridge.notify.call_count
-                    with self.assertRaisesRegex(ValueError, 'Motion not ready'):
-                        self.move(remote=remote, duration=.7,
-                                  controller_id='phone_guard_' + str(index), sequence=1)
+                    command = dict(remote=remote, duration=.7,
+                                   controller_id='phone_guard_' + str(index), sequence=1)
+                    if remote and phase in ('default_pose', 'getup'):
+                        self.assertEqual(self.move(**command)['status'], 'paused')
+                    else:
+                        with self.assertRaisesRegex(ValueError, 'Motion not ready'):
+                            self.move(**command)
                     self.assertEqual(self.c.mode, mode)
                     self.assertEqual(self.c.input_source, 'web')
+                    self.assertEqual(self.c.twist, [0, 0, 0])
                     self.assertFalse(self.c.arm_pending)
                     self.assertEqual(self.c.bridge.notify.call_count, before)
 
@@ -422,6 +421,69 @@ class VoiceMotionTest(unittest.TestCase):
         self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=3)
         self.assertEqual(self.c.twist, [.08, 0, 0])
         self.assertFalse(self.c.arm_pending)
+
+    def test_remote_direction_from_hold_stands_and_needs_a_new_lease(self):
+        self.access.remote_allowed = lambda: True
+        self.c.mode = 'hold'
+        mcp = self.mcp()
+        args = dict(direction='forward', speed=50, seconds=.7, controller_id='phone_session_A')
+        reply, data = self.call_mcp(mcp, 'Duck.RemoteMove', dict(args, sequence=1))
+        self.assertFalse(reply['isError'], data)
+        self.assertEqual(data['execution']['status'], 'paused')
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.access.action['kind'], 'stand')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertFalse(self.access.pending)
+        stand_id = self.access.action['id']
+
+        self.c.recovery.angle_deg = 5
+        self.advance(.3)
+        reply, data = self.call_mcp(mcp, 'Duck.RemoteMove', dict(args, sequence=2))
+        self.assertFalse(reply['isError'], data)
+        self.assertEqual(data['execution']['status'], 'paused')
+        self.assertEqual(self.access.action['id'], stand_id)
+        self.call_mcp(mcp, 'Duck.RemoteMove', dict(args, direction='stop', sequence=4))
+        reply, _ = self.call_mcp(mcp, 'Duck.RemoteMove', dict(args, sequence=3))
+        self.assertTrue(reply['isError'])
+        self.advance(1.)
+        self.assertEqual(self.access.action['kind'], 'stand')
+        self.assertEqual(self.access.action['state'], 'completed')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+
+        reply, data = self.call_mcp(mcp, 'Duck.RemoteMove', dict(args, sequence=5))
+        self.assertFalse(reply['isError'], data)
+        self.assertEqual(data['execution']['status'], 'accepted')
+        self.assertEqual(self.c.twist, [.075, 0, 0])
+
+    def test_remote_direction_can_arm_from_off_but_torque_off_retires_the_key(self):
+        self.access.remote_allowed = lambda: True
+        self.c.mode, self.c.feedback.enabled = 'off', False
+        lease = dict(remote=True, duration=.7, controller_id='phone_session_A')
+        self.assertEqual(self.move(**lease, sequence=1)['status'], 'paused')
+        self.assertTrue(self.c.arm_pending)
+        self.c.step()
+        self.ack_arm()
+        self.c.recovery.phase, self.c.recovery.angle_deg = 'walk', 5
+        self.advance(1.1)
+        self.assertEqual(self.c.twist, [0, 0, 0])  # The first lease expired while standing.
+        self.assertEqual(self.move(**lease, sequence=2)['status'], 'accepted')
+        self.advance(.75)
+        self.access.start_action(kind='torque_off', session=101)
+        with self.assertRaisesRegex(ValueError, 'release the direction key'):
+            self.move(**lease, sequence=3)
+        self.assertFalse(self.c.arm_pending)
+
+    def test_remote_stand_timeout_needs_a_new_press(self):
+        self.access.remote_allowed = lambda: True
+        self.c.mode = 'hold'
+        lease = dict(remote=True, duration=.7, controller_id='phone_session_A')
+        self.assertEqual(self.move(**lease, sequence=1)['status'], 'paused')
+        self.c.recovery.angle_deg = 25
+        self.advance(5.05)
+        self.assertEqual(self.access.action['state'], 'failed')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        with self.assertRaisesRegex(ValueError, 'release the direction key'):
+            self.move(**lease, sequence=2)
 
     def test_falling_during_remote_lease_stops_and_retires_controller(self):
         self.access.remote_allowed = lambda: True
@@ -566,16 +628,12 @@ class VoiceMotionTest(unittest.TestCase):
             self.assertEqual(self.c.twist, [speed, 0, 0])
             self.access.cancel('test')
 
-    def test_normal_forward_retains_duration_bounds_permission_and_standing_checks(self):
+    def test_normal_forward_retains_duration_bounds_and_standing_checks(self):
         mcp = self.mcp()
         for seconds in (False, 0, 11, float('nan')):
             reply, _ = self.call_mcp(mcp, 'Duck.Forward', {'seconds': seconds})
             self.assertTrue(reply['isError'])
             self.assertEqual(self.c.twist, [0, 0, 0])
-        self.allowed = False
-        reply, _ = self.call_mcp(mcp, 'Duck.Forward')
-        self.assertTrue(reply['isError'])
-        self.allowed = True
         self.c.mode, self.c.feedback.enabled = 'shadow', False
         reply, _ = self.call_mcp(mcp, 'Duck.Forward')
         self.assertTrue(reply['isError'])
@@ -722,6 +780,19 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.twist, [0, 0, 0])
         self.assertEqual(self.access.action['state'], 'cancelled')
 
+    def test_revoking_remote_permission_stops_direction_lease_and_voice_still_runs(self):
+        self.access.remote_allowed = lambda: True
+        self.move(remote=True, duration=.7, controller_id='phone_session_A', sequence=1)
+        self.access.remote_allowed = lambda: False
+        self.advance(.05)
+        self.assertEqual(self.access.action['state'], 'cancelled')
+        self.assertEqual(self.c.twist, [0, 0, 0])
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.move()['status'], 'accepted')
+        self.advance(.05)
+        self.assertEqual(self.access.action['state'], 'running')
+        self.assertEqual(self.c.twist, [.08, 0, 0])
+
     def test_previous_remote_stop_does_not_cancel_new_controller_or_voice_owner(self):
         self.access.remote_allowed = lambda: True
         self.access.start_action(kind='move', twist=[.04, 0, 0], duration=.7, session=101,
@@ -746,11 +817,7 @@ class VoiceMotionTest(unittest.TestCase):
             self.access.start_action(**(body | {'sequence': 100}))
         self.assertEqual(self.c.mode, 'hold')
 
-    def test_permission_calibration_feedback_and_running_guards(self):
-        self.allowed = False
-        with self.assertRaisesRegex(ValueError, 'disabled'):
-            self.move()
-        self.allowed = True
+    def test_calibration_feedback_and_running_guards(self):
         self.c.input_source, self.c.mode = 'web', 'calibrate'
         with self.assertRaisesRegex(ValueError, 'calibration'):
             self.move()
@@ -1065,9 +1132,8 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.twist, [.2, 0, 0])
 
     def test_queue_is_discarded_on_heartbeat_loss_takeover_or_feedback_fault(self):
-        for fault in ('heartbeat', 'takeover', 'feedback', 'permission', 'fall', 'session'):
+        for fault in ('heartbeat', 'takeover', 'feedback', 'fall', 'session'):
             self.access.cancel('reset')
-            self.allowed = True
             self.motion_status.update(full_robot_ready=True, mcu_watchdog=False, mcu_command_age_us=10000)
             self.c.mode, self.c.input_source, self.c.recovery.angle_deg = 'policy', 'web', 0
             self.advance(1.1)
@@ -1077,7 +1143,6 @@ class VoiceMotionTest(unittest.TestCase):
                 if fault == 'heartbeat': self.now += .81
                 elif fault == 'takeover': self.access.web_mode('hold')
                 elif fault == 'feedback': self.motion_status['mcu_command_age_us'] = 150001
-                elif fault == 'permission': self.allowed = False
                 elif fault == 'fall': self.c.recovery.angle_deg = 60
                 elif fault == 'session': self.access.heartbeat(None)
                 self.access.tick()
@@ -1340,19 +1405,17 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertNotIn('action', state)
         self.assertEqual(state['motion_action']['kind'], 'roulade')
 
-    def test_roulade_requires_permission_standing_feedback_and_available_model(self):
-        faults = ('permission', 'off', 'disabled', 'fallen', 'recovering', 'unknown',
+    def test_roulade_requires_standing_feedback_and_available_model(self):
+        faults = ('off', 'disabled', 'fallen', 'recovering', 'unknown',
                   'feedback', 'command', 'watchdog', 'calibration', 'servo_debug', 'pick')
         for fault in faults:
             with self.subTest(fault=fault):
-                self.allowed = True
                 self.c.mode, self.c.input_source, self.c.feedback.enabled = 'policy', 'web', True
                 self.c.recovery.phase, self.c.recovery.angle_deg = 'walk', 0
                 self.c.pick_active = False
                 self.motion_status.update(full_robot_ready=True, mcu_watchdog=False, mcu_command_age_us=10000)
                 self.advance(1.1)
-                if fault == 'permission': self.allowed = False
-                elif fault == 'off': self.c.mode = 'off'
+                if fault == 'off': self.c.mode = 'off'
                 elif fault == 'disabled': self.c.feedback.enabled = False
                 elif fault == 'fallen': self.c.recovery.angle_deg = 70
                 elif fault == 'recovering': self.c.recovery.phase = 'getup'
@@ -1457,20 +1520,18 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.mode, 'policy')
 
     def test_roulade_stop_faults_and_takeover_cancel_roll_and_queue(self):
-        for fault in ('stop', 'heartbeat', 'permission', 'feedback', 'command', 'enable', 'manual', 'session'):
+        for fault in ('stop', 'heartbeat', 'feedback', 'command', 'enable', 'manual', 'session'):
             with self.subTest(fault=fault):
-                self.allowed = True
                 self.c.mode, self.c.input_source, self.c.feedback.enabled = 'policy', 'web', True
                 self.c.recovery.phase, self.c.recovery.angle_deg = 'walk', 0
                 self.motion_status.update(full_robot_ready=True, mcu_watchdog=False, mcu_command_age_us=10000)
-                self.access = MotionAccess(self.c, allowed=lambda: self.allowed, clock=lambda: self.now)
+                self.access = MotionAccess(self.c, clock=lambda: self.now)
                 self.access.heartbeat(101)
                 self.advance(1.1)
                 self.access.start_action(kind='roulade', session=101)
                 self.move()
                 if fault == 'stop': self.access.start_action(kind='stop', session=101)
                 elif fault == 'heartbeat': self.now += .81
-                elif fault == 'permission': self.allowed = False
                 elif fault == 'feedback': self.motion_status['full_robot_ready'] = False
                 elif fault == 'command': self.motion_status['mcu_command_age_us'] = 150001
                 elif fault == 'enable': self.c.feedback.enabled = False
@@ -1543,6 +1604,44 @@ class VoiceMotionTest(unittest.TestCase):
                 self.c.step(); self.access.heartbeat(101); self.access.tick()
             self.assertEqual(self.access.action['kind'], 'move')
             self.assertEqual(self.access.action['state'], 'running')
+
+    def test_mcp_seated_head_uses_sit_model_and_direction_then_starts_stand(self):
+        self.access.remote_allowed = lambda: True
+        timer = SimpleNamespace(monotonic=lambda: self.now)
+        with patch.dict(fixture.ns, time=timer), patch('motion_access.time', timer):
+            self.c.rx_time = self.now
+            self.access.web_sitstand('sit')
+            self.c.step()
+            mcp = self.mcp()
+            reply, data = self.call_mcp(mcp, 'Duck.SetHead', {'head3': .3})
+            self.assertFalse(reply['isError'], data)
+            self.assertEqual(self.access.action['required_joint_ids'], [32])
+            self.c.step()
+            self.assertEqual(self.c.sitstand_phase, 'sit')
+            self.assertEqual(self.c.sitstand_policy.infer.call_args.args[4], [1., 0., 0.])
+            self.assertEqual(self.c.sitstand_policy.infer.call_args.args[5], [0., 0., .3, 0.])
+            self.assertEqual(self.c.twist, [0, 0, 0])
+            self.advance(1.05)
+            self.c.rx_time = self.now
+
+            lease = dict(remote=True, duration=.7, controller_id='phone_session_A')
+            self.assertEqual(self.move(**lease, sequence=1)['status'], 'paused')
+            self.assertEqual(self.c.sitstand_phase, 'stand')
+            self.assertEqual(self.c.twist, [0, 0, 0])
+            for _ in range(48):
+                self.now += .05
+                self.c.rx_time = self.now
+                self.c.feedback.sample_us += 50000
+                self.c.feedback.imu_us = self.c.feedback.sample_us
+                self.c.step()
+                self.access.heartbeat(101)
+                self.access.tick()
+            self.assertEqual(self.c.sitstand_phase, 'idle')
+            self.assertEqual(self.access.action['kind'], 'stand')
+            self.assertEqual(self.access.action['state'], 'completed')
+            self.assertEqual(self.c.twist, [0, 0, 0])
+            self.assertEqual(self.move(**lease, sequence=2)['status'], 'accepted')
+            self.assertEqual(self.c.twist, [.08, 0, 0])
 
     def test_mcp_left_right_kicks_run_matching_model_and_return_to_balance(self):
         timer = SimpleNamespace(monotonic=lambda: self.now)
@@ -1854,7 +1953,7 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertFalse(data['execution']['tof_available'])
         self.assertIn('过期', data['message'])
 
-    def test_bad_parameters_permissions_and_broken_feedback_still_return_actual_mcp_errors(self):
+    def test_bad_parameters_and_broken_feedback_still_return_actual_mcp_errors(self):
         self.motion_status['obstacle_avoidance'] = dict(enabled=True, available=True,
             forward_ready=False, front_distance_mm=80, blocking_reason='前方8厘米有障碍。')
         mcp = self.mcp()
@@ -1862,11 +1961,6 @@ class VoiceMotionTest(unittest.TestCase):
         reply, data = self.call_mcp(mcp, 'Duck.Move', dict(args, speed=10))
         self.assertTrue(reply['isError'])
         self.assertIn('speed', reply['error'])
-        self.allowed = False
-        reply, data = self.call_mcp(mcp, 'Duck.Move', args)
-        self.assertTrue(reply['isError'])
-        self.assertIn('语音运动', reply['error'])
-        self.allowed = True
         self.c.feedback.enabled = False
         reply, data = self.call_mcp(mcp, 'Duck.Move', args)
         self.assertTrue(reply['isError'])

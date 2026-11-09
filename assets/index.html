@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=20261107-control-i18n">
+<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=walking-help">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 <main>
-<header><div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a></nav><button id="language" type="button">中文</button><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
+<header><div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a><a id="cockpit-link" href="/mobile.html" data-zh="驾驶舱">Cockpit</a></nav><button id="language" type="button">中文</button><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
 <p id="message" data-zh="正在连接…">Connecting…</p>
 <section class="metrics"><article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article><article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article><article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article><article><small data-zh="电压">Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
 <section>
@@ -12,7 +12,20 @@
   <p class="hint" data-zh="默认姿态保持站立。行走 / 起身支持行走和跌倒后起身。可选择叼东西、翻滚、坐下、站起或踢球。滑行时请开启滑行模式。仅推理模式只预览动作。点击「舵机卸力」可释放扭矩。">Default pose holds a standing pose. Walk / get up walks and recovers after a fall. Choose Pick, Roulade, Sit/Stand or a kick to perform that action. Enable Skating mode for skating. Inference only previews motion; Torque off releases the motors.</p>
 </section>
 <section>
-  <h2 data-zh="运动控制">Motion</h2>
+  <div class="motion-heading">
+    <h2 data-zh="运动控制">Motion</h2>
+    <details id="walking-help">
+      <summary data-zh="走不稳？">Unsteady walking?</summary>
+      <div class="walking-help-body">
+        <p data-zh="如果小鸭走不稳或发抖，先停止移动并扶稳小鸭。">If Duck shakes or walks unsteadily, stop moving and support it.</p>
+        <ol>
+          <li><strong data-zh="检查舵机安装">Check servo installation</strong><p data-zh="卸力后按编号图核对每个舵机的 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。">Release servo torque, then check each servo's ID, mounting position and order against the diagrams. Check the servo horns and retaining screws for looseness.</p></li>
+          <li><a href="/calibrate.html" data-zh="打开标定">Open Calibration</a><p data-zh="先标定 IMU，再按参考图重新标定全部 15 个舵机。">Recalibrate the IMU first, then use the reference images to recalibrate all 15 servos.</p></li>
+          <li><a href="/servo.html" data-zh="打开舵机设置">Open Servo setup</a><p data-zh="扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。">Scan all IDs. Set KP to 5 and KD to 10 on each servo, then read back the saved and runtime values. Power-cycling reloads the saved values.</p></li>
+        </ol>
+      </div>
+    </details>
+  </div>
   <p id="roller-warning" class="warn" role="note" data-zh="长时间滑行后，请暂停片刻，让驱动电机冷却。" hidden>Let the roll motors cool down between longer skating sessions.</p>
   <div class="joysticks"><div class="joystick-side"><label id="left-label" data-zh="前后 / 侧移">Forward / strafe</label><div class="joy" id="joy-left" role="group" aria-labelledby="left-label"><div class="knob"></div></div><p class="joy-value">vx <span id="vxValue">0.00</span> · vy <span id="vyValue">0.00</span></p></div><div class="joystick-side"><label id="right-label" data-zh="左右转向">Yaw</label><div class="joy" id="joy-right" role="group" aria-labelledby="right-label"><div class="knob"></div></div><p class="joy-value">ωz <span id="wzValue">0.00</span></p></div></div>
   <div class="buttons"><button id="zero" data-zh="停止移动">Zero motion</button><label class="mode-toggle"><input id="heading-hold" type="checkbox" role="switch" checked><span data-zh="航向保持">Heading hold</span> <span id="heading-state" data-zh="开">On</span></label></div>
@@ -48,4 +61,4 @@
     </figure>
   </div>
 </section>
-</main><script src="panel-language.js"></script><script src="app.js?v=20261107-control-language"></script></html>
+</main><script src="panel-language.js"></script><script src="app.js?v=walking-help"></script></html>

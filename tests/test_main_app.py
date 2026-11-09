@@ -22,7 +22,7 @@ def free_port():
 class MainAppTest(unittest.TestCase):
     def launch(self, directory, mode, usb_mode='host'):
         folder = Path(directory)
-        (folder / 'voice_config.json').write_text(json.dumps({'enabled': False}))
+        (folder / 'voice_config.json').write_text(json.dumps({'enabled': False, 'voice_motion_enabled': False}))
         if mode == 'tof_read_disabled_avoidance':
             (folder / 'obstacle-avoidance.json').write_text(json.dumps({'enabled': False}))
         self.ports = [free_port() for _ in range(3)]

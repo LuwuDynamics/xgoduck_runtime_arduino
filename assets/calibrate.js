@@ -54,7 +54,7 @@ const strings={
     savedNote:'Centers are saved in the servos. Center set confirms calibration, not torque status. Progress counts centers set in this session; unloading or reopening resets the count but does not erase saved centers.',
     legendPart:'Orange part / circle: the joint to adjust',legendLine:'Green dashed line: line the part up with it',
     legendWrong:'Red part and arrow: a wrong position, turn it back the way the arrow shows',
-    progress:'Set this session {done} / {total}',zoneIds:'IDs {first}–{last}',
+    progress:'Set this session {done} / {total}',zoneIds:'IDs {first}–{last}',legPerspective:' (robot’s perspective)',
     photoAlt:'Photo of the servos, each marked with its white ID tag',photoOpen:'Open the full-size photo',poseAlt:'ID {id} {name}: zero pose',
     finishTitle:'Finished?',finishText:'Click Unload all, then Exit. After that, go back to Control to stand Duck up.',
     credits:'Photos: the official XGO Duck developer guide. Zero-pose pictures: rendered from the XGO Duck URDF model.',
@@ -106,7 +106,7 @@ const strings={
     savedNote:'中位保存在舵机内。“已设中位”表示标定成功，不表示已确认上力。进度统计本轮已设中位的关节；卸力或重新打开页面后计数归零，不清除已保存的中位。',
     legendPart:'橙黄色部件／圆圈：要调整的关节',legendLine:'绿色虚线：把部件对齐到这里',
     legendWrong:'红色部件和箭头：错误的位置，按箭头方向转回来',
-    progress:'本轮已设 {done} / {total}',zoneIds:'ID {first}–{last}',
+    progress:'本轮已设 {done} / {total}',zoneIds:'ID {first}–{last}',legPerspective:'（机器人的视角）',
     photoAlt:'舵机实物照片，每个舵机贴有白色编号牌',photoOpen:'打开原尺寸照片',poseAlt:'ID {id} {name}：零位姿态',
     finishTitle:'都做完了？',finishText:'先点 Unload all，再点 Exit。之后回到 Control 页让 Duck 站起来。',
     credits:'实物照片：XGO Duck 官方开发者指南。零位姿态图：由 XGO Duck 的 URDF 模型渲染。',
@@ -226,9 +226,11 @@ function renderZones(){
   $('zones').replaceChildren(...zones().map(zone=>{
     const photo=guide?.photos?.[zone.photo];
     const wide=photo&&photo.width/photo.height>1.6;
+    const title=pick(zone.title)||zone.key;
+    const isLeg=zone.key==='left'||zone.key==='right';
     return h('section',{class:'cal-zone',id:'zone-'+zone.key},
       h('div',{class:'cal-zone-head'},
-        h('h2',{text:pick(zone.title)||zone.key}),
+        h('h2',{text:isLeg?title+t('legPerspective'):title}),
         h('small',{text:t('zoneIds',{first:zone.ids[0],last:zone.ids[zone.ids.length-1]})}),
         h('span',{class:'cal-count',id:'count-'+zone.key})),
       h('div',{class:'cal-top'+(wide?' wide':'')},

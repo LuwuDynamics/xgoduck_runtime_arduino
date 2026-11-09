@@ -125,8 +125,10 @@ test('Both value rows fit a narrow phone viewport',async t=>{
 
 test('Chinese locale translates navigation, scan progress and runtime readback feedback',async t=>{
   const {page,state}=await setup(t,{width:320,height:844},'zh-TW');
+  const restartHint=page.locator('#gains-restart-hint');
   assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
   assert.deepEqual(await page.locator('.nav a').allTextContents(),['控制','标定','舵机设置']);
+  assert.equal(await restartHint.textContent(),'写入后断电重启，舵机会加载保存的 KP/KD。');
   assert.equal(await page.locator('#scan').textContent(),'扫描所有 ID');
   assert.equal(await page.locator('#scan-progress').getAttribute('aria-label'),'舵机扫描进度');
   assert.match(await page.locator('#scan-status').textContent(),/^已停止.*找到 2 个/);
@@ -140,6 +142,7 @@ test('Chinese locale translates navigation, scan progress and runtime readback f
   const servoCommands=state.calls.filter(call=>call.path==='/api/servo').length;
   await page.getByRole('button',{name:'Switch to English'}).click();
   assert.equal(await page.locator('html').getAttribute('lang'),'en');
+  assert.equal(await restartHint.textContent(),'After writing, power-cycle the Duck to reload the saved KP/KD.');
   assert.match(await page.locator('#scan-status').textContent(),/^Stopped.*2 found/);
   assert.match(await page.locator('#message').textContent(),/Runtime read failed: servo reply timeout/);
   assert.equal(await page.locator('#scan-progress').getAttribute('aria-label'),'Servo scan progress');

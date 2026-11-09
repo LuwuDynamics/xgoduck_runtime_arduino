@@ -307,8 +307,7 @@ class MouthMotionTest(unittest.TestCase):
         self.assertEqual(self.c.mouth, 2.)
         self.assertFalse(self.access.state()['tts_mouth']['active'])
 
-    def test_mouth_is_independent_of_voice_locomotion_permission(self):
-        self.f.allowed = False
+    def test_mouth_updates_preserve_manual_body_control(self):
         self.submit()
         self.f.advance(.15)
         self.assertEqual(self.c.mouth, 6.)

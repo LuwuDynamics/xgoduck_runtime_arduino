@@ -101,7 +101,7 @@ class BaselineTest(unittest.TestCase):
             timer.start()
             self.addCleanup(timer.stop)
         self.c = controller.Controller(Mock())  # Actual five ONNX sessions.
-        self.access = MotionAccess(self.c, allowed=lambda: True, clock=lambda: self.now)
+        self.access = MotionAccess(self.c, clock=lambda: self.now)
         self.feedback(enabled)
         self.access.heartbeat(101)
 
@@ -118,6 +118,65 @@ class BaselineTest(unittest.TestCase):
         self.feedback(enabled)
         self.c.receive_diagnostics(wire.DIAGNOSTIC_V2.pack(b'DQD2', *([0] * 16), millivolts))
         self.c.step()
+
+    def test_feedback_pause_preserves_torque_and_resumes_original_mode(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        for mode, command_mode in (('hold', wire.HOLD), ('policy', wire.POLICY)):
+            with self.subTest(mode=mode):
+                self.c.set_mode(mode)
+                self.c.command(twist=[.1, 0., 0.])
+                self.c.step()
+                self.c.bridge.notify.reset_mock()
+                self.now += .16
+                self.c.step()
+                self.now += .5
+                self.c.step()
+                self.c.bridge.notify.assert_not_called()
+                self.assertTrue(self.c.fault_hold)
+                self.assertEqual(self.c.mode, mode)
+
+                self.feedback()
+                self.c.step()
+                command = wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])
+                self.assertEqual(command[4], command_mode)
+                self.assertEqual(command[2], self.c.feedback.sample_us)
+                self.assertEqual(self.c.mode, mode)
+                self.assertFalse(self.c.fault_hold)
+                self.assertEqual(self.c.last_error, '')
+                self.assertEqual(self.c.twist, [0., 0., 0.])
+                self.assertEqual(self.c.command(twist=[.1, 0., 0.]), {'ok': True})
+
+    def test_feedback_pause_preserves_sitting_and_cancels_queued_stand(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.set_sitstand('sit')
+        self.c.action_preparation['warm_passes'] = 1
+        self.now += .21
+        self.feedback()
+        self.c.step()
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        self.c.set_sitstand('stand')
+
+        self.now += .16
+        self.c.step()
+        self.feedback()
+        self.c.step()
+        self.assertFalse(self.c.fault_hold)
+        self.assertIsNone(self.c.action_preparation)
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
+
+    def test_feedback_return_reports_actual_mcu_disarm_without_rearming(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('hold')
+        self.now += .16
+        self.c.step()
+        self.feedback(enabled=False)
+        self.c.step()
+        self.assertEqual(self.c.mode, 'shadow')
+        self.assertFalse(self.c.fault_hold)
+        self.assertEqual(self.c.last_error, 'MCU released torque during the feedback pause')
+        self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
 
     def test_battery_warns_once_then_disarms_and_requires_recovery(self):
         self.make_motion(enabled=True, synchronized_clock=True)

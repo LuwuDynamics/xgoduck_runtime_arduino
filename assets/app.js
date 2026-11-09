@@ -1,5 +1,8 @@
 const $=id=>document.getElementById(id);
 const {t,setText}=window.DuckPanelLanguage;
+const cockpitURL=new URL('/',location.href);
+cockpitURL.port='';
+$('cockpit-link')?.setAttribute('href',cockpitURL.href);
 const toggleLabel=enabled=>enabled?t('On','开'):t('Off','关');
 const actionLabels={
   pick:['Pick','叼东西'],roulade:['Roulade','翻滚'],sit:['Sit','坐下'],stand:['Stand','站起'],
@@ -311,7 +314,8 @@ for(const [id,action]of [['imu-calibrate','start'],['imu-reset','reset']])$(id).
   finally{imuCalibrationBusy=false;showImuCalibration();}
 };
 function keyCommand(){updateMotion();sendCommand();}
-window.addEventListener('keydown',e=>{if(e.code==='Space'){if(e.target===$('language'))return;e.preventDefault();$('stop').click();return;}const k=e.key.toLowerCase();if('wasdqe'.includes(k)&&k.length===1){keys.add(k);keyCommand();}});
+$('walking-help')?.addEventListener('toggle',e=>{if(e.currentTarget.open&&(keys.size||motion.some(Boolean)))zero();});
+window.addEventListener('keydown',e=>{if(e.target.closest?.('#walking-help'))return;if(e.code==='Space'){if(e.target===$('language'))return;e.preventDefault();$('stop').click();return;}const k=e.key.toLowerCase();if('wasdqe'.includes(k)&&k.length===1){keys.add(k);keyCommand();}});
 window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(keys.delete(k))keyCommand();});
 window.addEventListener('blur',()=>zero());
 document.addEventListener('visibilitychange',()=>{if(document.hidden)zero();});

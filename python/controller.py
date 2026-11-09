@@ -1058,13 +1058,16 @@ class Controller:
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
             if mode in ('hold','policy'):
-                if not fb or age > .15:
+                if not fb or age >= .15:
                     if not self.fault_hold:
                         self.fault_hold = True
                         self.arm_pending = False
                         self.last_error = FEEDBACK_HOLD_REASON
                         self.twist = [0.0]*3
-                        self._cancel_actions_locked()
+                        if self.sitstand_phase == 'sit':
+                            self._cancel_preparation_locked()  # Keep the seated posture.
+                        else:
+                            self._cancel_actions_locked()
                         self.heading.reset()
                         print(f'[motion] {FEEDBACK_HOLD_REASON}; feedback age={age*1000:.0f} ms', flush=True)
                     # In normal mode the MCU keeps the last target until it
@@ -1074,18 +1077,24 @@ class Controller:
                 if not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
                     lost = 'sensor feedback lost; disarmed'
                 elif self.fault_hold:
-                    if fb.enabled:
+                    if not fb.enabled:
+                        lost = 'MCU released torque during the feedback pause'
+                    elif mode == 'policy' and not (filt and filt['imu_fusion_ready']):
                         return
-                    lost = 'MCU released torque during the feedback pause'
-                elif time.monotonic()-self.web_time > 1.0:
-                    # Browser inactivity stops travel without releasing torque.
-                    self.twist = [0.0]*3
+                    else:
+                        self.fault_hold = False
+                        if self.last_error == FEEDBACK_HOLD_REASON:
+                            self.last_error = ''
+                        print(f'[motion] STM32 feedback restored; resuming {mode}', flush=True)
                 if lost:
                     self.mode = mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.last_error = lost
                     generation = self.generation
                     self.recovery.reset(); self.policy_needs_reset = True
                     self._cancel_actions_locked()
+                elif time.monotonic()-self.web_time > 1.0:
+                    # Browser inactivity stops travel without releasing torque.
+                    self.twist = [0.0]*3
             elif mode in EXCLUSIVE_MODES:
                 if time.monotonic()-self.web_time > 2.0:
                     previous = mode
