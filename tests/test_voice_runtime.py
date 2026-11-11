@@ -14,6 +14,7 @@ from types import SimpleNamespace
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
 from local_ipc import JsonServer
+from onboarding import ota_url
 from voice_config import VoiceConfig
 from voice_process import Runtime
 import voice_media
@@ -27,7 +28,11 @@ class ReadyOnboarding:
     def __init__(self):
         self.ready, self.bound, self.generation = True, True, 0
         self.mqtt = {'endpoint': 'mock'}
+        self.url = ''
         self.stop = asyncio.Event()
+
+    def ready_for(self, url):
+        return self.ready and self.url == url
 
     def snapshot(self):
         return dict(state='ready' if self.ready else 'awaiting_binding', ready=self.ready, bound=self.bound)
@@ -91,7 +96,7 @@ class VoiceRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.patches = [patch.dict(os.environ, DUCK_MEDIA_PORT=str(free_port()), DUCK_VOICE_PORT=str(free_port())),
             patch('voice_process.usb_audio_cards', side_effect=lambda: self.cards),
             patch('voice_media.usb_audio_cards', side_effect=lambda: self.cards),
-            patch.object(runtime, 'build_application', side_effect=lambda cards: Chat()),
+            patch.object(runtime, 'build_application', side_effect=lambda cards, cfg: Chat()),
             patch.object(voice_media.legacy.doubao, 'load_config', return_value={}),
             patch('voice_media.subprocess.Popen', side_effect=audio)]
         for item in self.patches:
@@ -179,6 +184,15 @@ class VoiceRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.onboarding.ready = self.onboarding.bound = True
         self.onboarding.generation += 1
         await eventually(lambda: self.runtime.app is not None and self.open_sessions == 1)
+
+    async def test_region_switch_waits_for_the_new_regions_credentials(self):
+        previous = self.runtime.app
+        self.config.select_region('global')
+        await eventually(lambda: previous._closing and self.open_sessions == 0)
+        self.assertEqual(len(self.instances), 1)
+        self.onboarding.url = ota_url(self.config.get())
+        await eventually(lambda: self.runtime.app is not None and self.open_sessions == 1)
+        self.assertEqual(len(self.instances), 2)
 
     async def test_missing_audio_keeps_cloud_session_then_replug_reopens_audio(self):
         previous = self.runtime.app

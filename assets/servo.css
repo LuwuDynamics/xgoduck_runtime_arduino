@@ -4,6 +4,53 @@
 .servo-action-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.servo-action-row .servo-readout{font-size:13px;overflow-wrap:anywhere}
 .protection-controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:14px}.protection-controls input{width:110px;padding:7px 10px;border-radius:6px;border:1px solid #3c5b78;background:#0e1924;color:#dce5ef;font:inherit}.protection-controls button{padding:7px 12px}.servo-protection .servo-readout{font-size:13px;overflow-wrap:anywhere}
 .protection-controls+.protection-controls{margin-top:12px}
+.protection-group h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+.protection-group + .protection-group {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #26384b;
+}
+.protection-readings { margin-top: 18px; }
+.protection-readings table {
+  width: 100%;
+  border: 1px solid #26384b;
+  border-collapse: collapse;
+  background: #0e1924;
+  text-align: left;
+  font-size: 13px;
+}
+.protection-readings caption {
+  padding-bottom: 8px;
+  text-align: left;
+  font-weight: 600;
+}
+.protection-readings th,
+.protection-readings td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #26384b;
+}
+.protection-readings thead th {
+  color: #9cafc3;
+  font-size: 12px;
+  font-weight: 500;
+}
+.protection-readings th:first-child { width: 1%; }
+.protection-threshold { text-align: right; font-variant-numeric: tabular-nums; }
+.protection-readings td.protection-threshold { color: #8ce2cc; }
+.protection-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.protection-badge[data-protection-state="enabled"] { color: #8ce2cc; background: #183b3a; }
+.protection-badge[data-protection-state="disabled"] { color: #c1cddd; background: #243345; }
+.protection-readings [data-protection-state="unread"] { color: #f4c373; }
+#protection-message:empty { display: none; }
 .servo-gains{margin-top:4px;padding:12px;border:1px solid #26384b;border-radius:10px;background:#0e1924}
 .servo-gains table{width:100%;border-collapse:collapse;font-size:14px;text-align:left}
 .servo-gains th,.servo-gains td{padding:9px 8px;border-bottom:1px solid #26384b}
@@ -12,3 +59,30 @@
 .servo-gains td{font-family:monospace;color:#8ce2cc;font-size:17px;min-width:40px}
 .servo-gains #gains-status{margin:12px 8px 0;color:#9cafc3;font-size:13px}
 .servo-gains #gains-status[data-state=different],.servo-gains #gains-status[data-state=incomplete]{color:#f4c373}
+.servo-test-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+.servo-test figure { margin: 0; }
+.servo-test img { width: 100%; border-radius: 8px; }
+.servo-test figcaption { margin-top: 4px; color: #9cafc3; font-size: 13px; }
+.servo-test select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: 1px solid #3c5b78;
+  border-radius: 6px;
+  background: #0e1924;
+  color: #dce5ef;
+  font: inherit;
+}
+.servo-test-actions { margin: 12px 0; }
+.servo-test-actions button { padding: 7px 12px; }
+.servo-test output { color: #8ce2cc; }
+@media (max-width: 560px) {
+  .protection-readings th, .protection-readings td { padding-inline: 6px; }
+  .servo-test-layout { grid-template-columns: 1fr; }
+  .servo-test figure { max-width: 260px; }
+}

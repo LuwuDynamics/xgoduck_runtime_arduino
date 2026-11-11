@@ -11,12 +11,16 @@ class Element extends EventTarget {
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
 const wakePhrases={cn:'小鸭小鸭',global:'Hey Ducky'};
-function setup({locale='zh-CN',languages,savedLanguage}={}){
+function setup({locale='zh-CN',languages,savedLanguage,unconfigured=false}={}){
   const elements=Object.fromEntries(['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip','startupWake','language'].map(id=>[id,new Element()]));
   const document=Object.assign(new EventTarget(),{hidden:false,documentElement:{},getElementById:id=>elements[id],querySelectorAll:()=>[]});
   const window=new EventTarget(),stored=new Map(savedLanguage?[['duck-cockpit-language',savedLanguage]]:[]),requests=[];
   const navigator={language:locale,languages};
   const state={config:{cloud_region:'cn',custom_endpoint:false,configured:true,wake_phrase:wakePhrases.cn},voice:{onboarding:{cloud_region:'cn',bound:true},cloud_connected:true,session_cloud_region:'cn'}};
+  if(unconfigured){
+    state.config={cloud_region:null,custom_endpoint:false,configured:false};
+    state.voice={cloud_connected:false};
+  }
   let override=null;
   const ctx=vm.createContext({window,document,navigator,localStorage:{getItem:k=>stored.get(k),setItem:(k,v)=>stored.set(k,v)},CustomEvent:class extends Event{},AbortController,setTimeout,clearTimeout,
     setInterval:(f,n)=>{const timer=setInterval(f,n);timer.unref();return timer;},clearInterval,
@@ -56,6 +60,9 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
   const s=setup(),e=s.elements;
   assert(s.requests.every(r=>!r.options.method));await tick();assert.equal(e.bindingRegionChip.textContent,'国内');e.openBinding.click();await tick();
   assert.equal(e.bindingRegion.textContent,'国内版');assert.equal(e.bindingStatus.textContent,'已绑定 · 语音在线');
+  assert.equal(s.window.DuckI18n.t('bindAi'),'AI 语音交互绑定');
+  assert.equal(s.window.DuckI18n.t('bindingTitle'),'AI 语音交互绑定');
+  assert.match(e.openBinding.attributes['aria-label'],/^AI 语音交互绑定/);
   assert.match(e.startupWake.textContent,/说「小鸭小鸭」唤醒/);
   assert(e.regionCn.checked);assert(!e.regionCn.disabled);assert(s.requests.every(r=>!r.options.method));
   s.window.DuckI18n.setLanguage('en');assert.equal(e.bindingRegion.textContent,'China');
@@ -80,8 +87,26 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
   e.regionCn.change();e.closeBinding.click();s.window.dispatchEvent(new Event('focus'));await tick();assert.equal(s.requests.filter(r=>r.options.method==='POST').length,2);
   e.openBinding.click();await tick();assert.equal(e.regionCn.checked,true,'Closing the dialog must not cancel a server selection.');
   s.override(()=>Promise.resolve({ok:false}));s.window.dispatchEvent(new Event('focus'));await tick();assert.equal(e.bindingStatus.dataset.state,'unavailable');e.closeBinding.click();
-  const u=setup();u.state.config={cloud_region:null,custom_endpoint:false,configured:false};u.state.voice={cloud_connected:false};u.elements.openBinding.click();await tick();
+  const u=setup({unconfigured:true});await tick();
+  assert.equal(u.elements.bindingDialog.open,false,'Unknown camera status must leave the dialog closed.');
+  u.window.DuckBinding.updateCameraAvailability(false);
+  u.window.dispatchEvent(new Event('focus'));await tick();
+  assert.equal(u.elements.bindingDialog.open,false,'An unconfigured device without a camera must not open the dialog.');
+  u.elements.openBinding.click();await tick();
   assert.equal(u.elements.bindingRegion.textContent,'尚未选择');u.elements.regionCn.change();await tick();assert.equal(u.state.config.cloud_region,'cn');u.elements.closeBinding.click();
+  const withCamera=setup({unconfigured:true});await tick();
+  withCamera.window.DuckBinding.updateCameraAvailability(true);await tick();
+  assert.equal(withCamera.elements.bindingDialog.open,true);
+  assert(withCamera.requests.every(r=>!r.options.method),'Showing the region dialog must not select a region.');
+  withCamera.elements.closeBinding.click();
+  withCamera.window.DuckBinding.updateCameraAvailability(false);
+  withCamera.window.DuckBinding.updateCameraAvailability(true);
+  withCamera.window.dispatchEvent(new Event('focus'));await tick();
+  assert.equal(withCamera.elements.bindingDialog.open,false,'A dismissed dialog must not reopen automatically.');
+  const alreadyBound=setup({unconfigured:true});await tick();
+  alreadyBound.state.config={cloud_region:'cn',custom_endpoint:false,configured:true};
+  alreadyBound.window.DuckBinding.updateCameraAvailability(true);await tick();
+  assert.equal(alreadyBound.elements.bindingDialog.open,false,'Recheck the saved region when a camera is detected.');
   const custom=setup();custom.state.config.custom_endpoint=true;custom.elements.openBinding.click();await tick();assert.equal(custom.elements.bindingRegion.textContent,'自定义服务器');custom.elements.regionCn.change();await tick();assert.equal(custom.state.config.custom_endpoint,false);custom.elements.closeBinding.click();
   const failed=setup();await tick();failed.elements.openBinding.click();await tick();
   failed.override((url,options)=>options.method==='POST'?Promise.resolve({ok:false}):undefined);
@@ -106,5 +131,5 @@ function setup({locale='zh-CN',languages,savedLanguage}={}){
   const html=fs.readFileSync(path.join(assets,'mobile.html'),'utf8');
   assert(!html.includes('id="applyRegion"'),'No extra Apply button is required.');
   for(const url of ['https://agent.xgorobot.com/devices','https://agent.luwudynamics.ai/'])assert(html.includes(`href="${url}" target="_blank" rel="noopener noreferrer"`));
-  console.log('PASS: 13 system-language cases, temporary manual toggle, system-language changes, immediate region save, duplicate suppression, failure rollback, lost-response reconciliation, close/reopen during save, no language/link writes, stale connection isolation, idempotency, first setup and custom URL.');
+  console.log('PASS: system-language detection, camera-gated region dialog, manual binding, region saves, failure rollback and stale-response handling.');
 })().catch(error=>{console.error(error);process.exitCode=1;});

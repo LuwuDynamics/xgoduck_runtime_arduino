@@ -26,13 +26,20 @@ SERVO_SET_PROTECTION = 9
 SERVO_SET_PROTECTION_CURRENT = 10
 SERVO_APPLY_RUN_GAINS = 11  # Retired fixed profile; never sent or accepted.
 SERVO_READ_RUN_GAINS = 12
+SERVO_TEST_START, SERVO_TEST_MOVE, SERVO_TEST_STOP = range(13, 16)
+SERVO_READ_PROTECTION = 16
+SERVO_SET_PROTECTION_SWITCH = 17
+SERVO_TEST_OFFSET_DEG = 30
+SERVO_TEST_OFFSET_BIAS = 10
+SERVO_TEST_OPS = (SERVO_TEST_START, SERVO_TEST_MOVE, SERVO_TEST_STOP)
 BROADCAST_ID = 254
 PROTECTION_CURRENT_UNIT_A = 0.0065
+PROTECTION_VOLTAGE, PROTECTION_OVERCURRENT = 0x01, 0x08
 PROTECTION_DISABLED, PROTECTION_ENABLED = 0x04, 0x0D
 SERVO_OPS = (SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID,
              SERVO_SET_PERM_KP_KD, SERVO_READ, SERVO_PING, SERVO_RESET_MID,
              SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT,
-             SERVO_READ_RUN_GAINS)
+             SERVO_READ_RUN_GAINS, *SERVO_TEST_OPS, SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH)
 
 assert STATE.size == 240
 assert DIAGNOSTIC.size == 68
@@ -171,6 +178,27 @@ def encode_servo_protection(enabled):
     flags = PROTECTION_ENABLED if enabled else PROTECTION_DISABLED
     return encode_servo(SERVO_SET_PROTECTION, BROADCAST_ID, protection_flags=flags)
 
+def encode_servo_protection_switch(target_id, mask, enabled):
+    if type(target_id) is not int or not 0 <= target_id <= 253:
+        raise ValueError('Servo ID must be between 0 and 253')
+    if mask not in (PROTECTION_VOLTAGE, PROTECTION_OVERCURRENT):
+        raise ValueError('invalid protection switch')
+    if not isinstance(enabled, bool):
+        raise ValueError('protection_enabled must be true or false')
+    return SERVO.pack(b'DQV2', SERVO_SET_PROTECTION_SWITCH, target_id, mask, 0, 0, mask if enabled else 0, 0)
+
+def encode_servo_test(op, target_id, session, offset_deg=0):
+    if op not in SERVO_TEST_OPS or type(target_id) is not int or not 0 <= target_id <= 253:
+        raise ValueError('invalid servo test operation')
+    if type(session) is not int or not 1 <= session <= 65535:
+        raise ValueError('invalid servo test session')
+    if (type(offset_deg) is not int or abs(offset_deg) > SERVO_TEST_OFFSET_DEG
+            or (op != SERVO_TEST_MOVE and offset_deg != 0)):
+        raise ValueError('invalid servo test angle')
+    # Keep the original encoding at ±10°. Lower angles extend into the signed byte range.
+    offset = (offset_deg + SERVO_TEST_OFFSET_BIAS) & 0xff if op == SERVO_TEST_MOVE else 0
+    return SERVO.pack(b'DQV2', op, target_id, offset, 0, 0, 0, session)
+
 def encode_servo_protection_current(current_a):
     if isinstance(current_a, bool):
         raise ValueError('protection current must be amperes')
@@ -207,6 +235,22 @@ def decode_servo_reply(data):
                 'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
     if x[2] > 253:
         raise ValueError('invalid servo reply ID')
+    if x[1] in (SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH):
+        return {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]),
+                'protection_flags': x[4], 'voltage_protection': bool(x[4] & PROTECTION_VOLTAGE),
+                'overcurrent_protection': bool(x[4] & PROTECTION_OVERCURRENT),
+                'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
+    if x[1] in SERVO_TEST_OPS:
+        reply = {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]), 'raw_pos': x[5], 'session': x[6]}
+        # A guarded start advertises the limits. A rejected move reports the one that ended the test.
+        if (x[1] == SERVO_TEST_START and x[3]) or (x[1] == SERVO_TEST_MOVE and not x[3]):
+            if x[4]:
+                reply['feedback_limit'] = x[4]
+            if x[8]:
+                reply['idle_timeout_s'] = x[8]
+        if x[1] == SERVO_TEST_START and x[3] and x[7]:
+            reply['offset_limit_deg'] = x[7]
+        return reply
     return {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]),
             'raw_pos': x[5], 'center_pos': x[6], 'kp': x[7], 'kd': x[8]}
 

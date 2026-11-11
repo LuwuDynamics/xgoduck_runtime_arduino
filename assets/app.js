@@ -35,6 +35,7 @@ const serverMessages=new Map([
   ['Not enough IMU readings. Keep the board still and try again.','IMU 读数不足，请保持主板静止后重试。'],
   ['Unexpected acceleration. Keep the board still and try again.','加速度异常，请保持主板静止后重试。'],
   ['Movement detected. Hold the board still and try again.','检测到晃动，请保持主板静止后重试。'],
+  ['Gyroscope zero offset is too large. Check the IMU and try again.','陀螺仪零偏过大，请检查 IMU 后重试。'],
   ['Calibration cancelled because the control mode changed.','控制模式已切换，标定已取消。'],
   ['Calibration cancelled because the app stopped.','应用已停止，标定已取消。'],
   ['App stopped. Calibration cancelled.','应用已停止，标定已取消。'],
@@ -278,6 +279,91 @@ imuFilters.forEach(([id,key])=>{
   input.oninput=()=>output.textContent=(+input.value).toFixed(2);
   input.onchange=()=>post('imu-filter',{[key]:+input.value}).catch(showError);
 });
+let gainCheckDone = false, gainCheckBusy = false, gainCheckAfter = 0;
+let overcurrentCheckBusy = false, overcurrentCheckAfter = 0, overcurrentCheckedIds = '';
+const lowOvercurrent = new Map();
+window.addEventListener('pageshow', event => {
+  if (event.persisted) {
+    overcurrentCheckedIds = '';
+    overcurrentCheckAfter = 0;
+    lowOvercurrent.clear();
+  }
+});
+
+function showStartupWarnings() {
+  $('startup-check').hidden = $('gain-check-warning').hidden && $('imu-check-warning').hidden
+    && $('overcurrent-check-warning').hidden;
+}
+
+async function checkRuntimeGains() {
+  gainCheckBusy = true;
+  try {
+    const response = await fetch('/api/servo/gain-check', {cache:'no-store', signal:AbortSignal.timeout(2000)});
+    if (!response.ok) return;
+    const result = await response.json();
+    if (result.state !== 'checked' || !Array.isArray(result.mismatches)) return;
+    gainCheckDone = true;
+    const ids = result.mismatches.map(({id,kp,kd}) => `ID ${id} (${kp} / ${kd})`).join(', ');
+    if (ids) {
+      setText('gain-check-text', () => t('Runtime KP/KD differs from 5 / 10 on', '运行 KP/KD 与 5 / 10 不一致的舵机') + ' · ' + ids);
+      $('gain-check-warning').hidden = false;
+      showStartupWarnings();
+    }
+  } catch (_) {
+    // The next eligible status update retries the read.
+  } finally {
+    gainCheckBusy = false;
+    gainCheckAfter = performance.now() + 3000;
+  }
+}
+
+async function checkOvercurrent() {
+  overcurrentCheckBusy = true;
+  try {
+    const response = await fetch('/api/servo/overcurrent-check', {cache:'no-store', signal:AbortSignal.timeout(2000)});
+    if (!response.ok) return;
+    const result = await response.json();
+    if (result.state !== 'checked' || !Array.isArray(result.checked_ids) || !Array.isArray(result.low_thresholds)) return;
+    for (const id of result.checked_ids) lowOvercurrent.delete(id);
+    for (const {id,current_a} of result.low_thresholds) lowOvercurrent.set(id, current_a);
+    overcurrentCheckedIds = result.checked_ids.join(',');
+  } catch (_) {
+    // The next eligible status update retries the read.
+  } finally {
+    overcurrentCheckBusy = false;
+    overcurrentCheckAfter = performance.now() + 3000;
+  }
+}
+
+function updateStartupChecks(status) {
+  const missingImu = imuReady && imuState && !imuState.calibrated && !imuState.active;
+  $('imu-check-warning').hidden = !missingImu;
+  if (missingImu) {
+    const invalid = imuState.state === 'error';
+    setText('imu-check-text', () => invalid
+      ? t('IMU online. No valid calibration is loaded.', 'IMU 在线，当前没有有效的标定。')
+      : t('IMU online. Calibration has not been saved.', 'IMU 在线，尚未保存标定。'));
+  }
+  const servoIds = status.servo_ids || [];
+  const low = servoIds.filter(id => lowOvercurrent.has(id)).map(id => `ID ${id} (${lowOvercurrent.get(id)} A)`);
+  $('overcurrent-check-warning').hidden = !low.length;
+  if (low.length) {
+    setText('overcurrent-check-text', () => t(
+      `Low overcurrent threshold · ${low.join(', ')}. Recommended setting is 2 A.`,
+      `过流保护阈值偏低 · ${low.join('、')}。建议设为 2 A。`));
+  }
+  showStartupWarnings();
+  if (document.hidden || gainCheckBusy || overcurrentCheckBusy || imuState?.active
+      || status.feedback_age_ms == null || status.feedback_age_ms >= 150
+      || status.enabled !== false || !['off','shadow'].includes(status.mode)) return;
+  const now = performance.now();
+  if (!gainCheckDone && now >= gainCheckAfter && servoIds.length === 15) {
+    void checkRuntimeGains();
+  } else if (servoIds.length && now >= overcurrentCheckAfter && servoIds.join(',') !== overcurrentCheckedIds) {
+    void checkOvercurrent();
+  }
+}
+
 function showImuCalibration(){
   imuCalibrationActive=!!imuState?.active;
   const busy=imuCalibrationBusy||imuCalibrationActive;
@@ -346,6 +432,7 @@ if(imuActive!==imuCalibrationActive)zero(false);
 imuCalibrationActive=imuActive;
 imuState=s.imu_calibration||null;
 imuReady=!!s.imu_ok&&s.feedback_age_ms!=null&&s.feedback_age_ms<150;
+updateStartupChecks(s);
 document.querySelectorAll('[data-mode="hold"],[data-mode="policy"]').forEach(b=>b.disabled=!s.control_ready);
 if(s.roller&&!rollerBusy)showRoller(s.roller.enabled);
 if(!rollerBusy)showActionSettings(s.deployment);

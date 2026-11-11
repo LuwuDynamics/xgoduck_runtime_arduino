@@ -30,8 +30,19 @@ enum ServoOp : uint8_t {
   SERVO_SET_PROTECTION = 9,
   SERVO_SET_PROTECTION_CURRENT = 10,
   SERVO_APPLY_RUN_GAINS = 11, // Retired fixed profile; requests are rejected.
-  SERVO_READ_RUN_GAINS = 12
+  SERVO_READ_RUN_GAINS = 12,
+  SERVO_TEST_START = 13,
+  SERVO_TEST_MOVE = 14,
+  SERVO_TEST_STOP = 15,
+  SERVO_READ_PROTECTION = 16,
+  SERVO_SET_PROTECTION_SWITCH = 17
 };
+constexpr uint8_t SERVO_TEST_OFFSET_DEG = 30;
+constexpr uint8_t SERVO_TEST_OFFSET_BIAS = 10; // Preserve the original move encoding.
+
+constexpr int32_t servoTestOffsetDeg(uint8_t encoded) {
+  return (encoded < 128 ? (int32_t)encoded : (int32_t)encoded - 256) - SERVO_TEST_OFFSET_BIAS;
+}
 
 // Little endian, binary payload inside MessagePack RPC. ABI shared with wire.py.
 struct __attribute__((packed)) CommandPacket {
@@ -76,9 +87,11 @@ struct __attribute__((packed)) CalReplyPacket {
 };
 struct __attribute__((packed)) ServoPacket {
   char magic[4];
-  uint8_t op, targetId, newId, kp, kd;
+  uint8_t op, targetId;
+  union { uint8_t newId; uint8_t testOffset; uint8_t protectionMask; };
+  uint8_t kp, kd;
   union { uint8_t reserved; uint8_t protectionFlags; };
-  union { uint16_t reserved2; uint16_t protectionCurrent; };
+  union { uint16_t reserved2; uint16_t protectionCurrent; uint16_t testSession; };
 };
 struct __attribute__((packed)) RawPacket {
   char magic[4];
@@ -88,10 +101,11 @@ struct __attribute__((packed)) RawPacket {
 struct __attribute__((packed)) ServoReplyPacket {
   char magic[4];
   uint8_t op, targetId, ok;
-  union { uint8_t reserved; uint8_t protectionFlags; };
+  union { uint8_t reserved; uint8_t protectionFlags; uint8_t testFeedbackLimit; };
   union { uint16_t rawPos; uint16_t protectionCurrent; };
-  uint16_t centerPos;
-  uint8_t kp, kd;
+  union { uint16_t centerPos; uint16_t testSession; };
+  union { uint8_t kp; uint8_t testOffsetLimitDeg; };
+  union { uint8_t kd; uint8_t testIdleTimeoutSec; };
 };
 static_assert(sizeof(CommandPacket) == 80, "Command ABI");
 static_assert(sizeof(StatePacket) == 240, "State ABI");

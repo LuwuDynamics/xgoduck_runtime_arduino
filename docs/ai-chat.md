@@ -1,6 +1,6 @@
 # XGO Duck AI App
 
-> 也可在驾驶舱的「AI 绑定」窗口点击国内/国际服务器即可保存选区并重连语音。首次安装可以先运行安装脚本，首次 Run 后再在网页选区。以下 CLI 选区方式仍可使用；手机配网不会自动修改选区。
+> 首次配网并绑定后，小鸭可以自动选区。也可在驾驶舱的「AI 语音交互绑定」窗口点击国内版或国际版，保存选区并重连语音。
 
 ## 0.2.36 AEC 播放余量与打断停声
 
@@ -66,7 +66,7 @@ Python 控制器、`wire.py` 和 STM32 sketch 必须成套更新；仅覆盖 Pyt
 
 ## 1. 先选择服务器和客户端
 
-同一份代码支持两套服务。**在板端明确选择区域**；手机配网、手机语言、Wi-Fi 名称和聊天语言都不能自动改区。未选择时显示 `awaiting_cloud_config`，不向任一聊天服务器发请求。
+小鸭未保存选区时，会在 Wi-Fi 接通后通过两边的 `/ota/activate` 查询绑定。国内有记录就优先尝试国内，国内确认无记录且国际有记录时尝试国际。两边都确认无记录才提示绑定。结果不明确时显示重试。前一分钟约每 5 秒查询，之后约每 30 秒查询，遇到限流按 `Retry-After` 等待。常规 OTA 确认绑定后保存选区。已保存的区域或自定义服务优先。
 
 | 板端配置 | 唤醒词 | 服务器 | 手机客户端 |
 | --- | --- | --- | --- |
@@ -111,15 +111,15 @@ cd ~/ArduinoApps/xgoduck_ai
 
 停止已有 Duck App，避免共用 Bridge、舵机、9527 和 9528。旧 App 可以保留。要沿用这只鸭子的校准和手柄映射，在两个 App 都停止时，按需保留同一只鸭子的 `data/gamepad-bindings.json`；若要带上历史 `data/zero_pos.json`，本版会据此要求完成硬件中点迁移。已经使用本版校准的同一只鸭子可保留其 `data/hardware-centers.json` 及对应旧零位文件。不要复制其他机器人的校准或绑定身份。ZIP 排除了所有运行数据，不会自动迁移。
 
-## 4. 在板端选区、安装硬件支持
+## 4. 安装硬件支持
 
-下面在 UNO Q 的 **Debian 13 ARM64 主机终端**中，以 `arduino` 用户执行，不在 App 容器或 Mac 上执行。两组配置二选一：
+在 UNO Q 的 **Debian 13 ARM64 主机终端**中，以 `arduino` 用户运行。首次安装想自动选区时，直接运行安装脚本。想提前选区时，先取消注释对应的一行。
 
 ```sh
 cd ~/ArduinoApps/xgoduck_ai
 
 # 国内微信小程序
-python3 tools/configure-ai.py --region cn --language cn
+# python3 tools/configure-ai.py --region cn --language cn
 
 # 或国际版 App
 # python3 tools/configure-ai.py --region global --language en
@@ -153,7 +153,7 @@ arduino-app-cli app start "$PWD"
 
 也可准备后在 App Lab 通过 Network 连接点击 **Run**。上一步的安装脚本已调用 `tools/prepare-ai-sketch.py`：解析 `sketch/sketch.yaml` 的固定依赖、修补 Bridge/RPClite 缓存、仅编译并检查 ELF，无需先 Run 失败一次再 Stop 修缓存。若只需重建 MCU 缓存，以 `arduino` 用户运行 `python3 tools/prepare-ai-sketch.py`。首次准备期间保持扭矩关闭，App 保持停止。库缓存清空后需重新准备；已有正确环境不必每次重启 router。
 
-**Run 是启动整个 App 的构建和运行流程，Arduino 工具可能编译并上传其中的 sketch。** 本分支没有修改 STM32 源码，但 Run 不能被当作保证不上传 MCU 的纯 Python 更新。2 Mbps router 设置是全局设置；换用其他 Bridge 速率的 App 前按[技术参考](technical_reference.md#running)恢复。
+**Run 会构建并启动整个 App。** 0.3.5 的单舵机安装检查需要更新 STM32 sketch，请在舵机卸力后运行。换用其他 Bridge 速率的 App 前，按技术参考调整全局的 2 Mbps Router 设置。 [技术参考](technical_reference.md#running)
 
 USB 探测在 **App 容器创建之前** 完成。开机先开 Host，最多等待 5 秒识别 USB 摄像头或音频接口。检测到音视频设备就保留 Host，否则切回 Device，包括只接了空 Hub 的情况。切换角色前，开机服务暂停 USB 串口监视器、代理及 Arduino router。确定角色后恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART，重启 router 又会更换容器绑定的 socket、重置 MCU。App 入口只检查当前 USB 角色。驾驶舱手动切换后，单独重启 App 会沿用所选模式，下次整机开机重新探测。
 
@@ -200,7 +200,7 @@ bash tools/install-ai-support.sh
 2. 连接后扫描 Wi-Fi，选择网络并提交密码。协议沿用生态现有 BluFi（FFFF / FF01 / FF02），发送的是 Wi-Fi 参数，不修改服务器。当前支持开放网络与 WPA/WPA2 Personal 密码；企业网络和需要网页登录的热点需另行在 Linux 主机配置。
 3. Wi-Fi 成功后，板子发送同一个稳定设备 ID；客户端把它绑定到**当前客户端所在服务器**的账号，并选择智能体。之后板端检查所选服务器的绑定状态，取得 MQTT 凭据并启动聊天/MCP。
 4. 已联网且绑定检查成功后结束配网广播；已经连接的配网会话先完成。后续 Wi-Fi 失联会重新广播以便更换网络。云服务暂时不可达时保留同一区域已知绑定并重试，不把网络错误当作“已解绑”。
-5. USB 麦克风或扬声器缺失时，云端 MCP 和配网仍可运行，语音状态显示 `waiting_audio`。设备接入后自动重新枚举。语音就绪后，按驾驶舱「AI 绑定」里显示的唤醒词开始聊天。
+5. USB 麦克风或扬声器缺失时，云端 MCP 和配网仍可运行，语音状态显示 `waiting_audio`。设备接入后自动重新枚举。语音就绪后，按驾驶舱「AI 语音交互绑定」里显示的唤醒词开始聊天。
 
 如果选错客户端，Wi-Fi 仍可能配置成功，但板子检查的另一套服务器仍是未绑定。换用正确客户端完成绑定，或按下一节在板端明确换区；手机不会替你切区。
 
@@ -381,10 +381,9 @@ curl -fsS http://127.0.0.1:9527/api/voice/status | python3 -m json.tool
 
 | 状态/现象 | 检查 |
 | --- | --- |
-| `awaiting_cloud_config` | 用 `tools/configure-ai.py` 在板端明确选区；配置损坏时先修复 JSON |
 | `awaiting_network` | 手机蓝牙配网；扫描失败时同时查看板端硬件服务日志和手机错误码 |
-| `awaiting_binding` | 客户端区域是否匹配、账号是否绑定到返回的稳定 ID |
-| `checking_binding` / `cloud_error` | DNS、时间、互联网和所选服务可达性；不等同于解绑 |
+| `awaiting_binding` | 服务确认暂无记录。检查客户端区域和账号绑定的设备 ID。 |
+| `checking_binding` / `cloud_error` | 正在检查绑定或等待重试。检查 DNS、时间和服务可达性，也可在驾驶舱手动选区。 |
 | `hardware_error` / identity mismatch | 核对当前 App 路径和身份，重跑硬件支持安装；不要删除已绑定身份 |
 | `waiting_audio` | Host 模式、Hub 供电、USB capture/playback 声卡及持久选择；MCP 仍可在线 |
 | 手机找不到设备 | 硬件服务是否启动、是否已联网并绑定而停止广播、蓝牙是否可用；原系统/驱动故障需单独排查 |

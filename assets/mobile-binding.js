@@ -1,4 +1,4 @@
-/* Server selection is explicit; opening links or changing UI language never writes configuration. */
+/* Display the saved service region and allow the user to choose another. */
 (() => {
   const ids=['openBinding','bindingDialog','closeBinding','bindingRegion','bindingStatus','regionCn','regionGlobal','regionCnCard','regionGlobalCard','regionMessage','bindingRegionChip','startupWake'];
   const el=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
@@ -6,6 +6,7 @@
   const t=(key,values)=>window.DuckI18n.t(key,values);
   let snapshot=null,config=null,failed=false,request=null,generation=0,timer=null;
   let selected=null,saving=false,message='';
+  let hasOpenedBinding=false,cameraAvailable=false;
   const changed=value=>!!config&&['cn','global'].includes(value)&&(config.custom_endpoint||config.cloud_region!==value);
   function render(){
     el.bindingRegion.textContent=!config?t('bindingRegionUnknown'):config.custom_endpoint?t('bindingCustom'):config.cloud_region==='cn'?t('bindingCn'):config.cloud_region==='global'?t('bindingGlobal'):t('bindingNotConfigured');
@@ -14,12 +15,14 @@
     el.openBinding.title=t('bindingEntryCurrent',{region:el.bindingRegion.textContent});
     const setup=snapshot?.onboarding||{},actual=snapshot?.session_cloud_region??setup.cloud_region;
     const matches=!!config&&(config.custom_endpoint||actual===config.cloud_region);
-    const bound=setup.cloud_region===config?.cloud_region?(typeof setup.bound==='boolean'?setup.bound:snapshot?.bound):null;
+    const bound=setup.cloud_region===config?.cloud_region?(setup.bound===undefined?snapshot?.bound:setup.bound):null;
     let state='pending',key='bindingChecking';
     if(failed){state='unavailable';key='bindingUnavailable';}
-    else if(snapshot?.cloud_connected===true&&matches){state='online';key='bindingOnline';}
+    else if(setup.state==='awaiting_network'){key='bindingWaitingNetwork';}
+    else if(config?.configured&&snapshot?.cloud_connected===true&&matches){state='online';key='bindingOnline';}
     else if(bound===true){state='bound';key=setup.cached?'bindingCached':'bindingBound';}
     else if(bound===false){state='unbound';key='bindingUnbound';}
+    else if(!config?.configured&&setup.cloud_error){key='bindingRetrying';}
     el.bindingStatus.textContent=t(key);el.bindingStatus.dataset.state=state;
     for(const [value,input,card] of [['cn',el.regionCn,el.regionCnCard],['global',el.regionGlobal,el.regionGlobalCard]]){
       input.checked=selected===value;input.disabled=saving||!config;
@@ -61,10 +64,12 @@
     finally{clearTimeout(timeout);saving=false;render();refresh();}
   }
   for(const [input,value] of [[el.regionCn,'cn'],[el.regionGlobal,'global']])input.addEventListener('change',()=>select(value));
-  el.openBinding.addEventListener('click',()=>{
+  function openBinding(){
     if(!el.bindingDialog.open){if(!saving)message='';el.bindingDialog.showModal();}
+    hasOpenedBinding=true;
     render();refresh();if(!timer)timer=setInterval(refresh,3000);
-  });
+  }
+  el.openBinding.addEventListener('click',openBinding);
   el.closeBinding.addEventListener('click',()=>el.bindingDialog.close());
   el.bindingDialog.addEventListener('close',()=>{++generation;request?.abort();request=null;clearInterval(timer);timer=null;});
   async function headerRegion(){
@@ -73,9 +78,17 @@
     try{
       const value=await jsonResponse(await fetch('/api/voice/region',{cache:'no-store'}));
       if(current!==generation||saving)return;
-      config=value;selected=config.custom_endpoint?null:config.cloud_region;render();
+      config=value;selected=config.custom_endpoint?null:config.cloud_region;
+      if(!hasOpenedBinding&&!document.hidden&&cameraAvailable&&config.configured===false)openBinding();
+      else render();
     }catch(error){if(current===generation)render();}
   }
+  function updateCameraAvailability(available){
+    if(cameraAvailable===available)return;
+    cameraAvailable=available;
+    if(cameraAvailable&&!hasOpenedBinding&&!document.hidden)void headerRegion();
+  }
+  window.DuckBinding={updateCameraAvailability};
   window.addEventListener('duck-languagechange',render);
   window.addEventListener('focus',()=>el.bindingDialog.open?refresh():headerRegion());
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)(el.bindingDialog.open?refresh:headerRegion)();});

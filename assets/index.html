@@ -1,10 +1,29 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=walking-help">
+<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=overcurrent-check">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 <main>
-<header><div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div><div class="header-actions"><nav class="nav"><a href="/" aria-current="page" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" data-zh="舵机设置">Servo setup</a><a id="cockpit-link" href="/mobile.html" data-zh="驾驶舱">Cockpit</a></nav><button id="language" type="button">中文</button><button class="stop" id="stop" data-zh="舵机卸力">Torque off</button></div></header>
+<header>
+  <div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div>
+  <div class="header-actions">
+    <nav class="nav">
+      <a href="/" aria-current="page" data-zh="控制">Control</a>
+      <a href="/calibrate.html" data-zh="标定">Calibration</a>
+      <a href="/servo.html" data-zh="舵机设置">Servo setup</a>
+      <a id="cockpit-link" href="/mobile.html" data-zh="语音交互驾驶舱">Cockpit</a>
+      <a href="https://github.com/LuwuDynamics/xgoduck_runtime_arduino" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer">Wiki</a>
+    </nav>
+    <button id="language" type="button">中文</button>
+    <button class="stop" id="stop" data-zh="舵机卸力">Torque off</button>
+  </div>
+</header>
 <p id="message" data-zh="正在连接…">Connecting…</p>
+<div id="startup-check" class="warn" role="status" hidden>
+  <p id="gain-check-warning" hidden><span id="gain-check-text"></span> <a href="/servo.html" data-zh="打开舵机设置">Open Servo setup</a></p>
+  <p id="imu-check-warning" hidden><span id="imu-check-text"></span> <a href="/calibrate.html" data-zh="打开标定">Open Calibration</a></p>
+  <p id="overcurrent-check-warning" hidden><span id="overcurrent-check-text"></span> <a href="/servo.html#servo-protection" data-zh="打开舵机保护设置">Open servo protection settings</a></p>
+</div>
 <section class="metrics"><article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article><article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article><article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article><article><small data-zh="电压">Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
 <section>
   <h2><span data-zh="模式">Mode</span> <span id="mode">—</span></h2>
@@ -61,4 +80,4 @@
     </figure>
   </div>
 </section>
-</main><script src="panel-language.js"></script><script src="app.js?v=walking-help"></script></html>
+</main><script src="panel-language.js"></script><script src="app.js?v=overcurrent-check"></script></html>

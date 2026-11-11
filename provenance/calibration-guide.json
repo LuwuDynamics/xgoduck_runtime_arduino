@@ -74,8 +74,8 @@
     34
   ],
   "sha256": {
-    "assets/calibrate.html": "7c141eec4358cae13d55263a259449328102c793d5ec24516812897d7e72fd8c",
-    "assets/calibrate.js": "d5e55c51ca5ad33eb45a05c34f34fe3c43b5e9a2bb7576e32279164e907b592a",
+    "assets/calibrate.html": "47f29c89f39a5d5cd06b25f0a5b1592720806d6990cca1d7e63146c8a8ccd7f4",
+    "assets/calibrate.js": "6206175a0f80ff6369c45a9c5fc996c8e4c2861f89fe30924e895ee5a7a962b9",
     "assets/calibrate.css": "2a8c99f004d5da8981e897ee144909b346c3c077387acf9d485aff6fd97a4bb8",
     "assets/calibrate-joints.json": "374301c5c61b45323a86feabae9c9df3b7a74c76e92b06632104b8d82b6de533",
     "assets/cal-photo-head.webp": "f5462e5783a75c89bcfa83109d11d281164de49df29e01a6811064342b591909",

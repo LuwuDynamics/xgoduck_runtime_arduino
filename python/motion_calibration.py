@@ -16,19 +16,25 @@ import time
 from app_paths import DATA
 from controller import Controller
 from rl_core import MOTOR_IDS
-from wire import SERVO_CENTER_POS
-from runtime_gains import RuntimeGainsReader
+from wire import (PROTECTION_OVERCURRENT, PROTECTION_VOLTAGE, SERVO_CENTER_POS,
+                  SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH, encode_servo,
+                  encode_servo_protection_switch)
+from runtime_gains import ServoParameterReader
 from forward_avoidance import GuardedWalkingPolicy
 
 ARM_CONFIRM_S = 1.
 IMU_LOAD_ERROR = 'IMU 标定文件无效或为旧版。请在 9527 的 Control 页重新标定 IMU。'
+PROTECTION_SWITCHES = {
+    'set_voltage_protection': PROTECTION_VOLTAGE,
+    'set_overcurrent_protection': PROTECTION_OVERCURRENT,
+}
 
 
 class AppController(Controller):
     def __init__(self, bridge, *, data_dir=None):
         data = Path(DATA if data_dir is None else data_dir)
         super().__init__(bridge, imu_calibration_path=data / 'imu-calibration.json')
-        self.run_gains = RuntimeGainsReader(self)
+        self.servo_parameters = ServoParameterReader(self)
         self.forward_avoidance = None
         self._forward_release = set()
         self._arm_deadline = None
@@ -161,7 +167,21 @@ class AppController(Controller):
 
     def servo_op(self, action, target_id=None, *args, **kwargs):
         if action == 'read_runtime_gains':
-            return self.run_gains.read(target_id)
+            return self.servo_parameters.read(target_id)
+        if action == 'read_protection' or action in PROTECTION_SWITCHES:
+            if type(target_id) is not int or not 0 <= target_id <= 253:
+                raise ValueError('Servo ID must be between 0 and 253')
+            if action == 'read_protection':
+                op = SERVO_READ_PROTECTION
+                payload = encode_servo(op, target_id, kp=0, kd=0)
+            else:
+                op = SERVO_SET_PROTECTION_SWITCH
+                payload = encode_servo_protection_switch(
+                    target_id, PROTECTION_SWITCHES[action], kwargs.get('protection_enabled'))
+            with self.servo_op_lock:
+                with self.lock:
+                    self._require_servo_debug()
+                return self._exchange_servo(op, target_id, payload)
         with self._center_lock:
             reply = super().servo_op(action, target_id, *args, **kwargs)
             sid = reply.get('target_id')
@@ -236,7 +256,7 @@ class AppController(Controller):
                     result['gravity_calibration']['corrected_gyro_dps'] = result['gyro_corrected']
             if imu_error:
                 result['last_error'] = imu_error
-        result['runtime_gains'] = self.run_gains.status()
+        result['runtime_gains'] = self.servo_parameters.status()
         if self.forward_avoidance is not None:
             result['obstacle_avoidance'] = self.forward_avoidance.status()
             with self.lock:

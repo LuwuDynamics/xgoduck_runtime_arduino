@@ -76,7 +76,8 @@ Copy the prompt and fill in the **board IP, SSH username and password** in your 
 ```text
 Import and start XGO Duck AI on my Arduino UNO Q.
 Board IP: [fill in]. SSH username: [fill in, usually arduino]. SSH password: [board's Linux login password].
-Installation: [first install / update]. Service region: [China cn / International global].
+Installation: [first install / update]. Service region: [detect after binding / China cn / International global].
+For automatic detection, leave the region unset on a fresh install and preserve any saved region on update.
 Sign in to the board over Wi-Fi SSH with the credentials above. Keep the password out of files,
 shell history and logs. Run App CLI commands as the arduino user.
 Check the OS, disk space, installed Apps and their actual paths. If needed, download the dedicated ZIP:
@@ -165,7 +166,7 @@ Default standing pose for Duck with roller feet and standard feet.
 
    <img src="docs/images/cockpit-live-en.png" alt="Cockpit with live camera video, ToF readings, and Link AI in the top bar" width="1000">
 
-2. Tap **Link AI**, tap **China** or **International** to save the region and reconnect voice immediately. The window shows the current region and binding state; open its matching platform:
+2. Open the platform where you want to bind Duck. To choose the region in advance, open **Link AI** in the cockpit and tap **China** or **International**. This saves the choice and reconnects voice.
 
    | Device region | Wake word | Binding and agent platform |
    | --- | --- | --- |
@@ -184,7 +185,7 @@ Web Bluetooth requires a compatible Chrome / Edge browser. On iPhone / iPad, add
 | <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="150"> | <img src="docs/images/qr_miniprogram.png" alt="China WeChat Mini Program QR" width="150"> |
 | [Open the App download page](https://agent.luwudynamics.ai/download) | Scan with WeChat |
 
-China and international accounts and bindings are separate. Selecting a region saves it and reconnects voice, preserving conversation language, volume and motion settings. Bind separately when switching to another service for the first time. Opening a platform link alone does not switch servers. If the device belongs to another account, unbind it from that account first.
+China and international accounts and bindings are separate. If no region is saved, Duck checks both services after connecting to Wi-Fi. It uses the service where it is bound, choosing China when both have a binding. A saved region takes precedence. Switching servers preserves conversation language, volume and motion settings. Bind separately when switching to another service for the first time. If the device belongs to another account, unbind it from that account first.
 
 If voice stays offline after binding, copy this prompt to an AI assistant.
 

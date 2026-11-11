@@ -28,8 +28,10 @@ static const uint8_t ADDR_UNLOCK = 0x37;
 static const uint8_t ADDR_ID = 0x05;
 static const uint8_t ADDR_UNLOAD_CONDITION = 0x13;
 static const uint8_t ADDR_PROTECTION_CURRENT = 0x1C;
+static const uint8_t PROTECTION_VOLTAGE = 0x01;
+static const uint8_t PROTECTION_OVERCURRENT = 0x08;
 static const uint8_t PROTECTION_DISABLED = 0x04; // Keep overheat protection on.
-static const uint8_t PROTECTION_ENABLED = 0x0D; // Voltage, overheat, overcurrent.
+static const uint8_t PROTECTION_ENABLED = PROTECTION_DISABLED | PROTECTION_VOLTAGE | PROTECTION_OVERCURRENT;
 
 static const uint8_t MOUTH_MOTOR_ID = 34;
 

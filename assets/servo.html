@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=20261107-1">
+<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=protection-readings">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 <main class="page-servo">
 <header>
@@ -57,21 +57,69 @@
     <p class="hint" data-zh="保存值存储在舵机中，运行值是当前生效的参数。「写入 KP/KD」同时更新两组值。「读取」只查看数值。">Saved values are stored in the servo. Runtime values are used now. Set KpKd writes both; Read never changes them.</p>
   </div>
 </section>
-<section class="servo-panel servo-protection">
-  <h2 data-zh="电压与过流保护（全部舵机）">All-servo voltage / overcurrent protection</h2>
-  <div class="protection-controls">
-    <button id="enable-protection" data-zh="启用">Enable</button>
-    <button id="disable-protection" data-zh="禁用">Disable</button>
-    <span id="protection-out" class="servo-readout" role="status" data-zh="尚未设置">Not applied</span>
+<section class="servo-panel servo-test">
+  <h2 data-zh="单舵机安装检查">Single-servo installation check</h2>
+  <div class="servo-test-layout">
+    <figure>
+      <img id="servo-test-image" alt="" hidden>
+      <figcaption id="servo-test-caption"></figcaption>
+    </figure>
+    <div>
+      <label for="servo-test-id" data-zh="测试舵机">Servo to test</label>
+      <select id="servo-test-id" disabled></select>
+      <p class="hint" data-zh="支撑好小鸭。开始测试后可反复拖动滑条，确认图中标出的关节在动。测完点「停止并卸力」。左右以小鸭自身为准。">Support Duck, start the test, and move the slider to verify the highlighted joint. Click Stop and unload when finished. Left and right are from Duck’s perspective.</p>
+      <div class="buttons servo-test-actions">
+        <button id="servo-test-start" type="button" data-zh="开始测试" disabled>Start test</button>
+        <button id="servo-test-stop" type="button" data-zh="停止并卸力" disabled>Stop and unload</button>
+      </div>
+      <label for="servo-test-offset"><span data-zh="相对起始位置">Offset from start</span> <output id="servo-test-angle" for="servo-test-offset">0°</output></label>
+      <input id="servo-test-offset" type="range" min="-30" max="30" value="0" step="1" disabled>
+      <p id="servo-test-status" class="hint" role="status" data-zh="测试范围最大为起始位置的 ±30°。">The test moves up to 30° in either direction.</p>
+    </div>
   </div>
-  <div class="protection-controls">
-    <input id="protection-current" type="number" min="0" step="any" value="1.5" inputmode="decimal" aria-label="Protection current in amperes" data-zh-aria-label="保护电流（安培）">
-    <span>A</span>
-    <button id="set-protection-current" data-zh="设置保护电流">Set protection current</button>
-    <span id="protection-current-out" class="servo-readout" role="status" data-zh="尚未设置">Not applied</span>
+</section>
+<section id="servo-protection" class="servo-panel servo-protection">
+  <h2 data-zh="舵机保护">Servo protection</h2>
+  <div class="protection-group" role="group" aria-labelledby="voltage-protection-title">
+    <h3 id="voltage-protection-title" data-zh="电压保护">Voltage protection</h3>
+    <div class="protection-controls">
+      <button id="enable-voltage-protection" data-zh="启用" aria-label="Enable voltage protection" data-zh-aria-label="启用电压保护">Enable</button>
+      <button id="disable-voltage-protection" data-zh="禁用" aria-label="Disable voltage protection" data-zh-aria-label="禁用电压保护">Disable</button>
+      <span id="voltage-protection-out" class="servo-readout" role="status" data-zh="等待读取">Waiting to read</span>
+    </div>
   </div>
-  <p class="hint" data-zh="「启用 / 禁用」只改变电压与过流保护的开关，「设置保护电流」只改变过流阈值。两项设置都会广播到所有舵机，无需扫描或选择 ID。过热保护保持开启，已保存的电压限值保持原值。电流分辨率为 6.5 mA。广播写入后，舵机不会逐个返回确认。">Enable / Disable changes only the protection switch. Set protection current changes only the current threshold. Both operations broadcast to every servo; no scan or ID selection is needed. Overheat protection stays enabled, and stored voltage limits are unchanged. Current resolution is 6.5 mA. Broadcast writes have no per-servo acknowledgement.</p>
+  <div class="protection-group" role="group" aria-labelledby="overcurrent-protection-title">
+    <h3 id="overcurrent-protection-title" data-zh="过流保护">Overcurrent protection</h3>
+    <div class="protection-controls">
+      <button id="enable-overcurrent-protection" data-zh="启用" aria-label="Enable overcurrent protection" data-zh-aria-label="启用过流保护">Enable</button>
+      <button id="disable-overcurrent-protection" data-zh="禁用" aria-label="Disable overcurrent protection" data-zh-aria-label="禁用过流保护">Disable</button>
+      <span id="overcurrent-protection-out" class="servo-readout" role="status" data-zh="等待读取">Waiting to read</span>
+    </div>
+    <div class="protection-controls">
+      <label for="protection-current" data-zh="新阈值">New threshold</label>
+      <input id="protection-current" type="number" min="0" step="any" value="2" inputmode="decimal" aria-label="New overcurrent threshold in amperes" data-zh-aria-label="新的过流阈值（安培）">
+      <span>A</span>
+      <button id="set-protection-current" data-zh="写入电流阈值">Write current threshold</button>
+    </div>
+  </div>
+  <p id="protection-message" class="servo-readout" role="status"></p>
+  <div class="protection-readings">
+    <p id="protection-readings-empty" class="hint" role="status" data-zh="正在读取舵机保护设置…">Reading servo protection settings…</p>
+    <table id="protection-readings" hidden>
+      <caption data-zh="舵机读回">Servo readback</caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col" data-zh="电压保护">Voltage</th>
+          <th scope="col" data-zh="过流保护">Overcurrent</th>
+          <th scope="col" class="protection-threshold" data-zh="已保存阈值（A）">Saved threshold (A)</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <p class="hint" data-zh="开关逐台应用到已检测到的舵机。电流阈值广播写入，分辨率为 6.5 mA。">Switches apply to each detected servo. The current threshold is broadcast in 6.5 mA steps.</p>
 </section>
 </main>
-<script src="panel-language.js"></script><script src="servo.js?v=20261107-servo-language"></script>
+<script src="panel-language.js"></script><script src="servo.js?v=servo-test-idle"></script>
 </html>

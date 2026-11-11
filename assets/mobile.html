@@ -18,7 +18,7 @@
       <span class="duck-mark">D<span>↗</span></span>
       <span><span class="brand-name">DUCK</span><small><span class="brand-caption" data-i18n="cockpit">驾驶舱</span><span class="app-version" data-app-version hidden></span></small></span>
     </a>
-    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
+    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 语音交互绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
     <div class="top-actions">
       <button id="language" class="language-button" type="button">EN</button>
       <button id="fit" class="icon-button" aria-label="填满画面" data-i18n-aria-label="fillView">⤢</button>
@@ -165,9 +165,9 @@
   </div>
 </dialog>
 <dialog id="bindingDialog" aria-labelledby="bindingTitle" aria-describedby="bindingIntro">
-  <div class="dialog-head"><div><span class="eyebrow">AI INTERACTION</span><h2 id="bindingTitle" data-i18n="bindingTitle">AI 交互绑定</h2></div><button id="closeBinding" class="icon-button" type="button" aria-label="关闭绑定窗口" data-i18n-aria-label="closeBinding">×</button></div>
+  <div class="dialog-head"><div><span class="eyebrow">AI INTERACTION</span><h2 id="bindingTitle" data-i18n="bindingTitle">AI 语音交互绑定</h2></div><button id="closeBinding" class="icon-button" type="button" aria-label="关闭绑定窗口" data-i18n-aria-label="closeBinding">×</button></div>
   <div class="binding-body">
-    <p id="bindingIntro" data-i18n="bindingIntro">点击国内版或国际版即可切换服务器，再打开对应平台绑定设备。</p>
+    <p id="bindingIntro" data-i18n="bindingIntro">尚未选区时，小鸭会在绑定后自动选择服务。也可在这里手动选区。</p>
     <div class="binding-device" aria-live="polite"><div><span data-i18n="bindingRegion">当前服务区域</span><strong id="bindingRegion">—</strong></div><div><span data-i18n="bindingStatus">绑定状态</span><strong id="bindingStatus">正在读取</strong></div></div>
     <fieldset class="binding-server-options"><legend data-i18n="bindingChooseRegion">选择服务区域</legend><div class="binding-choices">
       <div class="binding-choice"><label class="binding-card" id="regionCnCard"><span class="binding-card-top"><span class="binding-symbol">CN</span><input id="regionCn" name="cloudRegion" type="radio" value="cn"><span class="binding-current" data-i18n="bindingCurrent">当前使用</span></span><span class="binding-card-title" data-i18n="bindingCn">国内版</span><span class="binding-card-hint" data-i18n="bindingCnHint">唤醒词 · 小鸭小鸭</span><span class="binding-domain">agent.xgorobot.com</span></label><a class="binding-platform" href="https://agent.xgorobot.com/devices" target="_blank" rel="noopener noreferrer" data-i18n="bindingOpenCn">打开国内版 ↗</a></div>
@@ -213,5 +213,5 @@
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=walking-help"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=walking-help"></script><script src="mobile.js?v=walking-help"></script><script src="mobile-binding.js?v=hey-ducky1"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=voice-binding"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=walking-help"></script><script src="mobile-binding.js?v=camera-region"></script><script src="mobile.js?v=camera-region"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

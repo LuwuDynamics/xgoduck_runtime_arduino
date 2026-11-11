@@ -1,5 +1,25 @@
 # XGO Duck AI 更新记录 / Changelog
 
+## 0.3.5
+
+### 简体中文
+
+- 9527 控制台新增自检。15 个舵机全部在线且卸力时核对运行 KP/KD，列出偏离 5 / 10 的舵机。IMU 在线时提示缺失或无效的标定记录。卸力后，过流保护已开启且读回的阈值大于 0、低于 1.6 A 时，列出对应舵机并建议设为 2 A。
+- IMU 标定分别判断采样波动和陀螺仪零偏，避免将静止时的固定零偏误判为晃动。零偏过大时会单独提示。
+- 舵机设置新增带关节图的单舵机安装检查，滑条可从起始位置调整 ±30°。连续 10 秒未调整目标角度、退出测试、断线或连续超过 10 帧没有位置反馈时自动卸力。
+- 舵机设置可分别启用或禁用电压保护和过流保护，并逐台显示保护开关和已保存的过流阈值。电流输入框预填 2 A。
+- 小鸭未保存服务区域时，联网后会根据账号绑定自动选区。国内有绑定时优先使用国内服务。已保存的区域或自定义服务优先。
+- 驾驶舱入口改为「AI 语音交互绑定」。未选区且检测到摄像头时自动打开选区窗口。9527 顶部新增 GitHub 和 Wiki 链接，「走不稳？」帮助可完整收起。
+
+### English
+
+- The port 9527 control page checks live KP/KD when all 15 servos are online and unloaded, listing values that differ from 5 / 10. It flags missing or invalid calibration when the IMU is online. While unloaded, it recommends 2 A for servos with overcurrent protection enabled and a reported threshold above 0 A and below 1.6 A.
+- IMU calibration checks motion and gyroscope bias separately so a steady bias can be calibrated while Duck is stationary. An excessive zero offset has its own message.
+- Servo setup adds an illustrated single-joint test with ±30° travel from the starting position. It releases torque after 10 seconds without a new target angle, on exit or disconnect, or after more than 10 consecutive missing position feedback frames.
+- Servo setup provides separate voltage and overcurrent protection switches and shows the saved protection settings and current threshold for each servo. The current input starts at 2 A.
+- With no service region saved, Duck checks account bindings after connecting to Wi-Fi and gives priority to China when a binding exists there. A saved region or custom service takes precedence.
+- The cockpit opens the AI binding region picker automatically when it detects a camera and the region is unset. The port 9527 header links to GitHub and the Wiki, and the walking-help panel collapses fully.
+
 ## 0.3.4
 
 ### 简体中文

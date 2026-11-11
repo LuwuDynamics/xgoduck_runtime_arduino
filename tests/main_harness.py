@@ -22,6 +22,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
 import wire
+from rl_core import MOTOR_IDS
 
 
 def wait_for(check, timeout=10):
@@ -71,7 +72,14 @@ class Bridge:
     callbacks, commands = {}, []
     servo_ops = []
     saved_gains = {}
+    protection_flags, protection_current = wire.PROTECTION_ENABLED, 231
     held_mask = 0
+    servo_debug = False
+    servo_mask = wire.ALL_MASK
+    servo_test = None
+    servo_test_limit = 0
+    servo_test_feedback_lost = False
+    servo_test_idle_expired = False
 
     @classmethod
     def provide(cls, name, callback):
@@ -95,8 +103,47 @@ class Bridge:
             assert magic == b'DQV2'
             cls.servo_ops.append(op)
             assert op != wire.SERVO_APPLY_RUN_GAINS, 'Automatic gains must remain disabled'
+            if op in (wire.SERVO_ENTER, wire.SERVO_EXIT):
+                cls.servo_debug = op == wire.SERVO_ENTER
+            if op in wire.SERVO_TEST_OPS:
+                ok, limit, angle_limit, idle_timeout = 1, 0, 0, 0
+                if op == wire.SERVO_TEST_START:
+                    assert cls.servo_debug and cls.servo_test is None and new == 0 and current
+                    cls.servo_test = (sid, current)
+                    limit = cls.servo_test_limit
+                    if limit:
+                        angle_limit, idle_timeout = 30, 10
+                elif op == wire.SERVO_TEST_MOVE:
+                    assert cls.servo_test == (sid, current)
+                    assert new in ((10, 20, 40, 236) if cls.servo_test_limit else (20,))
+                    if cls.servo_test_feedback_lost:
+                        ok, limit = 0, cls.servo_test_limit
+                        cls.servo_test = None
+                    elif cls.servo_test_idle_expired:
+                        ok, idle_timeout = 0, 10
+                        cls.servo_test = None
+                elif cls.servo_test == (sid, current):
+                    cls.servo_test = None
+                cls.callbacks['duck_servo_reply'](wire.SERVO_REPLY.pack(
+                    b'DQS3', op, sid, ok, limit, 2047, current, angle_limit, idle_timeout))
+                return
             if op == wire.SERVO_SET_PERM_KP_KD:
                 cls.saved_gains[sid] = (kp, kd)
+            if op == wire.SERVO_SET_PROTECTION:
+                cls.protection_flags = flags
+            if op == wire.SERVO_SET_PROTECTION_CURRENT:
+                cls.protection_current = current
+            if op in (wire.SERVO_READ_PROTECTION, wire.SERVO_SET_PROTECTION_SWITCH):
+                assert 0 <= sid <= 253 and not any((kp, kd, current))
+                if op == wire.SERVO_SET_PROTECTION_SWITCH:
+                    assert cls.servo_debug
+                    assert new in (wire.PROTECTION_VOLTAGE, wire.PROTECTION_OVERCURRENT) and flags in (0, new)
+                    cls.protection_flags = (cls.protection_flags & ~new) | flags
+                else:
+                    assert not (new or flags)
+                cls.callbacks['duck_servo_reply'](wire.SERVO_REPLY.pack(
+                    b'DQS3', op, sid, 1, cls.protection_flags, cls.protection_current, 2047, 0, 0))
+                return
             raw = (current if op == wire.SERVO_SET_PROTECTION_CURRENT else
                    0 if op in (wire.SERVO_SET_PROTECTION, wire.SERVO_APPLY_RUN_GAINS) else 2047)
             cls.callbacks['duck_servo_reply'](wire.SERVO_REPLY.pack(
@@ -128,7 +175,8 @@ def main():
         seq = 0
         while not stop_feedback.wait(.01):
             seq += 1
-            raw = wire.STATE.pack(b'DQS1', 1, 1, wire.ALL_MASK,
+            flags = 1 | (16 if Bridge.servo_debug else 0)
+            raw = wire.STATE.pack(b'DQS1', 1, flags, Bridge.servo_mask,
                 seq, seq * 10000, seq * 10000, 0, 0, 10000, 500, 0, 0, 0,
                 0, 0, -16384, 0, 0, 0, *([0.] * 45))
             Bridge.callbacks['duck_state'](raw)
@@ -228,17 +276,102 @@ def main():
                     assert center.status_code == 200 and center.json()['hold_pos'] == 2048
                     assert client.post('/api/cal/center', json={'index': True}).status_code == 400
                     assert client.post('/api/cal/exit', json={}).status_code == 200
+                    Bridge.saved_gains[22] = (7, 9)
+                    assert client.get('/api/servo/gain-check').json() == {
+                        'state': 'checked', 'mismatches': [{'id': 22, 'kp': 7, 'kd': 9}],
+                    }
+                    Bridge.servo_mask = (1 << MOTOR_IDS.index(10)) | (1 << MOTOR_IDS.index(31))
+                    wait_for(lambda: client.get('/api/status').json()['servo_ids'] == [10, 31])
+                    previous_ops = len(Bridge.servo_ops)
+                    assert client.get('/api/servo/overcurrent-check').json() == {
+                        'state': 'checked', 'checked_ids': [10, 31],
+                        'low_thresholds': [{'id': 10, 'current_a': 1.5015}, {'id': 31, 'current_a': 1.5015}],
+                    }
+                    assert Bridge.servo_ops[previous_ops:] == [wire.SERVO_READ_PROTECTION] * 2
+                    assert client.get('/api/status').json()['mode'] == 'shadow'
+                    Bridge.servo_mask = wire.ALL_MASK
+                    wait_for(lambda: len(client.get('/api/status').json()['servo_ids']) == 15)
+                    servo_test = '/api/servo/test'
+                    assert client.post(servo_test, json={'action': 'start', 'target_id': 22}).status_code == 400
                     assert client.post('/api/servo/enter', json={}).status_code == 200
+                    wait_for(lambda: client.get('/api/status').json()['mcu_servo_debug'])
+                    assert client.get('/api/servo/overcurrent-check').json() == {'state': 'waiting'}
+                    for limit in (0, 10):
+                        Bridge.servo_test_limit = limit
+                        started = client.post(servo_test, json={'action': 'start', 'target_id': 22})
+                        assert started.status_code == 200, started.text
+                        assert started.json().get('feedback_limit', 0) == limit
+                        assert started.json().get('offset_limit_deg', 10) == (30 if limit else 10)
+                        assert started.json().get('idle_timeout_s', 0) == (10 if limit else 0)
+                        args = {'target_id': 22, 'session': started.json()['session']}
+                        move = {**args, 'action': 'move', 'offset_deg': 10}
+                        assert client.post(servo_test, json={**move, 'offset_deg': 31}).status_code == 400
+                        assert client.post(servo_test, json=move).status_code == 200
+                        if limit:
+                            assert client.post(servo_test, json={**move, 'offset_deg': 30}).status_code == 200
+                            assert client.post(servo_test, json={**move, 'offset_deg': -30}).status_code == 200
+                        Bridge.servo_mask &= ~(1 << MOTOR_IDS.index(22))
+                        wait_for(lambda: 22 not in client.get('/api/status').json()['servo_ids'])
+                        moved = client.post(servo_test, json=move)
+                        if limit:
+                            assert moved.status_code == 200, moved.text
+                            Bridge.servo_test_feedback_lost = True
+                            stopped = client.post(servo_test, json=move)
+                            assert stopped.status_code == 400
+                            assert stopped.json()['detail'] == 'Servo ID 22 missed more than 10 consecutive feedback frames.'
+                            Bridge.servo_test_feedback_lost = False
+                        else:
+                            assert moved.status_code == 400 and moved.json()['detail'] == 'No servo replied at ID 22.'
+                        assert client.post(servo_test, json={**args, 'action': 'stop'}).status_code == 200
+                        assert Bridge.servo_test is None
+                        Bridge.servo_mask = wire.ALL_MASK
+                        wait_for(lambda: 22 in client.get('/api/status').json()['servo_ids'])
+                    started = client.post(servo_test, json={'action': 'start', 'target_id': 22})
+                    assert started.status_code == 200, started.text
+                    args = {'target_id': 22, 'session': started.json()['session']}
+                    Bridge.servo_test_idle_expired = True
+                    stopped = client.post(servo_test, json={**args, 'action': 'move', 'offset_deg': 0})
+                    Bridge.servo_test_idle_expired = False
+                    assert stopped.status_code == 400
+                    assert stopped.json()['detail'] == 'Servo unloaded after 10 seconds without an angle change.'
+                    assert client.post(servo_test, json={**args, 'action': 'stop'}).status_code == 200
+                    assert Bridge.servo_test is None
                     read = client.post('/api/servo', json={'action': 'read', 'target_id': 42})
                     assert read.status_code == 200 and read.json()['kp'] == 5
                     tuned = client.post('/api/servo', json={'action': 'set_gains', 'target_id': 42, 'kp': 7, 'kd': 19})
                     assert tuned.status_code == 200
                     assert Bridge.saved_gains[42] == (7, 19)
+                    protection = {'action': 'read_protection', 'target_id': 42}
+                    initial = client.post('/api/servo', json=protection)
+                    assert initial.status_code == 200
+                    assert initial.json()['voltage_protection'] is True and initial.json()['overcurrent_protection'] is True
+                    assert initial.json()['current_raw'] == 231
+                    assert client.post('/api/servo', json={**protection, 'target_id': 254}).status_code == 400
+                    current = client.post('/api/servo', json={'action': 'set_protection_current', 'current_a': 2})
+                    assert current.status_code == 200 and current.json()['current_raw'] == 308
+                    updated = client.post('/api/servo', json=protection).json()
+                    assert updated['current_raw'] == 308 and abs(updated['current_a'] - 2.002) < 1e-9
+                    assert updated['protection_flags'] == initial.json()['protection_flags']
+                    single = {'action': 'set_voltage_protection', 'target_id': 42, 'protection_enabled': False}
+                    assert client.post('/api/servo', json={**single, 'protection_enabled': 'false'}).status_code == 400
+                    assert client.post('/api/servo', json={**single, 'target_id': 254}).status_code == 400
+                    response = client.post('/api/servo', json=single)
+                    assert response.status_code == 200
+                    assert response.json()['voltage_protection'] is False
+                    assert response.json()['overcurrent_protection'] is True
+                    assert response.json()['current_raw'] == 308
+                    single = {**single, 'action': 'set_overcurrent_protection', 'protection_enabled': True}
+                    response = client.post('/api/servo', json=single)
+                    assert response.status_code == 200 and response.json()['voltage_protection'] is False
                     switch = client.post('/api/servo', json={'action': 'set_protection', 'protection_enabled': False})
                     assert switch.status_code == 200 and switch.json()['broadcast'] is True
-                    current = client.post('/api/servo', json={'action': 'set_protection_current', 'current_a': 1.5})
-                    assert current.status_code == 200 and abs(current.json()['current_a'] - 1.5) < .0065
+                    updated = client.post('/api/servo', json=protection).json()
+                    assert updated['voltage_protection'] is False and updated['overcurrent_protection'] is False
+                    assert updated['current_raw'] == 308
                     assert client.post('/api/servo/exit', json={}).status_code == 200
+                    wait_for(lambda: not client.get('/api/status').json()['mcu_servo_debug'])
+                    assert client.post('/api/servo', json=protection).status_code == 400
+                    assert client.post('/api/servo', json=single).status_code == 400
                     before = state['controller'].inferred
                     servo_ops_before = list(Bridge.servo_ops)
                     os.kill(voice['pid'], signal.SIGKILL)

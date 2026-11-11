@@ -2,6 +2,7 @@
 from pathlib import Path
 import sys
 import threading
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -9,7 +10,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT/'python'))
 import wire
-from runtime_gains import RuntimeGainsReader
+from runtime_gains import ServoParameterReader
 from voice_supervisor import VoiceSupervisor
 from rl_core import MOTOR_IDS
 
@@ -18,22 +19,31 @@ class RuntimeGainsTest(unittest.TestCase):
     def setup_controller(self, mode='policy', missing=False):
         c = SimpleNamespace(lock=threading.RLock(), servo_op_lock=threading.Lock(),
             servo_reply_event=threading.Event(), mode=mode, enabled=True,
-            servo_reply=None, servo_expected_reply=None, commands=[], generation=12)
+            servo_reply=None, servo_expected_reply=None, commands=[], generation=12, _imu_job={'active': False})
         c.user_gains = {sid: (3+sid%5, 12+sid%17) for sid in MOTOR_IDS}
+        c.protection_current = {}
+        c.overcurrent_disabled = set()
         def notify(name, payload):
             self.assertEqual(name, 'duck_servo')
             command = wire.SERVO.unpack(payload)
-            self.assertEqual(command[1], wire.SERVO_READ_RUN_GAINS)
+            self.assertIn(command[1], (wire.SERVO_READ_RUN_GAINS, wire.SERVO_READ_PROTECTION))
             c.commands.append(command)
         def wait(op, target_id=None):
             self.assertEqual(c.servo_expected_reply, (op,target_id))
             if missing:raise TimeoutError('MCU unavailable')
+            if op == wire.SERVO_READ_PROTECTION:
+                if target_id not in c.protection_current:
+                    raise ValueError('servo operation failed')
+                flags = wire.PROTECTION_DISABLED if target_id in c.overcurrent_disabled else wire.PROTECTION_ENABLED
+                raw = wire.SERVO_REPLY.pack(b'DQS3', op, target_id, 1, flags,
+                                            c.protection_current[target_id], 2047, 0, 0)
+                return wire.decode_servo_reply(raw)
             kp,kd = c.user_gains.get(target_id,(7,19))
             raw = wire.SERVO_REPLY.pack(b'DQS3',op,target_id,1,0,0,2047,kp,kd)
             return wire.decode_servo_reply(raw)
         c.bridge=SimpleNamespace(notify=notify)
         c._wait_servo_reply=wait
-        return c,RuntimeGainsReader(c)
+        return c,ServoParameterReader(c)
 
     def test_construction_and_status_never_reapply_gains(self):
         c,reader=self.setup_controller()
@@ -94,6 +104,72 @@ class RuntimeGainsTest(unittest.TestCase):
         for sid in [True,-1,254,255,'34',1.5]:
             with self.assertRaises(ValueError):reader.read(sid)
         self.assertEqual(c.commands,[])
+
+    def test_open_page_checks_all_15_runtime_gains_without_changes(self):
+        c, reader = self.setup_controller(mode='shadow')
+        c.rx_time = time.monotonic()
+        c.feedback = SimpleNamespace(mask=wire.ALL_MASK, enabled=False, calibrating=False, servo_debugging=False)
+        c.user_gains = {sid: (5, 10) for sid in MOTOR_IDS}
+        c.user_gains[22] = (7, 9)
+        self.assertEqual(reader.check(), {'state': 'checked', 'mismatches': [{'id': 22, 'kp': 7, 'kd': 9}]})
+        self.assertEqual([packet[2] for packet in c.commands], MOTOR_IDS)
+        self.assertEqual(c.mode, 'shadow')
+
+    def test_open_page_waits_for_all_servos_and_torque_off(self):
+        c, reader = self.setup_controller(mode='shadow')
+        c.rx_time = time.monotonic()
+        c.feedback = SimpleNamespace(mask=wire.ALL_MASK - 1, enabled=False, calibrating=False, servo_debugging=False)
+        self.assertEqual(reader.check(), {'state': 'waiting'})
+        c.feedback.mask = wire.ALL_MASK
+        c.feedback.enabled = True
+        self.assertEqual(reader.check(), {'state': 'waiting'})
+        self.assertEqual(reader.check_overcurrent(), {'state': 'waiting'})
+        c.feedback.enabled = False
+        c._imu_job['active'] = True
+        self.assertEqual(reader.check(), {'state': 'waiting'})
+        self.assertEqual(reader.check_overcurrent(), {'state': 'waiting'})
+        self.assertEqual(c.commands, [])
+
+    def test_overcurrent_warns_only_for_enabled_positive_thresholds_below_1_6_amperes(self):
+        c, reader = self.setup_controller(mode='shadow')
+        ids = [10, 11, 30, 31, 32, 33, 34]
+        c.rx_time = time.monotonic()
+        c.feedback = SimpleNamespace(mask=sum(1 << MOTOR_IDS.index(sid) for sid in ids),
+                                     enabled=False, calibrating=False, servo_debugging=False)
+        c.protection_current = {10: 154, 30: 231, 31: 246, 32: 247, 33: 0, 34: 154}
+        c.overcurrent_disabled = {34}
+        self.assertEqual(reader.check_overcurrent(), {
+            'state': 'checked',
+            'checked_ids': [10, 30, 31, 32, 33, 34],
+            'low_thresholds': [{'id': 10, 'current_a': 1.001}, {'id': 30, 'current_a': 1.5015},
+                               {'id': 31, 'current_a': 1.599}],
+        })
+        self.assertEqual([packet[2] for packet in c.commands], ids)
+        self.assertTrue(all(packet[1] == wire.SERVO_READ_PROTECTION for packet in c.commands))
+        self.assertEqual(c.mode, 'shadow')
+
+    def test_overcurrent_check_yields_when_motion_starts(self):
+        c, reader = self.setup_controller(mode='shadow')
+        c.rx_time = time.monotonic()
+        c.feedback = SimpleNamespace(mask=wire.ALL_MASK, enabled=False, calibrating=False, servo_debugging=False)
+        c.protection_current = {10: 154}
+        wait = c._wait_servo_reply
+
+        def start_motion(op, target_id):
+            reply = wait(op, target_id)
+            c.mode = 'policy'
+            return reply
+
+        c._wait_servo_reply = start_motion
+        self.assertEqual(reader.check_overcurrent(), {'state': 'waiting'})
+        self.assertEqual([packet[2] for packet in c.commands], [10])
+
+    def test_incomplete_runtime_sweep_cannot_report_a_gain_mismatch(self):
+        c, reader = self.setup_controller(mode='off', missing=True)
+        c.rx_time = time.monotonic()
+        c.feedback = SimpleNamespace(mask=wire.ALL_MASK, enabled=False, calibrating=False, servo_debugging=False)
+        self.assertEqual(reader.check(), {'state': 'unavailable', 'target_id': MOTOR_IDS[0]})
+        self.assertEqual(len(c.commands), 1)
 
     def test_retired_fixed_profile_is_rejected_in_both_packet_directions(self):
         with self.assertRaises(ValueError):

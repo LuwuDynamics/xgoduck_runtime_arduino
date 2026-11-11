@@ -1,6 +1,7 @@
 """100Hz receive/filter callback and independent 50Hz ONNX loop."""
 import collections
 import math
+import secrets
 import threading
 import time
 from statistics import median
@@ -172,6 +173,7 @@ class Controller:
         self.servo_reply = None
         self.servo_reply_event = threading.Event()
         self.servo_expected_reply = None
+        self.guarded_servo_test = None
 
     def receive_boot_pd(self, raw):
         if not isinstance(raw, (bytes, bytearray)) or len(raw)!=32: return
@@ -1028,6 +1030,51 @@ class Controller:
                 op, payload = SERVO_ENTER, encode_servo(SERVO_ENTER, target_id)
             else:
                 raise ValueError('unknown servo action')
+        return self._exchange_servo(op, target_id, payload)
+
+    def servo_test(self, action, target_id, session=None, offset_deg=0):
+        ops = {'start': SERVO_TEST_START, 'move': SERVO_TEST_MOVE, 'stop': SERVO_TEST_STOP}
+        if action not in ops or type(target_id) is not int or target_id not in MOTOR_IDS:
+            raise ValueError('Select one of Duck’s 15 servo IDs for the test.')
+        op = ops[action]
+        if op == SERVO_TEST_START:
+            session = secrets.randbelow(65535) + 1
+        payload = encode_servo_test(op, target_id, session, offset_deg)
+        with self.servo_op_lock:
+            with self.lock:
+                if op != SERVO_TEST_STOP:
+                    self._require_battery()
+                    fb = self.feedback
+                    now = time.monotonic()
+                    if (self.mode != 'servo_debug' or not fb or not fb.servo_debugging
+                            or fb.enabled or now - self.rx_time >= .15):
+                        raise ValueError('Servo setup is not ready for the position test.')
+                    # Updated firmware gates position writes on every local bus feedback frame.
+                    guarded_move = op == SERVO_TEST_MOVE and self.guarded_servo_test == (target_id, session)
+                    if not guarded_move and not fb.mask & (1 << MOTOR_IDS.index(target_id)):
+                        raise ValueError(f'No servo replied at ID {target_id}.')
+                    self.web_time = now
+            try:
+                reply = self._exchange_servo(op, target_id, payload)
+            except ValueError as error:
+                with self.lock:
+                    failed = self.servo_reply
+                if op == SERVO_TEST_MOVE and failed and not failed['ok'] and failed['session'] == session:
+                    if seconds := failed.get('idle_timeout_s'):
+                        raise ValueError(f'Servo unloaded after {seconds} seconds without an angle change.') from error
+                    if limit := failed.get('feedback_limit'):
+                        raise ValueError(f'Servo ID {target_id} missed more than {limit} consecutive feedback frames.') from error
+                raise
+            if reply['session'] != session:
+                raise ValueError('Unexpected servo test reply.')
+            if op == SERVO_TEST_START:
+                self.guarded_servo_test = (target_id, session) if reply.get('feedback_limit') else None
+            elif op == SERVO_TEST_STOP and self.guarded_servo_test == (target_id, session):
+                self.guarded_servo_test = None
+            return reply
+
+    def _exchange_servo(self, op, target_id, payload):
+        with self.lock:
             self.servo_reply_event.clear()
             self.servo_reply = None
             self.servo_expected_reply = (op, target_id)

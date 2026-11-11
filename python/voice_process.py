@@ -141,8 +141,8 @@ class Runtime:
         except (OSError, ValueError):
             pass
 
-    def build_application(self, cards):
-        cfg = self.config.get()
+    def build_application(self, cards, cfg=None):
+        cfg = self.config.get() if cfg is None else cfg
         capture_gain = CaptureGain(cfg['input_gain_db'])
         session_id = time.monotonic_ns()
         input_index = output_index = None
@@ -217,7 +217,10 @@ class Runtime:
         app._duck_session = session_id
         return app
 
-    async def chat_session(self):
+    async def chat_session(self, cfg):
+        url = ota_url(cfg)
+        if ota_url(self.config.get()) != url or not self.onboarding.ready_for(url):
+            return
         app = None
         try:
             self.update(state='connecting', message='Opening USB audio and connecting AI Chat Pro.')
@@ -225,13 +228,12 @@ class Runtime:
             before = ([(c['key'], c['card']) for c in cards], self.bench.camera_path())
             self.audio_ready = any(c['input'] for c in cards) and any(c['output'] for c in cards)
             if self.audio_ready:
-                cfg = self.config.get()
                 try:
                     select_audio(cards, 'input', cfg['input_device'])
                     select_audio(cards, 'output', cfg['output_device'])
                 except ValueError:
                     self.audio_ready = False  # A removed selected device must not take MCP down.
-            app = self.build_application(cards)
+            app = self.build_application(cards, cfg)
             self.app = app
             if not await app.start():
                 self.update(state='unconfigured', message='Check device binding and server credentials in App logs.')
@@ -307,27 +309,25 @@ class Runtime:
                     self.session_settings = settings
                     self.next_attempt = 0
                 setup = self.onboarding.snapshot()
-                cloud_connected = bool(self.app is not None and self.app.bound is True
+                cloud_ready = self.onboarding.ready_for(ota_url(cfg))
+                cloud_connected = bool(cloud_ready and self.app is not None and self.app.bound is True
                     and getattr(getattr(self.app, 'protocol', None), '_mqtt_connected', False))
                 if cfg['enabled']:
-                    binding_required = (setup['state'] == 'awaiting_cloud_config'
-                                        or (setup['state'] == 'awaiting_binding' and setup.get('cached') is False))
+                    binding_required = setup['state'] == 'awaiting_binding' and setup.get('cached') is False
                     self.connection_sounds.poll(setup.get('wifi_connected'), cloud_connected,
                                                 binding_required=binding_required)
-                ready = (cfg['enabled'] and not self.gate.busy() and self.onboarding.ready
+                ready = (cfg['enabled'] and not self.gate.busy() and cloud_ready
                          and not (self.app is None and self.connection_sounds.offline_busy))
                 if not ready and self.session is not None:
                     await self.stop_session()
                 if ready and (self.session is None or self.session.done()) and time.monotonic() >= self.next_attempt:
-                    self.session = asyncio.create_task(self.chat_session())
+                    self.session = asyncio.create_task(self.chat_session(cfg))
                 if not cfg['enabled']:
                     self.update(state='disabled', message='Chat disabled; original web media remains available.')
-                elif not self.onboarding.ready:
+                elif not cloud_ready:
                     setup = self.onboarding.snapshot()
                     self.update(state=setup['state'], bound=self.onboarding.bound,
                                 message=setup.get('hardware_error') or
-                                        ('Select China/International in the cockpit AI binding panel.'
-                                         if setup['state'] == 'awaiting_cloud_config' else '') or
                                         'Waiting for Wi-Fi and phone account binding; USB audio is optional.')
                 try:
                     session_id = (self.app._duck_session if self.app is not None and ready

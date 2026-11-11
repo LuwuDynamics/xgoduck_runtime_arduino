@@ -46,6 +46,9 @@ class BaselineTest(unittest.TestCase):
         bridge = manifest['sketch']['bridge_overlay']
         self.assertEqual(source.count(bridge['integrated']), 1)
         source = source.replace(bridge['integrated'], bridge['upstream'])
+        for overlay in manifest['sketch']['servo_test_overlays']:
+            self.assertEqual(source.count(overlay['integrated']), 1)
+            source = source.replace(overlay['integrated'], overlay['upstream'])
         for overlay in manifest['sketch'].get('runtime_gains_overlays', []):
             self.assertEqual(source.count(overlay['integrated']), overlay.get('count', 1))
             source = source.replace(overlay['integrated'], overlay['upstream'])
@@ -83,13 +86,15 @@ class BaselineTest(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), digest)
 
     def test_existing_mcu_normal_control_matches_stable_and_preserves_wire_abi(self):
-        manifest = json.loads((ROOT / 'provenance/motion.json').read_text())['mcu_compatibility']
+        provenance = json.loads((ROOT / 'provenance/motion.json').read_text())
+        manifest = provenance['mcu_compatibility']
         self.assertEqual(wire.STATE.format, manifest['state_format'])
         self.assertEqual(wire.COMMAND.format, manifest['command_format'])
         source = (ROOT / 'sketch/sketch.ino').read_text()
         start = source.index('static void controlTask(')
         task = source[start:source.index('\nstatic void reportTask(', start)]
-        for overlay in manifest['gain_call_overlays'] + manifest['battery_overlays']:
+        servo_test_overlays = [o for o in provenance['sketch']['servo_test_overlays'] if o.get('control_task')]
+        for overlay in servo_test_overlays + manifest['gain_call_overlays'] + manifest['battery_overlays']:
             self.assertEqual(task.count(overlay['integrated']), overlay.get('count', 1))
             task = task.replace(overlay['integrated'], overlay['upstream'])
         self.assertEqual(hashlib.sha256(task.encode()).hexdigest(), manifest['normal_control_task_sha256'])

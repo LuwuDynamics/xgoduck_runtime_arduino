@@ -190,6 +190,13 @@ def servo_action(body: dict):
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(400, str(exc))
 
+def servo_test(body: dict):
+    try:
+        return controller.servo_test(body['action'], body['target_id'],
+                                     session=body.get('session'), offset_deg=body.get('offset_deg', 0))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise HTTPException(400, str(exc))
+
 def app_version():
     try:
         version = (ROOT / 'version.txt').read_text(encoding='utf-8').strip()
@@ -224,6 +231,9 @@ ui.expose_api('POST', '/api/cal/heartbeat', cal_heartbeat)
 ui.expose_api('POST', '/api/cal/center', cal_center)
 ui.expose_api('POST', '/api/servo/enter', servo_enter)
 ui.expose_api('POST', '/api/servo/exit', servo_exit)
+ui.expose_api('GET', '/api/servo/gain-check', controller.servo_parameters.check)
+ui.expose_api('GET', '/api/servo/overcurrent-check', controller.servo_parameters.check_overcurrent)
+ui.expose_api('POST', '/api/servo/test', servo_test)
 ui.expose_api('POST', '/api/servo', servo_action)
 worker = threading.Thread(target=controller.run, name='policy50', daemon=True)
 avoidance.start()

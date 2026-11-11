@@ -1,6 +1,6 @@
 # XGO Duck AI App: installation and headless operation
 
-> You can also tap China/International in the cockpit’s **Link AI** window to save the region and reconnect voice immediately. First-time setup may run before choosing a region; select it in the web page after the first Run. The CLI option below remains supported. Phone provisioning does not change the region automatically.
+> Duck can select a region after its first Wi-Fi setup and account binding. You can also tap China or International in the cockpit’s **Link AI** window to save a region and reconnect voice.
 
 ## AEC playback headroom and interruption stop (0.2.36)
 
@@ -64,9 +64,9 @@ Support the robot and check Default pose before testing Walk / get up. Source re
 
 This is an open-source App for a user-owned **Arduino UNO Q**, rather than a preinstalled OS image. Complete installation with a computer once. The board can then start the App automatically and use the phone for Wi-Fi provisioning and account binding. Remote control uses cloud MCP. The matching stable web pages, existing audio/video and Doubao interfaces, calibration, gamepad and servo setup remain available.
 
-## Choose a cloud explicitly
+## Choose a service region
 
-One App supports both services. Select the region **locally on the board**. Phone provisioning, Wi-Fi SSID and language cannot change it. Without a selection, the state is `awaiting_cloud_config` and neither chat cloud is contacted.
+If no region is saved, Duck checks both services via `/ota/activate` after connecting to Wi-Fi. A record in China takes priority. Duck tries the international service when China confirms there is no record and the international service has one. The binding prompt plays after both services confirm there is no record. Duck retries about every 5 seconds during the first minute and every 30 seconds after that. It observes `Retry-After` when rate limited and saves the region after regular OTA confirms the binding. A saved region or custom server takes precedence.
 
 | `cloud_region` | Wake word | OTA service | Client |
 | --- | --- | --- | --- |
@@ -100,12 +100,12 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
    ```
 
 4. Stop the old Duck App. Two Duck Apps cannot share Bridge, servos or ports 9527/9528. Keep the old installation. With both Apps stopped, preserve this robot's optional `data/gamepad-bindings.json`. Bringing legacy `data/zero_pos.json` requires the hardware-centering migration above. For a robot already migrated with this release, preserve its `data/hardware-centers.json` and corresponding legacy file together. The ZIP excludes private state and calibration and does not migrate them automatically.
-5. In the **UNO Q Debian 13 ARM64 host shell**, as `arduino`, choose one region and install host support. These commands do not run in the App container or on the Mac:
+5. Install host support as `arduino` in the **UNO Q Debian 13 ARM64 host shell**. Leave the region unset on a fresh install to detect it after binding, or uncomment one line to choose a region now.
 
    ```sh
    cd ~/ArduinoApps/xgoduck_ai
-   python3 tools/configure-ai.py --region global --language en
-   # For the domestic Mini Program instead:
+   # python3 tools/configure-ai.py --region global --language en
+   # For the domestic Mini Program:
    # python3 tools/configure-ai.py --region cn --language cn
    python3 tools/configure-ai.py --show
    bash tools/install-ai-support.sh
@@ -125,7 +125,7 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
 
    You can also click Run over App Lab Network after preparing Bridge. The installer already ran `tools/prepare-ai-sketch.py`, which resolves libraries, patches Bridge/RPClite and performs a compile-only ELF check. There is no need to Run, fail, Stop and repair the cache manually. To rebuild only the MCU cache, run `python3 tools/prepare-ai-sketch.py` as `arduino`. Keep the App stopped and torque off during setup. Router speed is a system-wide setting; see the [technical reference](technical_reference.md#running) before using an App with another Bridge baud rate.
 
-Keep the board online until its first build and both business processes are running. **Run builds and starts the whole App and may compile/upload its MCU sketch.** Although this branch preserves STM32 source, Run is not a Python-only update command. Once installed as the default App, subsequent boots do not require clicking Run. Verify a normal reboot, then a cold boot without Wi-Fi. Reflashing the OS, deleting caches or removing the App requires the corresponding preparation again.
+Keep the board online until its first build and both processes are running. **Run builds and starts the whole App.** The single-servo installation check in 0.3.5 requires the updated STM32 sketch. Release servo torque before running the update. The default App starts automatically on subsequent boots. Verify a normal reboot, then a cold boot without Wi-Fi. Reflashing the OS, deleting caches or removing the App requires the corresponding preparation again.
 
 Finish assembly, unique servo IDs and calibration according to the [hardware guide](https://github.com/LuwuDynamics/xgoduck_hardware) and main README before enabling motion.
 
@@ -205,7 +205,7 @@ When Duck detects the wake word, it plays the fixed 0.92-second duck call while 
 }
 ```
 
-Missing fields use defaults. Select a cloud explicitly. Prefer a stable USB audio key or ALSA card ID and a `/dev/v4l/by-id/` camera path. An explicitly configured HTTPS `ota_url` overrides the region for a custom server. Custom servers still use the wake word associated with the conversation language, “小鸭小鸭” for Chinese and “Hi Luka” for English. `configure-ai.py --region ...` clears the override and preserves other settings. It reports malformed configuration files for repair.
+Missing fields use defaults. Prefer a stable USB audio key or ALSA card ID and a `/dev/v4l/by-id/` camera path. An explicitly configured HTTPS `ota_url` overrides the region for a custom server. Custom servers still use the wake word associated with the conversation language, “小鸭小鸭” for Chinese and “Hi Luka” for English. `configure-ai.py --region ...` clears the override and preserves other settings. It reports malformed configuration files for repair.
 
 Stop the App before changing regions:
 
@@ -329,7 +329,7 @@ sudo journalctl -u xgoduck-ai-hardware.service -b -n 80 --no-pager
 curl -fsS http://127.0.0.1:9527/api/voice/status | python3 -m json.tool
 ```
 
-`awaiting_cloud_config` means choose a region locally; `awaiting_network` means provision Wi-Fi; `awaiting_binding` means check the matching client/account; `checking_binding` or `cloud_error` means inspect internet/DNS/time/service reachability. `waiting_audio` permits MCP while waiting for USB audio. A helper or identity error calls for checking the current App path and reinstalling host support, while retaining the saved device ID.
+`awaiting_network` means provision Wi-Fi. `awaiting_binding` means check the matching client and account. If `checking_binding` persists or there is a `cloud_error`, check internet access, DNS, the clock and service reachability. You can also choose a region in the cockpit. `waiting_audio` permits MCP while waiting for USB audio. A helper or identity error calls for checking the current App path and reinstalling host support, while retaining the saved device ID.
 
 For missing Bluetooth discovery, check helper startup, existing binding/advertisement state and actual radio errors. If autostart fails, check the default App, completed first build, App Lab console and official daemon logs. If 9528 is busy after reboot, check the old media service. Provisioning code does not repair OS Wi-Fi or Bluetooth driver faults.
 

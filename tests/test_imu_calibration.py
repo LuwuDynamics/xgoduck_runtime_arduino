@@ -44,6 +44,27 @@ class ImuCalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'upright'):
             estimate([(t, [9.8, 0., 0.], g) for t, _, g in rows])
 
+    def test_stationary_customer_gyro_offset_is_saved_and_loaded(self):
+        bias = [1.9, 14., 7.3]
+        rows = [(stamp, acc, [value + (.25 if i % 2 else -.25) for value in bias])
+                for i, (stamp, acc, _) in enumerate(samples()[:150])]
+        rows.append((1.5, rows[-1][1], bias))
+        record = estimate(rows)
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'imu-calibration.json'
+            save(path, record)
+            correction = ImuCorrection(load(path))
+            _, gyro = correction.apply(rows[-1][1], bias)
+            for value in gyro:
+                self.assertAlmostEqual(value, 0.)
+        moving = list(rows)
+        stamp, acc, gyro = moving[75]
+        moving[75] = (stamp, acc, [gyro[0], gyro[1] + 5., gyro[2]])
+        with self.assertRaisesRegex(ValueError, 'Movement detected'):
+            estimate(moving)
+        with self.assertRaisesRegex(ValueError, 'zero offset is too large'):
+            estimate([(stamp, acc, [1.9, 25., 7.3]) for stamp, acc, _ in rows])
+
     def test_save_preserves_previous_and_reset_disables_calibration(self):
         with tempfile.TemporaryDirectory() as directory:
             file = Path(directory) / 'imu-calibration.json'

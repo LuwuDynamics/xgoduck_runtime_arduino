@@ -150,9 +150,15 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
   bool valid = bytes.size() == sizeof(pkt);
   if (valid) {
     memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_READ_RUN_GAINS &&
+    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_SWITCH &&
             pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;
-    if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
+    if (pkt.op >= SERVO_TEST_START && pkt.op <= SERVO_TEST_STOP) {
+      const int32_t offset = servoTestOffsetDeg(pkt.testOffset);
+      valid = valid && motorIndexById(pkt.targetId) >= 0 && pkt.testSession &&
+              !pkt.kp && !pkt.kd && !pkt.reserved &&
+              (pkt.op == SERVO_TEST_MOVE ? offset >= -SERVO_TEST_OFFSET_DEG && offset <= SERVO_TEST_OFFSET_DEG
+                                         : !pkt.testOffset);
+    } else if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
       valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;
       if (pkt.op == SERVO_SET_PROTECTION) {
         valid = valid && !pkt.protectionCurrent &&
@@ -160,6 +166,10 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
       } else {
         valid = valid && !pkt.protectionFlags;
       }
+    } else if (pkt.op == SERVO_SET_PROTECTION_SWITCH) {
+      valid = valid && pkt.targetId <= 253 && !pkt.kp && !pkt.kd && !pkt.reserved2 &&
+              (pkt.protectionMask == PROTECTION_VOLTAGE || pkt.protectionMask == PROTECTION_OVERCURRENT) &&
+              (!pkt.protectionFlags || pkt.protectionFlags == pkt.protectionMask);
     } else {
       valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;
     }
@@ -283,14 +293,125 @@ static void advanceServoMid() {
   publishServoReply(reply);
 }
 
-static void applyServoOp(const ServoPacket &pkt) {
+constexpr uint32_t SERVO_TEST_KEEPALIVE_US = 850000;
+constexpr uint8_t SERVO_TEST_IDLE_S = 10;
+constexpr uint32_t SERVO_TEST_IDLE_US = SERVO_TEST_IDLE_S * 1000000u;
+constexpr uint8_t SERVO_TEST_MAX_MISSED_FRAMES = 10;
+struct ServoTest {
+  uint8_t id = 0xFF;
+  uint8_t missedFeedback = 0;
+  uint16_t session = 0, anchor = 0, position = 0, goal = 0;
+  uint32_t keepaliveDeadlineUs = 0, angleDeadlineUs = 0;
+};
+static ServoTest servoTest;
+
+enum class ServoTestStop { None, FeedbackLost, Idle };
+struct StoppedServoTest {
+  uint16_t session = 0;
+  uint8_t id = 0xFF;
+  ServoTestStop reason = ServoTestStop::None;
+};
+static StoppedServoTest stoppedServoTest;
+
+static void stopServoTest(ServoTestStop reason = ServoTestStop::None) {
+  if (!servoTest.session) return;
+  scsWriteByte(servoTest.id, ADDR_TORQUE, 0);
+  Serial1.flush();
+  stoppedServoTest = {servoTest.session, servoTest.id, reason};
+  servoTest = {};
+}
+
+static void checkServoTestFeedback(uint16_t mask) {
+  if (!servoTest.session) return;
+  if (mask & (1u << motorIndexById(servoTest.id))) {
+    servoTest.missedFeedback = 0;
+  } else if (++servoTest.missedFeedback > SERVO_TEST_MAX_MISSED_FRAMES) {
+    stopServoTest(ServoTestStop::FeedbackLost);
+  }
+}
+
+static void expireServoTest() {
+  if (!servoTest.session) return;
+  const uint32_t now = micros();
+  if (hostMode != HOST_SERVO_DEBUG || !atomic_get(&bridgeReady) ||
+      (int32_t)(now - servoTest.keepaliveDeadlineUs) >= 0) {
+    stopServoTest();
+  } else if ((int32_t)(now - servoTest.angleDeadlineUs) >= 0) {
+    stopServoTest(ServoTestStop::Idle);
+  }
+}
+
+static void advanceServoTest() {
+  expireServoTest();
+  if (!servoTest.session || servoTest.missedFeedback) return;
+  // Limit each 10 ms position update to two encoder counts.
+  int32_t step = (int32_t)servoTest.goal - servoTest.position;
+  if (!step) return;
+  if (step > 2) step = 2;
+  if (step < -2) step = -2;
+  servoTest.position += step;
+  writeSingleGoalRaw(servoTest.id, servoTest.position);
+  Serial1.flush();
+}
+
+static bool applyServoTest(const ServoPacket &pkt, ServoReplyPacket &reply) {
+  expireServoTest();
+  const bool same = servoTest.session == pkt.testSession && servoTest.id == pkt.targetId;
+  if (pkt.op == SERVO_TEST_STOP) {
+    if (same) stopServoTest();
+    return true;
+  }
+  if (hostMode != HOST_SERVO_DEBUG || servoMidId != 0xFF || !atomic_get(&bridgeReady)) return false;
+  bool renewAngleDeadline = true;
+  if (pkt.op == SERVO_TEST_START) {
+    uint16_t position = 0;
+    if (servoTest.session || !readServoPresent(pkt.targetId, position) || position > POS_MAX) return false;
+    stoppedServoTest = {};
+    reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;
+    reply.testOffsetLimitDeg = SERVO_TEST_OFFSET_DEG;
+    reply.testIdleTimeoutSec = SERVO_TEST_IDLE_S;
+    servoTest.id = pkt.targetId;
+    servoTest.session = pkt.testSession;
+    servoTest.anchor = servoTest.position = servoTest.goal = position;
+    writeSingleGoalRaw(pkt.targetId, position);
+    scsWriteByte(pkt.targetId, ADDR_TORQUE, 1);
+    Serial1.flush();
+  } else {
+    if (!same) {
+      if (stoppedServoTest.session == pkt.testSession && stoppedServoTest.id == pkt.targetId) {
+        if (stoppedServoTest.reason == ServoTestStop::FeedbackLost)
+          reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;
+        if (stoppedServoTest.reason == ServoTestStop::Idle)
+          reply.testIdleTimeoutSec = SERVO_TEST_IDLE_S;
+      }
+      return false;
+    }
+    const int32_t offset = servoTestOffsetDeg(pkt.testOffset);
+    const uint16_t goal = satPos(servoTest.anchor + (int32_t)(offset / M_A * M_N));
+    renewAngleDeadline = goal != servoTest.goal;
+    servoTest.goal = goal;
+  }
+  const uint32_t now = micros();
+  servoTest.keepaliveDeadlineUs = now + SERVO_TEST_KEEPALIVE_US;
+  if (renewAngleDeadline) servoTest.angleDeadlineUs = now + SERVO_TEST_IDLE_US;
+  reply.rawPos = servoTest.position;
+  return true;
+}
+
+static void applyServoOp(const ServoPacket &pkt, bool torqueEnabled) {
   ServoReplyPacket reply = {};
   memcpy(reply.magic, "DQS3", 4);
   reply.op = pkt.op;
   reply.targetId = pkt.targetId;
   reply.centerPos = SERVO_CENTER_POS;
   reply.ok = 1;
-  if (servoMidId != 0xFF && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {
+  if (pkt.op >= SERVO_TEST_START && pkt.op <= SERVO_TEST_STOP) {
+    reply.testSession = pkt.testSession;
+    reply.ok = applyServoTest(pkt, reply);
+    publishServoReply(reply);
+    return;
+  }
+  if ((servoMidId != 0xFF || servoTest.session) && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {
     reply.ok = 0;
     publishServoReply(reply);
     return;
@@ -300,6 +421,7 @@ static void applyServoOp(const ServoPacket &pkt) {
       hostMode = HOST_SERVO_DEBUG;
       rawNotifyEveryTick = true;
       servoMidId = 0xFF;
+      servoTest = {};
       setTorqueEnable(false);
       break;
     case SERVO_EXIT:
@@ -307,6 +429,7 @@ static void applyServoOp(const ServoPacket &pkt) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       servoMidId = 0xFF;
+      servoTest = {};
       setTorqueEnable(false);
       break;
     case SERVO_UNLOCK:
@@ -339,7 +462,7 @@ static void applyServoOp(const ServoPacket &pkt) {
     }
     case SERVO_SET_PROTECTION:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
-      servoSetProtection(pkt.protectionFlags);
+      servoSetProtection(pkt.targetId, pkt.protectionFlags);
       reply.protectionFlags = pkt.protectionFlags;
       break;
     case SERVO_SET_PROTECTION_CURRENT:
@@ -347,6 +470,25 @@ static void applyServoOp(const ServoPacket &pkt) {
       servoSetProtectionCurrent(pkt.protectionCurrent);
       reply.protectionCurrent = pkt.protectionCurrent;
       break;
+    case SERVO_READ_PROTECTION:
+    case SERVO_SET_PROTECTION_SWITCH: {
+      const bool idleRead = pkt.op == SERVO_READ_PROTECTION && hostMode == HOST_NORMAL && !torqueEnabled;
+      if (hostMode != HOST_SERVO_DEBUG && !idleRead) { reply.ok = 0; break; }
+      uint8_t flags = 0;
+      uint16_t current = 0;
+      reply.ok = readServoProtection(pkt.targetId, flags, current);
+      if (reply.ok && pkt.op == SERVO_SET_PROTECTION_SWITCH) {
+        const uint8_t wanted = (flags & ~pkt.protectionMask) | pkt.protectionFlags;
+        if (wanted != flags) {
+          servoSetProtection(pkt.targetId, wanted);
+          k_msleep(10); // Let the last EEPROM write finish before reading it back.
+          reply.ok = readServoProtection(pkt.targetId, flags, current) && flags == wanted;
+        }
+      }
+      reply.protectionFlags = flags;
+      reply.protectionCurrent = current;
+      break;
+    }
     case SERVO_PING:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
       reply.ok = pingServo(pkt.targetId) ? 1 : 0;
@@ -402,7 +544,8 @@ static void controlTask(void*, void*, void*) {
     if (servoPending) { servoPkt = pendingServo; servoPending = false; gotServo = true; }
     k_mutex_unlock(&hostMu);
     if (gotCal) applyCalOp(calPkt);
-    if (gotServo) applyServoOp(servoPkt);
+    advanceServoTest();
+    if (gotServo) applyServoOp(servoPkt, enabled);
     advanceCalibration();
     advanceServoMid();
 
@@ -424,6 +567,7 @@ static void controlTask(void*, void*, void*) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       calIndex = servoMidId = 0xFF;
+      servoTest = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
@@ -479,6 +623,7 @@ static void controlTask(void*, void*, void*) {
     }
     parseServoRx();
     const uint32_t servoWaitUs = micros() - readStart;
+    checkServoTestFeedback(servoRxMask);
     sampledImu = readImuSnapshot();
     const uint32_t sampleUs = micros();
     const bool publishImuOk = sampledImu.sample.ok && sampledImu.seq &&

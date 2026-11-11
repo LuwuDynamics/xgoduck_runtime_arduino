@@ -253,7 +253,10 @@
       audioStatus('playingClip',{seconds:data.duration.toFixed(1)});notify(t('audioSent'));
     }catch(error){notify(message(error));}finally{mediaBusy=false;render();}
   };
-  function leave(){stopLive();streaming=false;$('feed').removeAttribute('src');wake?.release();wake=null;}
+  function leave(){
+    stopLive();streaming=false;$('feed').removeAttribute('src');wake?.release();wake=null;
+    window.DuckBinding?.updateCameraAvailability(false);
+  }
   document.addEventListener('visibilitychange',()=>{if(document.hidden)leave();else{render();if(media?.camera.running)requestWake();}});
   window.addEventListener('pagehide',leave);window.addEventListener('duck-languagechange',()=>{notify('');render();});
   window.addEventListener('duck-tof-layout',render);
@@ -270,7 +273,10 @@
       const revision=mediaRevision,usbSnapshot=usbRevision;
       const results=await Promise.allSettled([api('status'),api('media/status'),api('gamepad/status')]);
       robot=results[0].status==='fulfilled'?results[0].value:null;
-      if(revision===mediaRevision&&!cameraBusy&&!lightBusy&&!mediaBusy)media=results[1].status==='fulfilled'?results[1].value:null;
+      if(revision===mediaRevision&&!cameraBusy&&!lightBusy&&!mediaBusy){
+        media=results[1].status==='fulfilled'?results[1].value:null;
+        window.DuckBinding?.updateCameraAvailability(media?.camera?.available===true&&!document.hidden);
+      }
       if(!usbBusy&&usbSnapshot===usbRevision)gamepad=results[2].status==='fulfilled'?results[2].value:null;
       window.DuckMotion?.update(robot,gamepad?.control?.enabled===true);
       render();

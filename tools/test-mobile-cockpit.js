@@ -13,6 +13,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const page=await context.newPage(),errors=[],writes=[];
     page.on('pageerror',error=>errors.push(error.message));
     const media={camera:{available:true,running:false,ready:false,device:'/dev/video2',frames:0,fps:0,error:'',light:{supported:true,enabled:false,error:''}},audio:{available:true,volume:100,state:'idle'}};
+    let region={cloud_region:'cn',custom_endpoint:false,configured:true};
     const usb={available:true,host:true,mode:'host'};
     const battery={voltage_v:7.8,low:false};
     const robot={mode:'shadow',enabled:false,feedback_hz:100,control_ready:true,battery,
@@ -70,6 +71,8 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         }
         if(url.pathname==='/api/status')return route.fulfill({json:robot});
         if(url.pathname==='/api/version')return route.fulfill({json:{version}});
+        if(url.pathname==='/api/voice/region')return route.fulfill({json:region});
+        if(url.pathname==='/api/voice/status')return route.fulfill({json:{cloud_connected:false}});
         if(url.pathname==='/api/tof/status'){
           const snapshot={...tof,seq:++tof.seq};
           if(tofDelay)await new Promise(resolve=>setTimeout(resolve,tofDelay));
@@ -100,6 +103,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
+    assert.equal(await page.locator('#openBinding [data-i18n="bindAi"]').innerText(),'AI 语音交互绑定');
     assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'),'/xgo-favicon.png');
     const versionBadge=page.locator('[data-app-version]');
     await versionBadge.waitFor({state:'visible'});
@@ -419,6 +423,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const summary=disclosure.locator('summary');
     assert.equal(await summary.innerText(),'走不稳？');
     assert.equal(await disclosure.locator('.walking-help-body').isVisible(),false);
+    assert.equal(await disclosure.evaluate(el=>el.getBoundingClientRect().height),0,'Closed walking help must not leave an empty panel.');
     await summary.focus();
     const modeWrites=writes.filter(call=>call.path==='/api/mode').length;
     await control.keyboard.press('Space');
@@ -432,7 +437,33 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await summary.innerText(),'Unsteady walking?');
     await control.close();
 
+    const binding=await browser.newPage({locale:'zh-CN',viewport:{width:1200,height:800}});
+    binding.on('pageerror',error=>errors.push(error.message));
+    await binding.route(origin+'/**',mockCockpit);
+    region={cloud_region:null,custom_endpoint:false,configured:false};
+    Object.assign(media.camera,{available:false,running:false,ready:false,device:''});
+    await binding.goto(origin+'/');
+    const waitForNoCamera=()=>binding.waitForFunction(()=>document.getElementById('startCamera').textContent==='未发现摄像头'
+      &&document.getElementById('bindingRegion').textContent==='尚未选择');
+    await waitForNoCamera();
+    const bindingDialog=binding.locator('#bindingDialog');
+    assert.equal(await bindingDialog.isVisible(),false);
+    await binding.locator('#openBinding').click();
+    await bindingDialog.waitFor();
+    assert.equal(await binding.locator('#bindingTitle').innerText(),'AI 语音交互绑定');
+    await binding.locator('#closeBinding').click();
+
+    await binding.reload();
+    await waitForNoCamera();
+    assert.equal(await bindingDialog.isVisible(),false);
+    const startupWrites=writes.length;
+    Object.assign(media.camera,{available:true,device:'/dev/video2'});
+    await bindingDialog.waitFor();
+    assert(!writes.slice(startupWrites).some(call=>call.path==='/api/voice/region'||call.path==='/api/media/camera/start'),
+      'Camera detection may show the dialog but must not select a region or start the camera.');
+    await binding.close();
+
     assert.deepEqual(errors,[]);
-    console.log('PASS: zh/en, camera/light, speaker volume, USB Host switching, audio cleanup, fullscreen, ToF and ten layouts, plus rotation, touch, keyboard, motion presets and duck calls.');
+    console.log('PASS: cockpit browser regression, including the camera-gated region dialog and manual binding without a camera.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

@@ -11,6 +11,8 @@ SAMPLE_SECONDS = 1.5
 MIN_SAMPLES = 90
 REFERENCE_G = 9.8
 FRAME = 'qmi-policy-body-offset-v2'
+MAX_GYRO_ZERO_DPS = 20.0
+GYRO_ZERO_ERROR = 'Gyroscope zero offset is too large. Check the IMU and try again.'
 
 
 def vector(values):
@@ -41,8 +43,8 @@ class ImuCorrection:
         if max(abs(v) for v in self.offset) > 15:
             raise ValueError('Invalid accelerometer offset')
         self.zero = vector(record['gyro_zero_dps'])
-        if max(abs(v) for v in self.zero) > 12:
-            raise ValueError('Invalid stationary gyro zero')
+        if max(abs(v) for v in self.zero) > MAX_GYRO_ZERO_DPS:
+            raise ValueError(GYRO_ZERO_ERROR)
 
     def apply(self, acc, gyro):
         return ([v+offset for v, offset in zip(acc, self.offset)],
@@ -65,7 +67,7 @@ def estimate(rows):
     acc_peak = max(math.dist(row, mean_acc) for row in acc)
     gyro_peak = max(math.dist(row, mean_gyro) for row in gyro)
     if (math.hypot(*acc_std) > .30 or math.hypot(*gyro_std) > 1.125
-            or acc_peak > 1.0 or gyro_peak > 4.5 or max(map(abs, mean_gyro)) > 12):
+            or acc_peak > 1.0 or gyro_peak > 4.5):
         raise ValueError('Movement detected. Hold the board still and try again.')
     check_standing(mean_acc)
     reference = [0., 0., -REFERENCE_G]

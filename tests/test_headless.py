@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+from email.utils import formatdate
 import importlib.util
 import json
 import os
@@ -133,15 +134,16 @@ class LifecycleTest(unittest.IsolatedAsyncioTestCase):
         await self.tick()
         self.assertFalse(self.onboard.snapshot()['cached'])
 
-    async def test_cloud_requires_local_choice_and_language_never_selects_or_changes_it(self):
+    async def test_unbound_discovery_does_not_choose_from_language_or_phone_files(self):
         self.hardware.connected = True
         self.config.update({'cloud_region': None, 'language': 'en'})
         # An obsolete phone-written file must never select a cloud.
         (self.folder / 'cloud-region').write_text('global')
         await self.tick()
-        self.assertEqual(self.onboard.snapshot()['state'], 'awaiting_cloud_config')
+        self.assertEqual(self.onboard.snapshot()['state'], 'awaiting_binding')
         self.assertFalse(self.onboard.ready)
-        self.probe.assert_not_called()
+        self.probe.assert_awaited_once()
+        self.assertIsNone(self.config.get()['cloud_region'])
         self.assertTrue(self.hardware.advertising)
         self.config.update({'cloud_region': 'cn'})
         self.probe.return_value = dict(bound=True, mqtt=MQTT)
@@ -160,6 +162,84 @@ class LifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.onboard.mqtt, {})
         self.assertFalse(self.onboard.ready)
         self.assertIn('xl-api.luwudynamics.ai', ota_url(self.config.get()))
+
+    async def test_discovered_region_is_saved_after_wifi_and_uses_the_matching_cache(self):
+        self.config.update({'cloud_region': None, 'language': 'en'})
+        self.probe.return_value = dict(bound=True, mqtt=MQTT, auto_region='cn')
+        await self.tick()
+        self.probe.assert_not_called()
+        self.assertEqual(self.onboard.snapshot()['state'], 'awaiting_network')
+        self.hardware.connected = True
+        await self.tick()
+        self.assertEqual(self.config.region_status()['cloud_region'], 'cn')
+        self.assertEqual(self.config.get()['language'], 'en')
+        self.assertTrue(self.onboard.ready)
+        self.assertTrue(self.onboard.ready_for(ota_url({'cloud_region': 'cn'})))
+        self.assertFalse(self.onboard.ready_for(ota_url({'cloud_region': 'global'})))
+        self.assertEqual(self.onboard.snapshot()['cloud_region'], 'cn')
+        self.assertEqual(self.onboard.mqtt, MQTT)
+        restored = Onboarding(self.config, self.hardware, self.probe, self.folder, clock=lambda: self.now)
+        restored.load(restored._binding_key(ota_url(self.config.get())))
+        self.assertEqual(restored.mqtt, MQTT)
+        await self.tick()
+        self.probe.assert_awaited_once()
+
+    async def test_unselected_region_retries_quickly_then_slows_and_recovers_after_wifi_loss(self):
+        self.config.update({'cloud_region': None})
+        self.hardware.connected = True
+        await self.tick(0)
+        self.assertEqual(self.onboard.snapshot()['state'], 'awaiting_binding')
+        self.assertFalse(self.onboard.bound)
+        await self.tick(4)
+        self.probe.assert_awaited_once()
+        await self.tick(1)
+        self.assertEqual(self.probe.await_count, 2)
+
+        self.probe.side_effect = httpx.ReadTimeout('fixture')
+        await self.tick(55)
+        self.assertIsNone(self.onboard.bound)
+        self.assertEqual(self.onboard.snapshot()['state'], 'checking_binding')
+        self.assertEqual(self.onboard.snapshot()['cloud_error'], 'ReadTimeout')
+        await self.tick(29)
+        self.assertEqual(self.probe.await_count, 3)
+        await self.tick(1)
+        self.assertEqual(self.probe.await_count, 4)
+
+        self.hardware.connected = False
+        await self.tick(0)
+        self.assertEqual(self.onboard.snapshot()['state'], 'awaiting_network')
+        self.hardware.connected = True
+        self.probe.side_effect = None
+        await self.tick(0)
+        self.assertEqual(self.probe.await_count, 5)
+        self.assertEqual(self.onboard.next_probe, self.now + 5)
+        self.assertTrue(self.hardware.advertising)
+        self.assertFalse((self.folder / 'binding.json').exists())
+        self.probe.return_value = dict(bound=True, mqtt=MQTT, auto_region='global')
+        await self.tick(5)
+        self.assertEqual(self.config.region_status()['cloud_region'], 'global')
+        self.assertTrue(self.onboard.ready)
+
+    async def test_manual_region_wins_if_it_is_set_while_discovery_completes(self):
+        self.config.update({'cloud_region': None})
+        self.hardware.connected = True
+        self.probe.return_value = dict(bound=True, mqtt=MQTT, auto_region='cn')
+        await self.onboard.step()
+        await asyncio.sleep(0)
+        snapshot = self.hardware.snapshot
+
+        async def select_manually():
+            self.config.select_region('global')
+            return await snapshot()
+
+        with patch.object(self.hardware, 'snapshot', side_effect=select_manually):
+            await self.onboard.step()
+        await asyncio.sleep(0)
+        self.assertEqual(self.probe.await_args.args[0]['cloud_region'], 'global')
+        self.assertEqual(self.config.region_status()['cloud_region'], 'global')
+        self.assertFalse(self.onboard.ready)
+        self.assertEqual(self.onboard.mqtt, {})
+        self.assertFalse((self.folder / 'binding.json').exists())
 
     async def test_mqtt_refresh_uses_selected_cloud_and_honors_revocation(self):
         self.hardware.connected = True
@@ -479,6 +559,115 @@ class BoardSerialTest(unittest.TestCase):
 
 
 class CloudResponseTest(unittest.IsolatedAsyncioTestCase):
+    async def test_auto_region_prioritizes_china_and_confirms_winner_with_ota(self):
+        cn = 'xl-api.xgorobot.com'
+        global_host = 'xl-api.luwudynamics.ai'
+        requests = []
+
+        def respond(request):
+            requests.append((request.url.host, request.url.path))
+            self.assertEqual(request.method, 'POST')
+            self.assertEqual(request.headers['Device-Id'], IDENTITY.lower())
+            if request.url.path == '/xiaolu/ota/activate':
+                self.assertEqual(request.content, b'')
+                status = domestic if request.url.host == cn else international
+                if status is None:
+                    raise httpx.ReadTimeout('fixture timeout', request=request)
+                if status == 'error':
+                    return httpx.Response(200, json={'code': 500, 'msg': 'fixture'})
+                return httpx.Response(status, content=b'success' if status == 200 else b'')
+            return httpx.Response(200, json=ota_response)
+
+        probe = CloudProbe()
+        self.addAsyncCleanup(probe.close)
+        await probe.client.aclose()
+        probe.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        for domestic, international, winner, region in (
+            (200, 200, cn, 'cn'), (200, 202, cn, 'cn'), (202, 200, global_host, 'global'),
+            (200, 500, cn, 'cn'), (200, None, cn, 'cn'), (202, 202, None, None),
+            (None, 200, None, None), ('error', 200, None, None), (202, None, None, None),
+        ):
+            with self.subTest(domestic=domestic, international=international):
+                requests.clear()
+                ota_response = {'mqtt': MQTT}
+                with patch('ota.get_device_id', return_value=IDENTITY), patch('ota.get_client_id', return_value='fixture'):
+                    if not winner and (domestic, international) != (202, 202):
+                        with self.assertRaises(ValueError):
+                            await probe({})
+                    else:
+                        result = await probe({})
+                        self.assertEqual(result.get('auto_region'), region)
+                        self.assertEqual(result['bound'], region is not None)
+                self.assertCountEqual(requests[:2], [(cn, '/xiaolu/ota/activate'),
+                                                     (global_host, '/xiaolu/ota/activate')])
+                self.assertEqual(requests[2:], [(winner, '/xiaolu/ota/')] if winner else [])
+
+        domestic, international = 200, 202
+        ota_response = {'activation': {'code': 'fixture'}, 'mqtt': MQTT}
+        with patch('ota.get_device_id', return_value=IDENTITY), patch('ota.get_client_id', return_value='fixture'):
+            with self.assertRaisesRegex(ValueError, 'Binding changed'):
+                await probe({})
+
+    async def test_china_hit_cancels_an_unfinished_international_request(self):
+        international_started = asyncio.Event()
+        international_canceled = asyncio.Event()
+
+        async def respond(request):
+            if request.url.host == 'xl-api.xgorobot.com':
+                await international_started.wait()
+                return httpx.Response(200, content=b'success')
+            international_started.set()
+            try:
+                await asyncio.Future()
+            finally:
+                international_canceled.set()
+
+        probe = CloudProbe()
+        self.addAsyncCleanup(probe.close)
+        await probe.client.aclose()
+        probe.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        self.assertEqual(await asyncio.wait_for(probe._find_region(IDENTITY.lower()), 1), 'cn')
+        self.assertTrue(international_canceled.is_set())
+
+    async def test_retry_after_is_applied_to_the_service_that_returns_429(self):
+        now = 1.
+        requests = []
+        cn = 'xl-api.xgorobot.com'
+        global_host = 'xl-api.luwudynamics.ai'
+        responses = {cn: httpx.Response(202), global_host: httpx.Response(429,
+                     headers={'Retry-After': formatdate(1020., usegmt=True)})}
+
+        def respond(request):
+            requests.append(request.url.host)
+            return responses[request.url.host]
+
+        probe = CloudProbe(clock=lambda: now)
+        self.addAsyncCleanup(probe.close)
+        await probe.client.aclose()
+        probe.client = httpx.AsyncClient(transport=httpx.MockTransport(respond))
+        with patch('onboarding.time.time', return_value=1000.):
+            with self.assertRaises(ValueError):
+                await probe._find_region(IDENTITY.lower())
+        now += 5
+        requests.clear()
+        responses[cn] = httpx.Response(200, content=b'success')
+        self.assertEqual(await probe._find_region(IDENTITY.lower()), 'cn')
+        self.assertEqual(requests, [cn])
+
+        now += 15
+        responses.update({cn: httpx.Response(429, headers={'Retry-After': '10'}),
+                          global_host: httpx.Response(200, content=b'success')})
+        with self.assertRaises(ValueError):
+            await probe._find_region(IDENTITY.lower())
+        now += 5
+        requests.clear()
+        responses[cn] = httpx.Response(202)
+        with self.assertRaises(ValueError):
+            await probe._find_region(IDENTITY.lower())
+        self.assertEqual(requests, [])
+        now += 5
+        self.assertEqual(await probe._find_region(IDENTITY.lower()), 'global')
+
     async def test_ota_payload_and_binding_response_never_require_audio(self):
         import ota
         # The manager API returns MQTT alongside activation for an unbound

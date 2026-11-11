@@ -96,12 +96,14 @@ class VoiceConfig:
             return dict(cloud_region=config['cloud_region'], custom_endpoint=bool(config['ota_url']),
                         configured=configured, wake_phrase=wake_profile(config)[0] if configured else None)
 
-    def select_region(self, region):
-        """Explicit user selection preserves all unrelated settings and identity."""
+    def select_region(self, region, *, only_if_unconfigured=False):
+        """Save a manual choice or fill in the region after automatic discovery."""
         if region not in ('cn', 'global'):
             raise ValueError('Select cn or global.')
         with self.lock:
             before = self.region_status()
+            if only_if_unconfigured and before['configured']:
+                return dict(before, changed=False, reconnecting=False)
             changed = before['cloud_region'] != region or before['custom_endpoint']
             if changed:
                 self.update(dict(cloud_region=region, ota_url=''))
