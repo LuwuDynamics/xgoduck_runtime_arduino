@@ -7,6 +7,7 @@
 #include "scs_bus.h"
 #include "qmi8658.h"
 #include "uart_fifo.h"
+#include "tof_sensor.h"
 
 Motor motors[NUM_MOTORS];
 struct k_mutex motorsMu;
@@ -35,7 +36,7 @@ static bool pending = false;
 static uint32_t invalidCommands = 0, reportDrops = 0;
 
 static HostBusMode hostMode = HOST_NORMAL;
-static CalPacket pendingCal = {};
+static CalPositionsPacket pendingCal = {};
 static bool calPending = false;
 static CalReplyPacket calReply = {};
 static bool calReplyReady = false;
@@ -45,6 +46,9 @@ static uint32_t calNextUs = 0, calSeq = 0;
 static constexpr uint8_t CAL_MID_REPEATS = 5;
 static constexpr uint32_t CAL_MID_INTERVAL_US = 10000;
 static constexpr uint32_t CAL_MID_SETTLE_US = 100000;
+static CalPositionsPacket calBatch = {};
+static uint8_t calBatchIndex = 0;
+static uint32_t calBatchNextUs = 0;
 static ServoPacket pendingServo = {};
 static bool servoPending = false;
 static ServoReplyPacket servoReply = {};
@@ -128,16 +132,25 @@ static void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {
 }
 
 static void receiveCal(MsgPack::bin_t<uint8_t> bytes) {
-  CalPacket pkt;
-  bool valid = bytes.size() == sizeof(pkt);
+  CalPositionsPacket request = {};
+  const bool parameterized = bytes.size() == sizeof(request);
+  bool valid = parameterized || bytes.size() == sizeof(CalPacket);
   if (valid) {
-    memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQL2", 4) == 0 && pkt.op <= CAL_CENTER_ONE;
+    memcpy(&request, bytes.data(), bytes.size());
+    const CalPacket &pkt = request.command;
+    valid = memcmp(pkt.magic, "DQL2", 4) == 0 &&
+            (parameterized ? pkt.op == CAL_SET_POSITIONS : pkt.op <= CAL_CENTER_ALL);
     if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;
+    if (pkt.op == CAL_CENTER_ALL || pkt.op == CAL_SET_POSITIONS)
+      valid = valid && pkt.index == CAL_ALL_JOINTS;
+    if (parameterized) {
+      for (unsigned i = 0; i < NUM_MOTORS; ++i)
+        valid = valid && request.positions[i] >= POS_MIN && request.positions[i] <= POS_MAX;
+    }
     if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingCal = pkt; calPending = true; atomic_set(&lastHostRxUs, micros()); }
+  if (valid) { pendingCal = request; calPending = true; atomic_set(&lastHostRxUs, micros()); }
   else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
@@ -149,8 +162,15 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
   bool valid = bytes.size() == sizeof(pkt);
   if (valid) {
     memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_CURRENT && pkt.op != 4;
-    if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
+    valid = memcmp(pkt.magic, "DQV2", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_SWITCH &&
+            pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;
+    if (pkt.op >= SERVO_TEST_START && pkt.op <= SERVO_TEST_STOP) {
+      const int32_t offset = servoTestOffsetDeg(pkt.testOffset);
+      valid = valid && motorIndexById(pkt.targetId) >= 0 && pkt.testSession &&
+              !pkt.kp && !pkt.kd && !pkt.reserved &&
+              (pkt.op == SERVO_TEST_MOVE ? offset >= -SERVO_TEST_OFFSET_DEG && offset <= SERVO_TEST_OFFSET_DEG
+                                         : !pkt.testOffset);
+    } else if (pkt.op == SERVO_SET_PROTECTION || pkt.op == SERVO_SET_PROTECTION_CURRENT) {
       valid = valid && pkt.targetId == 0xFE && !pkt.newId && !pkt.kp && !pkt.kd;
       if (pkt.op == SERVO_SET_PROTECTION) {
         valid = valid && !pkt.protectionCurrent &&
@@ -158,6 +178,10 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
       } else {
         valid = valid && !pkt.protectionFlags;
       }
+    } else if (pkt.op == SERVO_SET_PROTECTION_SWITCH) {
+      valid = valid && pkt.targetId <= 253 && !pkt.kp && !pkt.kd && !pkt.reserved2 &&
+              (pkt.protectionMask == PROTECTION_VOLTAGE || pkt.protectionMask == PROTECTION_OVERCURRENT) &&
+              (!pkt.protectionFlags || pkt.protectionFlags == pkt.protectionMask);
     } else {
       valid = valid && pkt.targetId <= 253 && !pkt.reserved && !pkt.reserved2;
     }
@@ -193,12 +217,14 @@ static void publishCalReply(uint32_t seq, uint8_t index, bool ok) {
   k_mutex_unlock(&hostMu);
 }
 
-static void applyCalOp(const CalPacket &pkt) {
+static void applyCalOp(const CalPositionsPacket &request) {
+  const CalPacket &pkt = request.command;
   switch (pkt.op) {
     case CAL_ENTER:
       hostMode = HOST_CAL;
       rawNotifyEveryTick = true;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
@@ -209,14 +235,14 @@ static void applyCalOp(const CalPacket &pkt) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       setTorqueEnable(false);
-      setMouthKpKd();
       break;
     case CAL_CENTER_ONE:
-      if (hostMode != HOST_CAL || calIndex != 0xFF ||
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op ||
           (calHeldMask & (1u << pkt.index)) || !(servoRxMask & (1u << pkt.index))) {
         publishCalReply(pkt.seq, pkt.index, false);
         break;
@@ -231,10 +257,48 @@ static void applyCalOp(const CalPacket &pkt) {
       calMidCount = 0;
       calNextUs = micros();
       break;
+    case CAL_CENTER_ALL:
+    case CAL_SET_POSITIONS:
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op || calHeldMask ||
+          servoRxMask != (1u << NUM_MOTORS) - 1u) {
+        publishCalReply(pkt.seq, CAL_ALL_JOINTS, false);
+        break;
+      }
+      setTorqueEnable(false);
+      calBatch = request;
+      calBatchIndex = 0;
+      calBatchNextUs = micros() + CAL_MID_INTERVAL_US;
+      break;
   }
 }
 
+static void advanceBatchCalibration() {
+  if (!calBatch.command.op) return;
+  const uint32_t hostRxUs = (uint32_t)atomic_get(&lastHostRxUs);
+  const uint32_t now = micros();
+  if (hostMode != HOST_CAL || !atomic_get(&bridgeReady) ||
+      (uint32_t)(now - hostRxUs) > HOST_HEARTBEAT_US) {
+    calBatch = {};
+    return;
+  }
+  if ((int32_t)(now - calBatchNextUs) < 0) return;
+  if (calBatchIndex == NUM_MOTORS) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, true);
+    calBatch = {};
+    return;
+  }
+  if (!servoCalibrateChecked(MOTOR_IDS[calBatchIndex], calBatch.command.op == CAL_SET_POSITIONS,
+                             calBatch.positions[calBatchIndex])) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, false);
+    calBatch = {};
+    return;
+  }
+  ++calBatchIndex;
+  calBatchNextUs = micros() + (calBatchIndex == NUM_MOTORS ? CAL_MID_SETTLE_US : CAL_MID_INTERVAL_US);
+}
+
 static void advanceCalibration() {
+  advanceBatchCalibration();
   if (hostMode != HOST_CAL || calIndex == 0xFF ||
       (int32_t)(micros() - calNextUs) < 0) return;
   const uint8_t id = MOTOR_IDS[calIndex];
@@ -282,14 +346,125 @@ static void advanceServoMid() {
   publishServoReply(reply);
 }
 
-static void applyServoOp(const ServoPacket &pkt) {
+constexpr uint32_t SERVO_TEST_KEEPALIVE_US = 850000;
+constexpr uint8_t SERVO_TEST_IDLE_S = 10;
+constexpr uint32_t SERVO_TEST_IDLE_US = SERVO_TEST_IDLE_S * 1000000u;
+constexpr uint8_t SERVO_TEST_MAX_MISSED_FRAMES = 10;
+struct ServoTest {
+  uint8_t id = 0xFF;
+  uint8_t missedFeedback = 0;
+  uint16_t session = 0, anchor = 0, position = 0, goal = 0;
+  uint32_t keepaliveDeadlineUs = 0, angleDeadlineUs = 0;
+};
+static ServoTest servoTest;
+
+enum class ServoTestStop { None, FeedbackLost, Idle };
+struct StoppedServoTest {
+  uint16_t session = 0;
+  uint8_t id = 0xFF;
+  ServoTestStop reason = ServoTestStop::None;
+};
+static StoppedServoTest stoppedServoTest;
+
+static void stopServoTest(ServoTestStop reason = ServoTestStop::None) {
+  if (!servoTest.session) return;
+  scsWriteByte(servoTest.id, ADDR_TORQUE, 0);
+  Serial1.flush();
+  stoppedServoTest = {servoTest.session, servoTest.id, reason};
+  servoTest = {};
+}
+
+static void checkServoTestFeedback(uint16_t mask) {
+  if (!servoTest.session) return;
+  if (mask & (1u << motorIndexById(servoTest.id))) {
+    servoTest.missedFeedback = 0;
+  } else if (++servoTest.missedFeedback > SERVO_TEST_MAX_MISSED_FRAMES) {
+    stopServoTest(ServoTestStop::FeedbackLost);
+  }
+}
+
+static void expireServoTest() {
+  if (!servoTest.session) return;
+  const uint32_t now = micros();
+  if (hostMode != HOST_SERVO_DEBUG || !atomic_get(&bridgeReady) ||
+      (int32_t)(now - servoTest.keepaliveDeadlineUs) >= 0) {
+    stopServoTest();
+  } else if ((int32_t)(now - servoTest.angleDeadlineUs) >= 0) {
+    stopServoTest(ServoTestStop::Idle);
+  }
+}
+
+static void advanceServoTest() {
+  expireServoTest();
+  if (!servoTest.session || servoTest.missedFeedback) return;
+  // Limit each 10 ms position update to two encoder counts.
+  int32_t step = (int32_t)servoTest.goal - servoTest.position;
+  if (!step) return;
+  if (step > 2) step = 2;
+  if (step < -2) step = -2;
+  servoTest.position += step;
+  writeSingleGoalRaw(servoTest.id, servoTest.position);
+  Serial1.flush();
+}
+
+static bool applyServoTest(const ServoPacket &pkt, ServoReplyPacket &reply) {
+  expireServoTest();
+  const bool same = servoTest.session == pkt.testSession && servoTest.id == pkt.targetId;
+  if (pkt.op == SERVO_TEST_STOP) {
+    if (same) stopServoTest();
+    return true;
+  }
+  if (hostMode != HOST_SERVO_DEBUG || servoMidId != 0xFF || !atomic_get(&bridgeReady)) return false;
+  bool renewAngleDeadline = true;
+  if (pkt.op == SERVO_TEST_START) {
+    uint16_t position = 0;
+    if (servoTest.session || !readServoPresent(pkt.targetId, position) || position > POS_MAX) return false;
+    stoppedServoTest = {};
+    reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;
+    reply.testOffsetLimitDeg = SERVO_TEST_OFFSET_DEG;
+    reply.testIdleTimeoutSec = SERVO_TEST_IDLE_S;
+    servoTest.id = pkt.targetId;
+    servoTest.session = pkt.testSession;
+    servoTest.anchor = servoTest.position = servoTest.goal = position;
+    writeSingleGoalRaw(pkt.targetId, position);
+    scsWriteByte(pkt.targetId, ADDR_TORQUE, 1);
+    Serial1.flush();
+  } else {
+    if (!same) {
+      if (stoppedServoTest.session == pkt.testSession && stoppedServoTest.id == pkt.targetId) {
+        if (stoppedServoTest.reason == ServoTestStop::FeedbackLost)
+          reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;
+        if (stoppedServoTest.reason == ServoTestStop::Idle)
+          reply.testIdleTimeoutSec = SERVO_TEST_IDLE_S;
+      }
+      return false;
+    }
+    const int32_t offset = servoTestOffsetDeg(pkt.testOffset);
+    const uint16_t goal = satPos(servoTest.anchor + (int32_t)(offset / M_A * M_N));
+    renewAngleDeadline = goal != servoTest.goal;
+    servoTest.goal = goal;
+  }
+  const uint32_t now = micros();
+  servoTest.keepaliveDeadlineUs = now + SERVO_TEST_KEEPALIVE_US;
+  if (renewAngleDeadline) servoTest.angleDeadlineUs = now + SERVO_TEST_IDLE_US;
+  reply.rawPos = servoTest.position;
+  return true;
+}
+
+static void applyServoOp(const ServoPacket &pkt, bool torqueEnabled) {
   ServoReplyPacket reply = {};
   memcpy(reply.magic, "DQS3", 4);
   reply.op = pkt.op;
   reply.targetId = pkt.targetId;
   reply.centerPos = SERVO_CENTER_POS;
   reply.ok = 1;
-  if (servoMidId != 0xFF && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {
+  if (pkt.op >= SERVO_TEST_START && pkt.op <= SERVO_TEST_STOP) {
+    reply.testSession = pkt.testSession;
+    reply.ok = applyServoTest(pkt, reply);
+    publishServoReply(reply);
+    return;
+  }
+  if ((servoMidId != 0xFF || servoTest.session) && pkt.op != SERVO_ENTER && pkt.op != SERVO_EXIT) {
     reply.ok = 0;
     publishServoReply(reply);
     return;
@@ -299,16 +474,16 @@ static void applyServoOp(const ServoPacket &pkt) {
       hostMode = HOST_SERVO_DEBUG;
       rawNotifyEveryTick = true;
       servoMidId = 0xFF;
+      servoTest = {};
       setTorqueEnable(false);
-      setMouthKpKd();
       break;
     case SERVO_EXIT:
       if (hostMode != HOST_SERVO_DEBUG) break;
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       servoMidId = 0xFF;
+      servoTest = {};
       setTorqueEnable(false);
-      setMouthKpKd();
       break;
     case SERVO_UNLOCK:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
@@ -340,7 +515,7 @@ static void applyServoOp(const ServoPacket &pkt) {
     }
     case SERVO_SET_PROTECTION:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
-      servoSetProtection(pkt.protectionFlags);
+      servoSetProtection(pkt.targetId, pkt.protectionFlags);
       reply.protectionFlags = pkt.protectionFlags;
       break;
     case SERVO_SET_PROTECTION_CURRENT:
@@ -348,6 +523,25 @@ static void applyServoOp(const ServoPacket &pkt) {
       servoSetProtectionCurrent(pkt.protectionCurrent);
       reply.protectionCurrent = pkt.protectionCurrent;
       break;
+    case SERVO_READ_PROTECTION:
+    case SERVO_SET_PROTECTION_SWITCH: {
+      const bool idleRead = pkt.op == SERVO_READ_PROTECTION && hostMode == HOST_NORMAL && !torqueEnabled;
+      if (hostMode != HOST_SERVO_DEBUG && !idleRead) { reply.ok = 0; break; }
+      uint8_t flags = 0;
+      uint16_t current = 0;
+      reply.ok = readServoProtection(pkt.targetId, flags, current);
+      if (reply.ok && pkt.op == SERVO_SET_PROTECTION_SWITCH) {
+        const uint8_t wanted = (flags & ~pkt.protectionMask) | pkt.protectionFlags;
+        if (wanted != flags) {
+          servoSetProtection(pkt.targetId, wanted);
+          k_msleep(10); // Let the last EEPROM write finish before reading it back.
+          reply.ok = readServoProtection(pkt.targetId, flags, current) && flags == wanted;
+        }
+      }
+      reply.protectionFlags = flags;
+      reply.protectionCurrent = current;
+      break;
+    }
     case SERVO_PING:
       if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }
       reply.ok = pingServo(pkt.targetId) ? 1 : 0;
@@ -358,6 +552,13 @@ static void applyServoOp(const ServoPacket &pkt) {
       uint8_t kp = 0, kd = 0;
       reply.ok = readServoPresent(pkt.targetId, pos) && readServoGains(pkt.targetId, kp, kd);
       reply.rawPos = pos;
+      reply.kp = kp; reply.kd = kd;
+      break;
+    }
+    case SERVO_READ_RUN_GAINS: {
+      if (hostMode == HOST_CAL) { reply.ok = 0; break; }
+      uint8_t kp = 0, kd = 0;
+      reply.ok = readServoGains(pkt.targetId, kp, kd, ADDR_TEMP_KP);
       reply.kp = kp; reply.kd = kd;
       break;
     }
@@ -372,7 +573,7 @@ static void controlTask(void*, void*, void*) {
   Serial1.begin(SERVO_BAUD);
   enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(DT_PHANDLE_BY_IDX(DT_PATH(zephyr_user), serials, 0))));
   for (unsigned i=0; i<3; ++i) { setTorqueEnable(false); k_msleep(5); }
-  setMouthKpKd();
+  // Preserve each servo's existing KP/KD, including the mouth.
   // Read temporary KP/KD once at boot (address 50, 2 bytes). Missing IDs stay unset.
   readAllRegisters(ADDR_TEMP_KP, 2); Serial1.flush();
   const uint32_t pdStart=micros();
@@ -388,7 +589,7 @@ static void controlTask(void*, void*, void*) {
     const bool imuFresh = sampledImu.sample.ok && sampledImu.seq &&
                          (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;
 
-    CalPacket calPkt;
+    CalPositionsPacket calPkt;
     ServoPacket servoPkt;
     bool gotCal = false, gotServo = false;
     k_mutex_lock(&hostMu, K_FOREVER);
@@ -396,7 +597,8 @@ static void controlTask(void*, void*, void*) {
     if (servoPending) { servoPkt = pendingServo; servoPending = false; gotServo = true; }
     k_mutex_unlock(&hostMu);
     if (gotCal) applyCalOp(calPkt);
-    if (gotServo) applyServoOp(servoPkt);
+    advanceServoTest();
+    if (gotServo) applyServoOp(servoPkt, enabled);
     advanceCalibration();
     advanceServoMid();
 
@@ -418,12 +620,12 @@ static void controlTask(void*, void*, void*) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       calIndex = servoMidId = 0xFF;
+      servoTest = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       enabled = false; timedOut = true;
       setTorqueEnable(false);
-      setMouthKpKd();
     }
     const bool busTaken = hostMode != HOST_NORMAL;
     if (got && !busTaken) {
@@ -435,7 +637,6 @@ static void controlTask(void*, void*, void*) {
         if (cmd.mode == ARM && !enabled && atomic_get(&bridgeReady) && imuFresh &&
             (uint32_t)(start-sampledImu.sampleUs) < 50000) {
           enabled = true; timedOut = false;
-          setMouthKpKd();
         }
         k_mutex_lock(&motorsMu, K_FOREVER);
         for (unsigned i = 0; i < NUM_MOTORS; ++i) motors[i].desAngleDeg = cmd.target[i];
@@ -464,6 +665,7 @@ static void controlTask(void*, void*, void*) {
     }
     drainServoRx();
     servoRxMask = 0;
+    memset(servoVoltage, 0, sizeof(servoVoltage));
     readAllState(); Serial1.flush();
     ++servoReads;
     const uint32_t readStart = micros();
@@ -474,6 +676,7 @@ static void controlTask(void*, void*, void*) {
     }
     parseServoRx();
     const uint32_t servoWaitUs = micros() - readStart;
+    checkServoTestFeedback(servoRxMask);
     sampledImu = readImuSnapshot();
     const uint32_t sampleUs = micros();
     const bool publishImuOk = sampledImu.sample.ok && sampledImu.seq &&
@@ -503,7 +706,7 @@ static void controlTask(void*, void*, void*) {
     RawPacket raw;
     fillRawPacket(raw);
     DiagnosticPacket diagnostic = {};
-    memcpy(diagnostic.magic, "DQD1", 4);
+    memcpy(diagnostic.magic, "DQD2", 4);
     diagnostic.bridgeState = atomic_get(&bridgeStage);
     diagnostic.bridgeAttempts = atomic_get(&bridgeAttempts);
     diagnostic.bridgeFailures = atomic_get(&bridgeFailures);
@@ -516,6 +719,7 @@ static void controlTask(void*, void*, void*) {
     diagnostic.servoWaitUs = servoWaitUs;
     diagnostic.reconnects = atomic_get(&bridgeReconnects);
     diagnostic.bridgeReadyUs = (uint32_t)atomic_get(&bridgeReadyUs);
+    diagnostic.servoBusVoltageMv = servoBusVoltageMv();
     k_mutex_lock(&stateMu, K_FOREVER);
     if (k_sem_count_get(&reportReady)) ++reportDrops;
     s.reportDrops = reportDrops; snapshot = s;
@@ -612,6 +816,17 @@ static void reportTask(void*, void*, void*) {
   }
 }
 
+// Router 0.11.0 answers a repeated `$/register` from the route's owner with success.
+// Routers 0.5.4-0.10.x answer RouteAlreadyExists (code 5) while the route is intact.
+// Either way this connection already owns the route; timeouts and other errors do not.
+static bool routeRegistered(const char *name) {
+  constexpr int ROUTE_EXISTS = 5;
+  bool registered = false;
+  const MsgPack::str_t route(name);
+  auto &&rpc = Bridge.call(BIND_METHOD, route);
+  return (rpc.result(registered) && registered) || rpc.getErrorCode() == ROUTE_EXISTS;
+}
+
 static void bridgeTask(void*, void*, void*) {
   uint32_t backoffMs = 250;
   for (;;) {
@@ -624,7 +839,8 @@ static void bridgeTask(void*, void*, void*) {
       atomic_set(&bridgeStage, 2);
       ready = Bridge.provide("duck_command", receiveCommand) &&
               Bridge.provide("duck_cal", receiveCal) &&
-              Bridge.provide("duck_servo", receiveServo);
+              Bridge.provide("duck_servo", receiveServo) &&
+              Bridge.provide("duck_tof", readTof);
     }
     if (!ready) {
       atomic_inc(&bridgeFailures);
@@ -642,6 +858,10 @@ static void bridgeTask(void*, void*, void*) {
       k_msleep(2000);
       MsgPack::str_t version;
       if (!Bridge.getRouterVersion(version)) break;
+      // A serial reconnect drops Router registrations while version still works.
+      // Re-assert every route: "already registered" counts, local handlers stay bound.
+      if (!(routeRegistered("duck_command") && routeRegistered("duck_cal") &&
+            routeRegistered("duck_servo") && routeRegistered("duck_tof"))) break;
     }
     atomic_clear(&bridgeReady);
     atomic_inc(&bridgeFailures);
@@ -662,6 +882,7 @@ void setup() {
   k_mutex_init(&hostMu);
   k_mutex_init(&imuMu);
   k_sem_init(&reportReady, 0, 1);
+  startTof();
   for (unsigned i = 0; i < NUM_MOTORS; ++i) {
     motors[i] = {}; motors[i].id = MOTOR_IDS[i];
     motors[i].fbPos = SERVO_CENTER_POS;

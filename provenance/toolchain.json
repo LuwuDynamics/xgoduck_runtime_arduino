@@ -1,0 +1,15 @@
+{
+  "platform": "arduino:zephyr",
+  "platform_version": "1.0.0",
+  "package": "zephyr",
+  "tool": "arm-zephyr-eabi",
+  "version": "1.0.1",
+  "host": "aarch64-linux-gnu",
+  "url": "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/toolchain_gnu_linux-aarch64_arm-zephyr-eabi.tar.xz",
+  "archiveFileName": "toolchain_gnu_linux-aarch64_arm-zephyr-eabi-1.0.1.tar.xz",
+  "sha256": "b9805b691f2f0a8926c92694cae378d05ba07b76abca745e216fcc52753cc4d6",
+  "size": 97253908,
+  "source": "Arduino package_index.json, zephyr arm-zephyr-eabi 1.0.1, Linux ARM64",
+  "upstream_release": "https://github.com/zephyrproject-rtos/sdk-ng/releases/tag/v1.0.1",
+  "notice": "Optional bundle contains the unchanged upstream archive, including share/licenses. It is a build dependency, not an App runtime dependency. Other installation dependencies still require internet access."
+}

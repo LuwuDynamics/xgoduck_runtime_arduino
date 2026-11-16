@@ -1,0 +1,9 @@
+.git
+.venv
+.cache
+.build
+data
+dist
+tools/offline
+**/__pycache__
+**/*.pyc

@@ -1,0 +1,17 @@
+{
+  "source": "https://github.com/LuwuDynamics/luwu_os",
+  "source_commit": "f698cc5c3a5fbbd15a2dcf31ae8267dc47acea16",
+  "license": "Apache-2.0 (python/vendor/luwu_os/LICENSE)",
+  "files": {
+    "docs/images/qr_miniprogram.png": {
+      "source_path": "apps/ai_chat_pro/pics/qr_miniprogram.png",
+      "sha256": "86c3d31ef517e9eb47d7e13964807f2716e2789025a813116156fd4405433391"
+    },
+    "docs/images/qr_app_intl.png": {
+      "source_path": "apps/ai_chat_pro/pics/qr_app_intl.png",
+      "sha256": "1579dd6c00ac0030100e654cfe3f0c15b4e32ce0d496b6c22c51d87dc77ceb67",
+      "decoded_url": "https://agent.luwudynamics.ai/download"
+    }
+  },
+  "verification": "App QR decoded with macOS Vision; destination HTTPS returned 200 on 2026-10-15. Mini Program code is copied byte-for-byte from the existing AI Chat Pro asset; actual WeChat recognition needs a phone."
+}

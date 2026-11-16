@@ -1,6 +1,7 @@
 """100Hz receive/filter callback and independent 50Hz ONNX loop."""
 import collections
 import math
+import secrets
 import threading
 import time
 from statistics import median
@@ -11,7 +12,7 @@ from heading import HeadingHold
 from standing_imu import (CALIBRATION_PATH, SAMPLE_SECONDS, ImuCorrection,
                           check_standing, estimate as estimate_imu, load as load_imu,
                           save as save_imu, disable as disable_imu)
-from rl_core import (MOTOR_IDS, POLICY_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG,
+from rl_core import (MOTOR_IDS, POLICY_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG, MOUTH_MIN_DEG,
                      ROLLER_LEG_DEFAULT_DEG)
 from wire import *
 
@@ -24,6 +25,14 @@ ROULADE_START_TIMEOUT_S = 0.5
 SITSTAND_STAND_S = 1.0
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
+LOW_BATTERY_MV = 6000
+BATTERY_REARM_MV = 7600
+BATTERY_SAMPLE_MAX_AGE_S = .4
+LOW_BATTERY_CONFIRM_S = 5.
+BATTERY_REARM_CONFIRM_S = 2.
+BATTERY_WARNING_TIMEOUT_S = 12.0
+LEG_FEEDBACK_MASK = 0x3ff  # The first ten bits of the hardware servo order.
+FEEDBACK_HOLD_REASON = 'STM32 feedback timed out; motion paused, holding last targets'
 ACTION_PREPARE_S = 0.2
 ACTION_PREPARE_TIMEOUT_S = 0.5
 ROLLER_YAW_LIMIT = 0.45  # rad/s, symmetric in Roller mode.
@@ -111,6 +120,7 @@ class Controller:
         self._action_first_target = None
         self._imu_path = CALIBRATION_PATH if imu_calibration_path is None else imu_calibration_path
         self._imu_record = None
+        self._imu_load_failed = False
         self._imu_job_token = 0
         self._imu_job = dict(state='idle', active=False, progress=0., samples=0,
                              message='Not calibrated. Hold the board upright and still.')
@@ -119,6 +129,7 @@ class Controller:
             if self._imu_record is not None:
                 self._imu_job.update(state='saved', message='Saved IMU calibration loaded.')
         except (OSError, ValueError, TypeError, KeyError):
+            self._imu_load_failed = True
             self._imu_job.update(state='error', message='Calibration could not be loaded. Calibrate again or reset it.')
         self.filter = SignalFilter(ImuCorrection(self._imu_record) if self._imu_record else None)
         self.feedback = self.filtered = None
@@ -128,10 +139,18 @@ class Controller:
         self._imu_source_us = None
         self._imu_source_time = 0.0
         self.diagnostics = {}
+        self.diagnostic_time = 0.
+        self.battery_phase = 'normal'
+        self.battery_since = None
+        self.battery_deadline = 0.
+        self.battery_warning = None
+        self.battery_warning_done = threading.Event()
         self.mode = 'shadow'
+        self.fault_hold = False
         self.generation = 0
         self.twist, self.head, self.mouth = [0.0]*3, [0.0]*4, 0.0
         self.web_time = 0.0
+        self.input_source = 'web'
         self.arm_pending = False
         self.seq = self.received = self.inferred = self.sent = self.bad_frames = self.gaps = 0
         self.last_error = ''
@@ -154,6 +173,7 @@ class Controller:
         self.servo_reply = None
         self.servo_reply_event = threading.Event()
         self.servo_expected_reply = None
+        self.guarded_servo_test = None
 
     def receive_boot_pd(self, raw):
         if not isinstance(raw, (bytes, bytearray)) or len(raw)!=32: return
@@ -207,7 +227,78 @@ class Controller:
                 self.filter.reset(); self.recovery.reset(); self.policy_needs_reset = True
                 self._imu_source_us = None
                 self._cancel_actions_locked()
-            self.diagnostics = values
+            now = time.monotonic()
+            if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
+                self.battery_since = None
+            self.diagnostics, self.diagnostic_time = values, now
+
+    def _battery_voltage(self, now):
+        if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
+            return None
+        return self.diagnostics.get('servo_bus_voltage_mv') or None
+
+    def _require_battery(self):
+        if self.battery_phase != 'normal':
+            raise ValueError('低电压保护中，请充电后重新使能。 Low battery protection is active.')
+
+    def _require_motion_available(self):
+        self._require_battery()
+        if self.fault_hold:
+            raise ValueError(FEEDBACK_HOLD_REASON)
+
+    def _battery_step_locked(self, now):
+        voltage = self._battery_voltage(now)
+        phase = self.battery_phase
+        if phase in ('normal', 'locked'):
+            crossed = voltage is not None and (
+                voltage <= LOW_BATTERY_MV if phase == 'normal' else voltage >= BATTERY_REARM_MV)
+            if not crossed:
+                self.battery_since = None
+                return
+            if self.battery_since is None:
+                self.battery_since = now
+                return
+            duration = LOW_BATTERY_CONFIRM_S if phase == 'normal' else BATTERY_REARM_CONFIRM_S
+            if now - self.battery_since < duration:
+                return
+            self.battery_since = None
+            if phase == 'locked':
+                self.battery_phase = 'normal'
+                return
+            self.battery_phase = 'warning'
+            self.battery_deadline = now + BATTERY_WARNING_TIMEOUT_S
+            self._cancel_preparation_locked()
+            self._stop_pick_locked()
+            self._stop_roulade_locked()
+            self._stop_kick_locked()
+            self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
+            self.input_source = 'web'
+            self.arm_pending = False
+            self.generation += 1
+            self.battery_warning_done = threading.Event()
+            if self.battery_warning is not None:
+                threading.Thread(target=self._play_battery_warning, args=(self.battery_warning_done,),
+                                 name='battery-warning', daemon=True).start()
+            else:
+                self.battery_warning_done.set()
+        fb, filt = self.feedback, self.filtered
+        age = now - self.rx_time
+        ready = (self.mode in ('hold', 'policy') and fb and fb.enabled and age < .15
+                 and fb.imu_ok and age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 <= IMU_STALE_S
+                 and not fb.flags & 4 and fb.command_age_us <= 250000
+                 and fb.mask & LEG_FEEDBACK_MASK == LEG_FEEDBACK_MASK and filt and filt['imu_fusion_ready']
+                 and self.recovery.phase == 'walk')
+        if ready and now < self.battery_deadline and not self.battery_warning_done.is_set():
+            return
+        self.battery_phase = 'locked'
+        self.set_mode('off')
+        self._disarm_now()
+
+    def _play_battery_warning(self, done):
+        try:
+            self.battery_warning()
+        finally:
+            done.set()
 
     def receive_voltage(self, raw):
         try:
@@ -379,6 +470,7 @@ class Controller:
                 # A cancelled job must never publish a file or apply its result.
                 save_imu(self._imu_path, record)
                 self._imu_record = record
+                self._imu_load_failed = False
                 self.filter.set_correction(correction)
                 self.filtered = None
                 self.recovery.reset()
@@ -402,6 +494,7 @@ class Controller:
             except OSError as exc:
                 raise ValueError('Could not reset calibration. Previous calibration kept.') from exc
             self._imu_record = None
+            self._imu_load_failed = False
             self.filter.set_correction(None)
             self.filtered = None
             self.recovery.reset()
@@ -415,6 +508,8 @@ class Controller:
         if mode not in ('shadow', 'off', 'hold', 'policy', 'calibrate', 'servo_debug'):
             raise ValueError('unknown mode')
         with self.lock:
+            if mode not in ('off', 'shadow'):
+                self._require_battery()
             if self._imu_job['active']:
                 if mode == 'off' or (self.mode == 'calibrate' and mode == 'shadow'):
                     self._imu_job_token += 1
@@ -425,7 +520,7 @@ class Controller:
                 raise ValueError('stand up before switching to walk')
             if mode == 'policy' and self.kick_until:
                 raise ValueError('wait for kick to finish before switching to walk')
-            if mode == self.mode and mode != 'calibrate':
+            if mode == self.mode and mode != 'calibrate' and not self.fault_hold:
                 self._cancel_preparation_locked()
                 self.web_time = time.monotonic()
                 return {'mode': self.mode}
@@ -436,6 +531,7 @@ class Controller:
                 fb = self._require_feedback(0)
             previous = self.mode
             self.generation += 1; self.mode = mode
+            self.fault_hold = False
             self.heading.reset()
             self.recovery.reset(); self.policy_needs_reset = True
             self._cancel_actions_locked()
@@ -705,6 +801,7 @@ class Controller:
         if side not in self.kick_policies:
             raise ValueError('kick side must be left or right')
         with self.lock:
+            self._require_motion_available()
             self._check_imu_idle_locked()
             now = time.monotonic()
             if self.mode not in ('shadow', 'policy'):
@@ -723,6 +820,7 @@ class Controller:
         if action not in ('sit', 'stand'):
             raise ValueError('sitstand action must be sit or stand')
         with self.lock:
+            self._require_motion_available()
             self._check_imu_idle_locked()
             now = time.monotonic()
             if self.kick_until:
@@ -747,6 +845,7 @@ class Controller:
 
     def start_pick(self):
         with self.lock:
+            self._require_motion_available()
             self._check_imu_idle_locked()
             if self.kick_until:
                 raise ValueError('wait for kick to finish before pick')
@@ -762,6 +861,7 @@ class Controller:
 
     def start_roulade(self):
         with self.lock:
+            self._require_motion_available()
             self._check_imu_idle_locked()
             now = time.monotonic()
             if self.kick_until:
@@ -786,7 +886,7 @@ class Controller:
             self._roulade_timing = dict(state='preparing', startup_ms=None, elapsed_s=0.0)
         return {'ok': True, 'preparing': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
 
-    def command(self, twist=None, head=None, mouth=None):
+    def command(self, twist=None, head=None, mouth=None, source='web'):
         def values(seq, limits):
             if len(seq)!=len(limits): raise ValueError('wrong command dimension')
             seq = [float(v) for v in seq]
@@ -798,9 +898,15 @@ class Controller:
         m = None
         if mouth is not None:
             m = float(mouth)
-            if not math.isfinite(m) or not 0 <= m <= MOUTH_MAX_DEG:
+            if not math.isfinite(m) or not MOUTH_MIN_DEG <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
+            if self.battery_phase != 'normal':
+                return {'ok': True, 'ignored': 'low battery protection'}
+            if self.fault_hold:
+                return {'ok': True, 'ignored': FEEDBACK_HOLD_REASON}
+            if source != self.input_source:
+                return {'ok': True, 'ignored': 'inactive input source'}
             if self._imu_job['active']:
                 self.web_time = time.monotonic()
                 return {'ok': True, 'ignored': 'imu_calibration'}
@@ -830,6 +936,7 @@ class Controller:
             raise ValueError('joint index out of range')
         with self.cal_op_lock:
             with self.lock:
+                self._require_battery()
                 self._check_imu_idle_locked()
                 if self.mode != 'calibrate':
                     raise ValueError('not in calibrate mode')
@@ -853,6 +960,54 @@ class Controller:
                         raise ValueError(f'No servo replied at ID {MOTOR_IDS[index]}; centering was not started')
                     self.web_time = time.monotonic()
                 return {'ok': True, 'index': index, 'id': MOTOR_IDS[index], 'hold_pos': CAL_HOLD_POS}
+            finally:
+                with self.lock:
+                    self.cal_expected_index = None
+
+    def cal_sitting(self, positions):
+        with self.cal_op_lock:
+            with self.lock:
+                self._require_battery()
+                self._check_imu_idle_locked()
+                if self.mode != 'calibrate':
+                    raise ValueError('not in calibrate mode')
+                generation = self.generation
+                center_seq = (self.cal_seq + 1) & 0xffffffff
+                positions_seq = (center_seq + 1) & 0xffffffff
+                stages = (
+                    (center_seq, encode_cal(CAL_CENTER_ALL, seq=center_seq), '2048'),
+                    (positions_seq, encode_cal_positions(positions, positions_seq), 'target positions'),
+                )
+                self.cal_seq = positions_seq
+                self.cal_expected_index = (center_seq, CAL_ALL_JOINTS)
+            try:
+                for seq, payload, stage in stages:
+                    with self.lock:
+                        self._require_battery()
+                        self._check_imu_idle_locked()
+                        if self.mode != 'calibrate' or self.generation != generation:
+                            raise ValueError('calibration session changed')
+                        fb = self.feedback
+                        now = time.monotonic()
+                        if not fb or now - self.rx_time > .15:
+                            raise ValueError('MCU feedback is stale')
+                        if not fb.calibrating or fb.enabled or any(self.cal_done):
+                            raise ValueError('Unload all joints before sitting calibration.')
+                        if fb.mask != ALL_MASK:
+                            raise ValueError('All 15 servos must be online for sitting calibration.')
+                        self.web_time = now
+                        self.cal_reply = None
+                        self.cal_reply_event.clear()
+                        self.cal_expected_index = (seq, CAL_ALL_JOINTS)
+                        self.bridge.notify('duck_cal', payload)
+                    if not self.cal_reply_event.wait(1.2):
+                        raise ValueError(f'Sitting calibration timed out at {stage}.')
+                    with self.lock:
+                        if self.mode != 'calibrate' or self.generation != generation:
+                            raise ValueError('calibration session changed')
+                        if not self.cal_reply or not self.cal_reply['ok']:
+                            raise ValueError(f'Sitting calibration failed at {stage}.')
+                return {'ok': True, 'positions': list(positions)}
             finally:
                 with self.lock:
                     self.cal_expected_index = None
@@ -923,6 +1078,51 @@ class Controller:
                 op, payload = SERVO_ENTER, encode_servo(SERVO_ENTER, target_id)
             else:
                 raise ValueError('unknown servo action')
+        return self._exchange_servo(op, target_id, payload)
+
+    def servo_test(self, action, target_id, session=None, offset_deg=0):
+        ops = {'start': SERVO_TEST_START, 'move': SERVO_TEST_MOVE, 'stop': SERVO_TEST_STOP}
+        if action not in ops or type(target_id) is not int or target_id not in MOTOR_IDS:
+            raise ValueError('Select one of Duck’s 15 servo IDs for the test.')
+        op = ops[action]
+        if op == SERVO_TEST_START:
+            session = secrets.randbelow(65535) + 1
+        payload = encode_servo_test(op, target_id, session, offset_deg)
+        with self.servo_op_lock:
+            with self.lock:
+                if op != SERVO_TEST_STOP:
+                    self._require_battery()
+                    fb = self.feedback
+                    now = time.monotonic()
+                    if (self.mode != 'servo_debug' or not fb or not fb.servo_debugging
+                            or fb.enabled or now - self.rx_time >= .15):
+                        raise ValueError('Servo setup is not ready for the position test.')
+                    # Updated firmware gates position writes on every local bus feedback frame.
+                    guarded_move = op == SERVO_TEST_MOVE and self.guarded_servo_test == (target_id, session)
+                    if not guarded_move and not fb.mask & (1 << MOTOR_IDS.index(target_id)):
+                        raise ValueError(f'No servo replied at ID {target_id}.')
+                    self.web_time = now
+            try:
+                reply = self._exchange_servo(op, target_id, payload)
+            except ValueError as error:
+                with self.lock:
+                    failed = self.servo_reply
+                if op == SERVO_TEST_MOVE and failed and not failed['ok'] and failed['session'] == session:
+                    if seconds := failed.get('idle_timeout_s'):
+                        raise ValueError(f'Servo unloaded after {seconds} seconds without an angle change.') from error
+                    if limit := failed.get('feedback_limit'):
+                        raise ValueError(f'Servo ID {target_id} missed more than {limit} consecutive feedback frames.') from error
+                raise
+            if reply['session'] != session:
+                raise ValueError('Unexpected servo test reply.')
+            if op == SERVO_TEST_START:
+                self.guarded_servo_test = (target_id, session) if reply.get('feedback_limit') else None
+            elif op == SERVO_TEST_STOP and self.guarded_servo_test == (target_id, session):
+                self.guarded_servo_test = None
+            return reply
+
+    def _exchange_servo(self, op, target_id, payload):
+        with self.lock:
             self.servo_reply_event.clear()
             self.servo_reply = None
             self.servo_expected_reply = (op, target_id)
@@ -949,21 +1149,47 @@ class Controller:
     def step(self):
         step_started = time.monotonic()
         with self.lock:
+            self._battery_step_locked(time.monotonic())
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = time.monotonic()-self.rx_time
             if mode in ('hold','policy'):
+                if not fb or age >= .15:
+                    if not self.fault_hold:
+                        self.fault_hold = True
+                        self.arm_pending = False
+                        self.last_error = FEEDBACK_HOLD_REASON
+                        self.twist = [0.0]*3
+                        if self.sitstand_phase == 'sit':
+                            self._cancel_preparation_locked()  # Keep the seated posture.
+                        else:
+                            self._cancel_actions_locked()
+                        self.heading.reset()
+                        print(f'[motion] {FEEDBACK_HOLD_REASON}; feedback age={age*1000:.0f} ms', flush=True)
+                    # In normal mode the MCU keeps the last target until it
+                    # receives another one or its own IMU/Bridge guard trips.
+                    return
                 lost = None
-                if not fb or age>.15 or not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
+                if not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
                     lost = 'sensor feedback lost; disarmed'
-                elif time.monotonic()-self.web_time > 1.0:
-                    # Browser inactivity stops travel without releasing torque.
-                    self.twist = [0.0]*3
+                elif self.fault_hold:
+                    if not fb.enabled:
+                        lost = 'MCU released torque during the feedback pause'
+                    elif mode == 'policy' and not (filt and filt['imu_fusion_ready']):
+                        return
+                    else:
+                        self.fault_hold = False
+                        if self.last_error == FEEDBACK_HOLD_REASON:
+                            self.last_error = ''
+                        print(f'[motion] STM32 feedback restored; resuming {mode}', flush=True)
                 if lost:
                     self.mode = mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.last_error = lost
                     generation = self.generation
                     self.recovery.reset(); self.policy_needs_reset = True
                     self._cancel_actions_locked()
+                elif time.monotonic()-self.web_time > 1.0:
+                    # Browser inactivity stops travel without releasing torque.
+                    self.twist = [0.0]*3
             elif mode in EXCLUSIVE_MODES:
                 if time.monotonic()-self.web_time > 2.0:
                     previous = mode
@@ -978,6 +1204,8 @@ class Controller:
                     else:
                         self.bridge.notify('duck_servo', encode_servo(SERVO_EXIT, 10))
                     self._disarm_now()
+            if mode not in ('hold', 'policy'):
+                self.fault_hold = False
             valid = bool(fb and age < .15 and fb.imu_ok and filt
                          and filt['imu_fusion_ready']
                          and age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 <= IMU_STALE_S)
@@ -994,6 +1222,9 @@ class Controller:
                 self.policy_needs_reset |= changed
                 if changed and self.recovery.phase != 'walk':
                     self._cancel_actions_locked()
+                    if self.battery_phase == 'warning':
+                        self._battery_step_locked(now)
+                        return
             phase = self.recovery.phase
             if phase == 'walk':
                 self._advance_preparation_locked(now, valid)
@@ -1190,7 +1421,8 @@ class Controller:
                 bad_frames=self.bad_frames, sequence_gaps=self.gaps, loop_missed=self.loop_missed,
                 inference_ms=summary(self.infer_ms), receive_interval_ms=summary(self.rx_intervals),
                 feedback_age_ms=(now-self.rx_time)*1000 if fb else None,
-                uptime_s=now-self.started, last_error=self.last_error, command=self.twist,
+                uptime_s=now-self.started, last_error=self.last_error, command=self.twist, input_source=self.input_source,
+                fault_hold=self.fault_hold and self.mode in ('hold', 'policy'), fault_hold_supported=True,
                 head=self.head, mouth=self.mouth, policy_targets=self.last_action, motors=MOTOR_IDS, boot_pd=self.boot_pd,
                 full_robot_ready=bool(fb and fb.imu_ok and fb.mask==ALL_MASK and now-self.rx_time<.15),
                 raw_pos=list(self.raw_pos), encoder_center=SERVO_CENTER_POS,
@@ -1229,6 +1461,10 @@ class Controller:
                 filter_clock='mcu_imu', snapshot='latest',
                 command_timeout_enabled=False, imu_stale_ms=IMU_STALE_S*1000)
             result['mcu_runtime'] = dict(self.diagnostics)
+            voltage = self._battery_voltage(now)
+            result['battery'] = dict(voltage_v=voltage / 1000 if voltage is not None else None,
+                                     low=self.battery_phase != 'normal',
+                                     phase=self.battery_phase)
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']
             result['recovery'] = self.recovery.status()

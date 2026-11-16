@@ -1,0 +1,21 @@
+[Unit]
+Description=XGO Duck Bluetooth gamepad service
+After=bluetooth.service adbd.service sys-kernel-config.mount
+Requires=bluetooth.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/arduino/ArduinoApps/xgoduck_runtime_arduino/tools/gamepad/server.py --socket /home/arduino/ArduinoApps/xgoduck_runtime_arduino/data/gamepad.sock
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/home/arduino/ArduinoApps/xgoduck_runtime_arduino/data
+ReadWritePaths=-/sys/kernel/debug/usb/4e00000.usb/mode
+ReadWritePaths=-/sys/kernel/config/usb_gadget
+ProtectKernelTunables=true
+ProtectControlGroups=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

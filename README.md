@@ -1,222 +1,213 @@
-# XGO Duck
+# XGO Duck AI
 
-Control an XGO Duck from a web browser using Arduino Uno Q. Includes walking, skating, get-up, sit/stand, pick, roulade, and left/right-kick policies.
+English · [简体中文](README_CN.md) · [Changelog](docs/CHANGELOG.md)
 
-Based on [Microduck](https://github.com/pollen-robotics/microduck) by [Pollen Robotics](https://pollen-robotics.com/microduck/).
+Voice chat, motion control, USB audio/video and ToF ranging for XGO Duck on Arduino UNO Q. Use a browser for everyday operation; Duck does not need a display.
 
-## Start the app
+Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data cable, a battery and servos. Voice chat needs a USB microphone and speaker. A USB camera and a VL53L5CX ToF sensor on the onboard Qwiic port are optional.
 
-1. Open the project in **Arduino App Lab** and click **Run**. For a new board, complete the first-time setup below.
-2. Open the web interface shown by App Lab, or visit `http://<board-ip>:9527`.
-3. Check that **Servos online** shows **15/15** and **IMU** shows **online**.
-4. The app starts in **Inference only**, with the motors unloaded. Finish servo setup and calibration before enabling motion.
+The first seven steps follow the official developer guide, with this repository’s XGO Duck AI ZIP and startup commands.
 
-### First-time board setup
+Motion control, voice chat, USB audio/video and optional ToF ranging are included in the App Lab ZIP in step 3. Follow step 4 to set up USB detection, the cockpit and automatic startup.
 
-After App Lab has downloaded the board libraries, stop the app. Open a terminal on the Uno Q in this project folder and run:
+## 1. Set up Wi-Fi
 
-```bash
-python3 tools/prepare-bridge.py
-sudo bash tools/router-2m.sh
+Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)
+
+## 2. Test the LEDs and record the board IP
+
+1. Open **Inspirations → Color your LEDs** in App Lab and click **Run**.
+2. Open its control page from the bottom status bar. Toggle the LEDs and change their colors to check that the matching lights respond on the board.
+3. Click **Stop**. Open **Network Info** from the Wi-Fi icon at the bottom right and record your board’s IP. Use the same network for your computer and the board. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/02-led-ip.html)
+
+Once you know the IP, you can give this prompt to an AI assistant with terminal access to check SSH.
+
+```text
+My board IP is [fill in]. Check whether my computer can reach the board over Wi-Fi SSH as arduino.
+After login, check the Debian version, CPU architecture, free disk space and Arduino App CLI.
+I will enter the password at the terminal prompt.
 ```
 
-Then click **Run** in App Lab. Repeat this preparation if the board's library cache is replaced. It configures the 2 Mbps connection required by this app.
+## 3. Import XGO Duck AI
 
-Connect the servo bus to **D0/D1** and the QMI8658 IMU to **D20/D21**.
+> **Want AI to handle the installation?** Jump to the [AI prompt for steps 3–4](#ai-assisted-install). It starts with downloading the ZIP and covers importing, configuring and launching the App.
 
-The STM32 runs independent 100 Hz servo and IMU threads. IMU initialization and
-I²C retries do not block the servo watchdog. Feedback uses the latest complete
-snapshots, and Linux integrates IMU samples using their MCU timestamps.
+### Import manually
 
-`tools/prepare-bridge.py` also installs bounded RPC waits and retry-safe Bridge
-initialization for the pinned libraries. Initialization retries use backoff;
-reconnection leaves the robot unloaded until motion is explicitly enabled again.
-`/api/status` includes `mcu_runtime` diagnostics for both loops and Bridge retries.
+1. Download and keep the [XGO Duck AI App Lab ZIP](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip). The [matching SHA-256 file](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip.sha256) lets you verify the download.
+2. In App Lab, select **＋ next to Apps → Import App → Import from computer** and choose the ZIP.
+3. Open the imported **XGO Duck AI** card and leave the App stopped. Step 4 prepares the board libraries and Bridge before the first **Run**. [Illustrated import guide](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
 
-## Servo setup
+<img src="docs/images/applab-import.jpg" alt="Arduino App Lab's ZIP import dialog" width="760">
 
-Connect **one servo at a time** when changing IDs.
+## 4. Configure the board and start the App
 
-Opening **Servo setup** automatically unloads all servos, including from Default pose or Walk / get up. Scanning waits for the board to confirm setup mode with torque off. Leaving the page keeps the servos unloaded; enable motion again from Control when ready.
+1. Check that Wi-Fi SSH works. For an update, support Duck, unload the servos, stop the old App and back up its directory and `data/`. Stop any running Apps before configuring the shared Router.
+2. SSH into the UNO Q over Wi-Fi. Use `arduino-app-cli app list` to find the actual App directory. The commands below use `~/ArduinoApps/xgoduck_ai` as an example.
 
-1. Open **Servo setup**, click **Scan all IDs**, and select a result. **Stop scan** ends the scan early.
-2. To change its ID, enter the new number in **Change ID to** and click **Change ID**. Scan again to select the new ID.
-3. To view its settings, click **Read**.
-4. To adjust gains, enter KP and KD, then click **Set KpKd**. One click writes and verifies both the saved EEPROM gains and the live gains, so the values take effect immediately and survive a servo power cycle. The inputs start at **5** and **10**; reading keeps your input values.
-5. To reset its center, turn the unloaded joint by hand to its mechanical center and click **Reset Mid**. The servo stays unloaded.
-6. Repeat for the remaining servos.
+   ```sh
+   cd ~/ArduinoApps/xgoduck_ai
+   bash tools/install-ai-support.sh
+   sudo bash tools/router-2m.sh
+   ```
 
-| Servo IDs | Joints |
+3. The first script installs host dependencies, sets up USB detection, the cockpit and autostart, and precompiles the MCU sketch. The second sets the shared Router Bridge serial rate to **2 Mbps**. Use Wi-Fi SSH because the USB probe may interrupt computer USB/ADB access.
+4. Stay online. Connect through **Network** in App Lab, open **XGO Duck AI**, and click **Run**. The first run may compile and upload the STM32 sketch while it prepares dependencies. Later power-ups start the App automatically. [XGO Duck AI installation and update details](docs/ai-chat-en.md)
+
+<a name="ai-assisted-install"></a>
+
+### Let AI handle steps 3–4
+
+The App installed successfully with this prompt in Codex, DeepSeek Harness, and Cursor. The Cursor test on a 2 GB board used single-job compilation. Allow 30 minutes to 1 hour, depending on download speed.
+
+Copy the prompt and fill in the **board IP, SSH username and password** in your own AI session. An assistant with terminal access can then sign in directly over Wi-Fi SSH. If you already imported the App, it can continue from the actual installation directory.
+
+```text
+Import and start XGO Duck AI on my Arduino UNO Q.
+Board IP: [fill in]. SSH username: [fill in, usually arduino]. SSH password: [board's Linux login password].
+Installation: [first install / update]. Service region: [detect after binding / China cn / International global].
+For automatic detection, leave the region unset on a fresh install and preserve any saved region on update.
+Sign in to the board over Wi-Fi SSH with the credentials above. Keep the password out of files,
+shell history and logs. Run App CLI commands as the arduino user.
+Check the OS, disk space, installed Apps and their actual paths. If needed, download the dedicated ZIP:
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip
+Verify it against the same URL with .sha256 appended. If needed, download on my computer and use SCP.
+Check arduino-app-cli app import --help. Import as arduino if supported, or guide me through App Lab.
+Reuse a verified import. For an update, have me support Duck and confirm torque is off before stopping
+the old App. Back up its directory and data/, then follow the migration notes in docs/ai-chat-en.md.
+Confirm other running Apps can be stopped. Keep Wi-Fi SSH available and stop all Apps.
+Use sketch/sketch.yaml, provenance/toolchain.json and python/requirements.txt for dependencies.
+Recorded board reference: Router 0.11.0, App CLI 0.13.0 and Python base image 0.12.0. Reuse compatible versions.
+Before the first start, run arduino-cli core list as arduino and check the installed arduino:zephyr core.
+If it is missing or differs from sketch/sketch.yaml, run arduino-cli core install arduino:zephyr@1.0.0
+and check again. Upload can pick up options from the older board core even if the sketch compiled successfully.
+Verify that the ARM64 toolchain is version 1.0.1 as pinned in provenance/toolchain.json.
+If the toolchain download fails on the board, download the official Linux ARM64 archive on my computer
+from the URL in that file, check its size and SHA-256, and transfer it to the board with SCP.
+From the App directory, run python3 tools/prepare-ai-sketch.py --toolchain-archive <path-on-board>
+as arduino to verify and stage the archive in the download cache.
+If downloading the board core or pulling the Docker base image fails, check the error and connectivity.
+If needed, temporarily forward my computer's existing proxy over Wi-Fi SSH for the affected download.
+Remove the forwarding and temporary proxy settings after installation.
+For Python downloads in China, keep any existing custom index. If needed, run from the App directory:
+python3 tools/configure-ai-python.py --index-url https://pypi.tuna.tsinghua.edu.cn/simple/
+From the App directory, run bash tools/install-ai-support.sh and then sudo bash tools/router-2m.sh.
+Verify the Router ExecStart uses 2000000 and check the default App, then run arduino-app-cli app start "$PWD".
+The first start may upload the STM32 sketch. Check the cockpit and port 9527's /api/status and /api/voice/status.
+If ToF is connected, poll port 9527's /api/tof/status and verify state=ranging, fresh=true,
+an advancing seq and valid_zones > 0. HTTP 200 alone only verifies access. If the status is
+unexpected, compare it with python /app/tools/read-tof.py --seconds 4 inside the App container
+to distinguish backend, Bridge and sensor failures. Record an absent sensor as not installed
+when confirmed, or mark the hardware check as pending.
+If servos are not wired yet, mark feedback as pending. On failure, inspect logs. Report the actual results.
+After the App installs and starts successfully, point me back to this README for steps 5–8.
+Guide me through configuring and numbering the servos, assembling XGO Duck, calibrating the IMU
+and servos, checking Default pose, then binding an account and selecting an agent. If I have already
+completed any of these steps, point me to the next unfinished one.
+```
+
+## 5. Configure and number the servos
+
+[Follow the official guide to configure and number the servos](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+
+## 6. Assemble XGO Duck
+
+[Follow the official illustrated assembly guide](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
+
+[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
+
+<img src="docs/images/wiring/overview-en.png" alt="XGO Duck physical wiring diagram for the UNO Q, carrier, camera, ToF module, speakers and fill light" width="960">
+
+## 7. IMU and servo calibration
+
+Open `http://<board-ip>:9527/` and check that **15/15** servos are online. Support Duck on a table or in a calibration stand, then click **Calibration** in the top bar. Selecting a calibration method releases the servos.
+
+### Calibrate the servos
+
+- **Unified calibration:** Follow the four photos to position Duck. Click **Complete calibration**, then set ID 30 separately with the neck parallel to the body.
+- **Calibrate individually:** Use the ID photos and pose diagrams to set the center of each joint. Wait for **Center set** before proceeding to the next joint. [Joint diagrams and controls](docs/calibration-guide.md)
+
+### Calibrate the IMU
+
+1. After the servo calibration, click **Unload all**. Follow the image in **IMU calibration** at the bottom of the page. Support Duck with the UNO Q upright, the battery connector pointing up, and the board’s bottom edge against a level table.
+2. Click **Calibrate IMU** and hold still for about **1.5 seconds**. When **IMU calibration saved** appears, click **Exit**. The app saves the accelerometer offsets and gyro bias and loads them on restart. [IMU calibration details](docs/imu-calibration.md)
+
+### Check Default pose on the Control page
+
+After both calibrations, place Duck on a level surface and support it. Return to **Control** and click **Default pose** under **Mode**. Once the servos engage and Duck stands steadily, compare its neck, legs and feet with the photo below.
+
+<img src="docs/images/calibration/default-pose-en.png" alt="Default pose button and enabled status in the Control page Mode section" width="920">
+
+Default standing pose for Duck with roller feet and standard feet.
+
+<img src="docs/images/default-pose-reference.jpg" alt="Two assembled XGO Ducks in the default standing pose, one with roller feet and one with standard feet" width="900">
+
+## 8. Bind an account and select an agent
+
+1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
+
+   <img src="docs/images/cockpit-live-en.png" alt="Cockpit with live camera video, ToF readings, and Link AI in the top bar" width="1000">
+
+2. Open the platform where you want to bind Duck. To choose the region in advance, open **Link AI** in the cockpit and tap **China** or **International**. This saves the choice and reconnects voice.
+
+   | Device region | Wake word | Binding and agent platform |
+   | --- | --- | --- |
+   | `global` International | **Hey Ducky** | [agent.luwudynamics.ai](https://agent.luwudynamics.ai/) |
+   | `cn` China | **小鸭小鸭** (xiǎo yā, xiǎo yā) | [agent.xgorobot.com/devices](https://agent.xgorobot.com/devices) |
+
+3. Sign in, open **Devices → Add device**, follow the Bluetooth prompts, and select the device beginning with `XGO-Duck`. Complete Wi-Fi setup and account binding, then select an agent.
+4. Return to **Link AI** to check the device server, binding and voice connection. Once voice is online, say the wake word shown for the selected region.
+
+<img src="docs/images/ai-binding-en.jpg" alt="Link AI shows Hey Ducky for the selected international region and 小鸭小鸭 for China" width="760">
+
+Web Bluetooth requires a compatible Chrome / Edge browser. On iPhone / iPad, add the device using the matching Mini Program or App:
+
+| International App | China WeChat Mini Program |
 | --- | --- |
-| 10–14 | Left leg |
-| 20–24 | Right leg |
-| 30–33 | Neck and head |
-| 34 | Mouth |
+| <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="150"> | <img src="docs/images/qr_miniprogram.png" alt="China WeChat Mini Program QR" width="150"> |
+| [Open the App download page](https://agent.luwudynamics.ai/download) | Scan with WeChat |
 
-### All-servo protection
+China and international accounts and bindings are separate. If no region is saved, Duck checks both services after connecting to Wi-Fi. It uses the service where it is bound, choosing China when both have a binding. A saved region takes precedence. Switching servers preserves conversation language, volume and motion settings. Bind separately when switching to another service for the first time. If the device belongs to another account, unbind it from that account first.
 
-Under **All-servo voltage / overcurrent protection**:
+If voice stays offline after binding, copy this prompt to an AI assistant.
 
-- Click **Enable** or **Disable** to change the protection switch.
-- Enter a current limit in amperes and click **Set protection current**. The field starts at **1.5 A**.
+```text
+Board IP: [fill in]. My service region: [China cn / International global].
+Read the cockpit binding status and /api/voice/status on port 9527. Check the region and voice connection.
+Tell me whether setup is waiting for Wi-Fi, binding or the voice service, and guide me to the next step.
+I will sign in, grant Bluetooth access, bind Duck and change regions myself.
+```
 
-These are separate actions and apply to **all connected servos**. No scan or ID selection is needed.
+### Startup sounds
 
-Leg and head servo KP/KD values are preserved at startup, on arming, and through calibration. The app only applies fixed temporary gains to mouth servo **ID 34**: KP **10**, KD **20**. Explicit **Set KpKd** operations still update the selected servo. Previously applied temporary values are not automatically restored by this change; power-cycle the servo supply to reload its saved power-on values.
+Later power-ups detect USB audio and video and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
 
-## Calibration
-
-1. Open **Calibration**. All servos unload automatically.
-2. Turn one joint by hand to its mechanical center, then click **Set center & hold** for that joint. It holds its center while the others stay unloaded.
-3. Repeat for every joint.
-4. Click **Unload all** to release the joints for another adjustment, or **Exit** to return to Control. Exiting unloads the servos.
-
-## Control
-
-| Button | What it does |
-| --- | --- |
-| **Inference only** | Runs the policies with motor torque off. |
-| **Default pose** | Holds the selected walking model's default pose. |
-| **Walk / get up** | Enables walking and automatic recovery after a fall. |
-| **Pick** | Plays one pick action, then returns to the selected walking model. |
-| **Roulade** | Plays one roll action, then returns to the selected walking model. |
-| **Sit / Stand** | Sit enables the sit/stand policy and holds the seated position. Stand runs the standing command for 1 s, then returns to walking/recovery. |
-| **left_kick / right_kick** | Runs the selected kick policy for 0.4 s with velocity and pose commands at zero, then returns to walking. Kick uses its own scale 0.8 and leg/head α 0. A fall cancels the kick and enters normal recovery. |
-| **Zero motion** | Stops travel while keeping the current control mode. |
-| **Torque off** | Unloads the motors. |
-
-Use the left pad to move and the right pad to turn. Release a pad to return it to center. Use **Head and mouth** to adjust the head and mouth. **Pick** and **Roulade** are available while walking upright.
-
-Pick, Roulade, Sit/Stand and both kicks have a 0.2 s preparation stage. The
-current walking policy continues at 50 Hz while spare control-cycle budget
-warms only the requested model. Stand keeps the seated policy running during
-preparation. A conflicting action is rejected; Torque off, mode changes and
-fall recovery cancel preparation immediately. An action that cannot prepare
-within 0.5 s is cancelled. No dummy warmup runs in the active action's start
-path. Roulade, kicks and the stand interval start their duration after the first
-actual action target is submitted to Bridge; an arming command does not start
-the action clock. Pick advances its phase only after submitting an action.
-
-`/api/status` includes `roulade.timing` for the current or most recent action:
-submitted frames, actual command rate, startup delay, inference/lock/step time,
-intervals and estimated missed 20 ms periods. `/api/roulade-timing` also returns
-the bounded per-frame samples. These measurements stay in memory and do not
-add disk writes or a second inference pass to the control loop. The main Policy
-frequency remains its existing five-second average.
-
-Leaving the Control page stops travel but keeps motor torque enabled. Use **Torque off** when you want the robot to rest.
-
-Sit/Stand uses `python/xgoduck_sitstand.onnx` with the ordinary action settings (default scale 1.0). Stand runs for 1 s before returning to walking/recovery. The policy command is `[1, 0, 0]` while sitting and `[0, 0, 0]` while standing. Walk, Pick, Roulade and Skating mode are disabled during sit/stand; motion controls cannot replace the sit/stand command. The standing interval also disables the Sit/Stand button. Changing to another control mode cancels sit/stand; Torque off remains available throughout.
-
-A fall cancels sit/stand and enters the existing recovery flow (default-pose hold, then get-up). After recovery the selected walking policy resumes; the robot does not sit down again automatically.
-
-`left_kick` and `right_kick` use `python/xgoduck_ballkick_left.onnx` and `python/xgoduck_ballkick_right.onnx`, respectively, and are available while walking upright, including an unloaded preview in Inference only. The velocity, head and body command observations are all zero throughout each 0.4 s action; browser motion and pose inputs cannot override them. At 0.4 s the controller returns to the selected walking policy. Both kick policies use fixed action scale 0.8 and leg/head α 0. The Action settings sliders and Roulade smoothing do not change kick settings; kick settings do not change the other policies. Other action buttons and Skating mode are unavailable during the kick. Torque off and other control modes can cancel it. The existing fall detection stays active and recovery returns to the selected walking policy without resuming the kick.
-
-## Skating
-
-Use this mode with the roller-equipped robot.
-
-1. Turn **Skating mode** **On**.
-2. Click **Default pose** to check the stance, then **Walk / get up** to start.
-3. Use the left pad for forward/backward motion and the right pad to turn. Sideways motion is disabled.
-4. Click **Zero motion** to stop travel, or **Torque off** to unload the motors for a rest.
-
-Skating uses `python/xgoduck_roller.onnx`. Its leg home is fixed in `ROLLER_LEG_DEFAULT_DEG` in `python/rl_core.py`:
-
-| Joint | Left leg (IDs 10–14) | Right leg (IDs 20–24) |
+| Order | Meaning | Example |
 | --- | --- | --- |
-| hip_yaw | 0° | 0° |
-| hip_roll | +2° | −2° |
-| hip_pitch | −8.5° | +8.5° |
-| knee | +8.5° | −8.5° |
-| ankle | +17° | −17° |
+| 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
+| 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
 
-Default pose, relative joint observations and action offsets use this same home. Neck/head values continue to come from the model's `default_joint_pos` metadata. Replacing the skating model does not change the fixed leg home; restart the app after changing the model or the constants.
+If Duck is unpaired, it says “Please open the Duck cockpit to pair your device” three times after the network sound.
 
-Recovery uses the get-up policy and then returns to skating. Turn **Skating mode** **Off** to select ordinary walking. Switching modes clears the motion controls; Skating mode starts **Off** after an app restart.
+After the voice service sound, say the wake word shown under **Link AI → Automatic startup & wake**. Speak after Duck’s wake-up call. You can play the startup examples there on your phone or computer. The actual startup sounds play through Duck’s speaker.
 
-**Heading hold**, next to **Zero motion**, works in both walking and skating. Heading starts at zero once tilt is within 5° and accumulates across full turns. Translation without a yaw command locks the current heading; stopping or turning releases it, and the next translation locks a new heading. Walking uses Kp 1.5 and skating uses Kp 1.0, with a 3° deadband and compensation limited to ±0.3 rad/s. Switching modes resets the heading estimate. Turning the switch off disables compensation in both modes.
+## Everyday use
 
-| Joystick range | Ordinary walking | Skating |
-| --- | --- | --- |
-| Forward / backward | -0.2 to +0.2 | -0.4 to +0.4 |
-| Sideways | ±0.3 | 0 |
-| Turning | ±1.0 | ±0.45 |
+- **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
+- **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
+- The cockpit shows two rows of actions and a row of seven duck calls. Tap a call to play it through Duck’s speaker. On a phone, rotate to landscape to use these controls.
+- On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
+- Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
+- **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
+- On power-up, Duck tries USB Host for up to 5 seconds of device detection. It keeps Host if a USB camera or audio device is detected and switches to Device otherwise. For accessories plugged in after boot, use the **USB Host** switch at the top of the cockpit over Wi-Fi after stopping Duck. Switching interrupts the current USB connection.
+- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward travel slows within 15 cm and stops at 10 cm by default. If ToF is absent or offline, you can issue a new forward command without distance-based avoidance. Stale or invalid readings while the sensor reports ranging still pause forward travel. [Avoidance settings](docs/forward-avoidance.md)
 
-Skating uses the same ±0.45 rad/s limit for the joystick, Q/E keys and command API. The API rejects skating commands outside this range.
+## FAQ
 
-Joystick commands use `0.75 × previous + 0.25 × target` smoothing on all motion axes.
+### 1. Duck shakes or walks unsteadily
 
-**Heat warning:** Holding a toe-out stance for long periods heats up the roll motors. Take regular breaks to let them cool down. A yellow reminder appears above the motion controls while Skating mode is on. Use a level, clear surface and keep **Torque off** within reach when trying a new model or setting.
+1. Stop moving, support Duck, and release servo torque. Check each servo's ID, mounting position, and order against the diagrams on the Calibration page. Check the servo horns and retaining screws for looseness.
+2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos.
+3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
 
-## Adjusting the sliders
-
-The Action settings sliders follow the Skating mode switch. Each group keeps its own settings until the app restarts. Kick has separate fixed settings: scale 0.8, leg α 0 and head α 0.
-
-| Default setting | Ordinary walking / other models | Skating |
-| --- | --- | --- |
-| Action scale | 1.0 | 0.8 |
-| Leg α | 0.35 | 0.4 |
-| Head α | 0.45 | 0.5 |
-
-- **Action scale** changes movement amplitude around the default pose. **0** holds the default pose; **1** uses the original amplitude.
-- Higher **Leg α** or **Head α** gives smoother, slower responses.
-- Under **IMU filtering**, higher **Angular velocity α** gives more smoothing; higher **Gravity projection τ** slows accelerometer correction.
-
-Release a slider to apply its value. Restarting the app restores defaults. Get-up and Pick use the ordinary settings; Roulade uses temporary leg/head α 0.05 while it runs, then restores the previous values. Its scale follows the ordinary Action scale setting.
-
-## Standing IMU calibration
-
-Open **Calibration** and find **IMU calibration** above **Joints**. Hold the Arduino
-board upright with the battery connector pointing straight up and its bottom edge
-firmly against a level tabletop. Click **Calibrate IMU** and keep the board still
-for 1.5 seconds. Walking and other actions are unavailable while
-sampling; **Exit** cancels sampling and preserves the previous calibration.
-The button never enables torque by itself.
-
-The saved accelerometer offset is `[0, 0, -9.8] - mean(raw_acc)` in m/s².
-Each subsequent sample uses `raw_acc + offset`; for example, `[1, 2, -9]`
-produces the fixed offset `[-1, -2, -0.8]`. Gyro correction subtracts the
-stationary gyro mean. No rotation or scale correction is applied. The same correction feeds
-policy observations, fall/get-up detection and telemetry. Corrected `acc`/`gyro`
-are displayed with separate `acc raw`/`gyro raw` lines; the API's existing `acc`
-and `gyro` fields remain raw and `acc_corrected`/`gyro_corrected` are added.
-
-At least 90 unique MCU IMU samples over 1.5 seconds are required. Movement,
-interrupted feedback and a reference more than 45° from upright are rejected.
-Failed or cancelled sampling retains the previous record. Successful results
-are saved atomically in `.cache/imu-calibration.json`, loaded on restart, and the
-previous record is backed up. **Reset IMU calibration** disables the saved correction and
-keeps a backup. No MCU flash is needed.
-
-Saved records use version 2. Earlier rotation/scale records remain backed up but
-are not applied; run the 1.5-second calibration again to obtain additive offsets.
-
-## Supply voltage
-
-The Feedback card displays servo supply voltage, refreshed about once per second.
-The STM32 includes register `0x3E` (0.1 V per unit) in its existing position/speed
-read, so voltage sampling adds one response byte per servo and no extra bus query.
-A separate 29-byte `duck_voltage` report preserves the 240-byte motion-state ABI.
-The display uses the median of valid servo readings; missing or expired readings
-show a dash. Per-servo values are available as `servo_voltage_v` in `/api/status`.
-
-## If something is not working
-
-- **The page looks outdated:** press **Ctrl+F5** to reload it.
-- **A servo is missing:** check power, wiring, and its assigned ID. Use **Scan all IDs** to find it.
-- **There is no Bridge feedback:** stop the app in App Lab, run `sudo systemctl restart arduino-router` on the Uno Q, then click **Run** again.
-- The system's Router stop script also resets the STM32. After restarting that service, run the app again to reload its firmware and refresh the container's socket mount. Bridge retries recover communication interruptions while the MCU app remains running.
-- **Startup tries to download an already installed toolchain:** run `python3 tools/reuse-toolchain.py` on the Uno Q and try again.
-
-## Project files
-
-`assets/` contains the web interface, `python/` the controller and models, `sketch/` the Uno Q firmware, and `tools/` the installation helpers.
-
-See [Program architecture](docs/architecture.md) for the block diagram, thread timing, Bridge recovery, and validation results.
-
-Build caches, local validation scripts, logs, and temporary backups are excluded from the distributed app. ONNX policy files are required runtime assets and remain included.
-
-## Sources and licensing
-
-See [Third-party sources and notices](THIRD_PARTY_NOTICES.md) for upstream attribution and the original third-party license texts. An overall license for this repository and its ONNX policies has not been declared.
+Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

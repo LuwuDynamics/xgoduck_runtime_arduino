@@ -1,6 +1,6 @@
-name: XGO Duck
-description: XGO Duck on Arduino Uno Q, based on Microduck. Linux runs ONNX policies at 50 Hz; the STM32 drives 15 servos and a QMI8658 at 100 Hz.
+name: XGO Duck AI
+description: XGO Duck with independent motion and AI Chat Pro processes, the matching stable web cockpit and automatic USB audio/video detection at boot.
 icon: 🦆
-ports: [9527]
+ports: [9527, 9528]
 bricks:
   - arduino:web_ui

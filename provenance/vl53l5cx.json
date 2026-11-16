@@ -1,0 +1,47 @@
+{
+  "upstream": "https://github.com/sparkfun/SparkFun_VL53L5CX_Arduino_Library",
+  "commit": "248607060e49d18bdf064c6aa411ffe515993d16",
+  "version": "1.0.3",
+  "folder": "sketch/src/vl53l5cx",
+  "original_sha256": {
+    "SparkFun_VL53L5CX_Library.cpp": "4e3ae7ebea07a0685f2334564962680e1a4190ff5cd179bdbbd3ba7490255f18",
+    "SparkFun_VL53L5CX_IO.cpp": "767bc147f4a086f00fa3e96f9faba5ef83493cdd76c3de062ef85fa6ba0f34eb",
+    "vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
+    "vl53l5cx_api.cpp": "147aa63b069446f2b54b6ecff224b325cda205d2e547528e62fd2e3ecfaba30b",
+    "vl53l5cx_buffers.h": "05a61b0e14cf55d43aed7c02a819e542b03452b6bd713e71216cdd5844b8b4bf",
+    "vl53l5cx_plugin_detection_thresholds.cpp": "a842e0e372679000e6ccfea8b8c943e610f6d33350c56f613de1272550f9b3c8",
+    "SparkFun_VL53L5CX_Library_Constants.h": "e2c2fbec9aa35fe96fdc89350ecda76dd33bb0049b4faef977561e66e79c019e",
+    "vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
+    "vl53l5cx_plugin_motion_indicator.cpp": "dbcee07fc4da31c2fb88866c34610cf39bdf5183cff26edd9186922be6a3fdd6",
+    "SparkFun_VL53L5CX_IO.h": "c3b6111d6922bba301c80a4426db47b7ee71ff1a1db110283201062c6427ec70",
+    "platform.cpp": "dbc25c1ba97365da752bf04aad552deea4e85cb2087d1abc382c9379d701d43b",
+    "vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1",
+    "SparkFun_VL53L5CX_Library.h": "5bb3441399c35e7b08086b82ba66b11c81898dfefd498a7f40a24f2e6d75dd4e",
+    "vl53l5cx_plugin_detection_thresholds.h": "30f8753650c247ced52cacb08e96ec4d385b0e67e60eee4370c9c1568cb61b18",
+    "vl53l5cx_api.h": "eea4c04f95d7688ccda53045ce886491d839db7fd4e20f70ebb78c7327821b57",
+    "platform.h": "c061451cdd498746659cbb8e5519a930b5ab77a00298295d4e83f0ac63ce09d9"
+  },
+  "patches": [
+    "Bound ULD command and stop polling loops; return actual timeout/MCU failure.",
+    "Propagate I2C short reads as errors and explicitly address each read chunk."
+  ],
+  "sha256_packaged": {
+    "LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
+    "SparkFun_VL53L5CX_Library.cpp": "4e3ae7ebea07a0685f2334564962680e1a4190ff5cd179bdbbd3ba7490255f18",
+    "SparkFun_VL53L5CX_IO.cpp": "9c7668b87766eac634d1b008e46e4528726144ffa26923838799ad3af17b43f0",
+    "vl53l5cx_plugin_motion_indicator.h": "e36716199bd4df89a81358b7e4830772bb44967b35f2efea2a11abf6f5f4a2ae",
+    "vl53l5cx_api.cpp": "b35d49835a6953f1ed99819c0ae8d16c1c2292fc68288d7fa84e0adf4f66f3f8",
+    "vl53l5cx_buffers.h": "05a61b0e14cf55d43aed7c02a819e542b03452b6bd713e71216cdd5844b8b4bf",
+    "vl53l5cx_plugin_detection_thresholds.cpp": "a842e0e372679000e6ccfea8b8c943e610f6d33350c56f613de1272550f9b3c8",
+    "SparkFun_VL53L5CX_Library_Constants.h": "e2c2fbec9aa35fe96fdc89350ecda76dd33bb0049b4faef977561e66e79c019e",
+    "vl53l5cx_plugin_xtalk.cpp": "060fce0b029e0c27045932cfa21ae56200fb477287cf8ab1ae3f5b2db9092b0f",
+    "vl53l5cx_plugin_motion_indicator.cpp": "dbcee07fc4da31c2fb88866c34610cf39bdf5183cff26edd9186922be6a3fdd6",
+    "SparkFun_VL53L5CX_IO.h": "c3b6111d6922bba301c80a4426db47b7ee71ff1a1db110283201062c6427ec70",
+    "platform.cpp": "dbc25c1ba97365da752bf04aad552deea4e85cb2087d1abc382c9379d701d43b",
+    "vl53l5cx_plugin_xtalk.h": "76e1c03c777a97a24e8e5271b0368eabd51c79708fc3deddcfe482bfc8a5f6c1",
+    "SparkFun_VL53L5CX_Library.h": "5bb3441399c35e7b08086b82ba66b11c81898dfefd498a7f40a24f2e6d75dd4e",
+    "vl53l5cx_plugin_detection_thresholds.h": "30f8753650c247ced52cacb08e96ec4d385b0e67e60eee4370c9c1568cb61b18",
+    "vl53l5cx_api.h": "eea4c04f95d7688ccda53045ce886491d839db7fd4e20f70ebb78c7327821b57",
+    "platform.h": "c061451cdd498746659cbb8e5519a930b5ab77a00298295d4e83f0ac63ce09d9"
+  }
+}

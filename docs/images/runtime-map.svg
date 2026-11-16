@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="430" viewBox="0 0 1100 430" role="img" aria-labelledby="title desc">
+  <title id="title">XGO Duck Uno Q data path</title>
+  <desc id="desc">Browser connects to Uno Q Linux web UI. Linux policy sends 80-byte duck commands over the Bridge to STM32. STM32 sends 240-byte state back, reads QMI8658 IMU and drives 15 servos.</desc>
+  <defs><marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#0969da"/></marker><marker id="back" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto"><path d="M0 0L10 4L0 8Z" fill="#8250df"/></marker></defs>
+  <rect width="1100" height="430" fill="#ffffff"/>
+  <text x="35" y="42" font-family="Arial,sans-serif" font-size="26" font-weight="700" fill="#24292f">Uno Q runtime · signal and control path</text>
+  <text x="35" y="68" font-family="Arial,sans-serif" font-size="15" fill="#57606a">Configured rates and payload sizes from this repository; not measured latency</text>
+  <g font-family="Arial,sans-serif">
+    <rect x="35" y="105" width="260" height="125" rx="8" fill="#f6f8fa" stroke="#afb8c1"/><text x="53" y="137" font-size="19" font-weight="700" fill="#24292f">Linux host / 主机</text><text x="53" y="168" font-size="16" fill="#57606a">ONNX policy · 50 Hz</text><text x="53" y="196" font-size="16" fill="#57606a">Latest state → 14 actions</text>
+    <rect x="420" y="105" width="260" height="125" rx="8" fill="#f6f8fa" stroke="#afb8c1"/><text x="438" y="137" font-size="19" font-weight="700" fill="#24292f">STM32 / 控制器</text><text x="438" y="168" font-size="16" fill="#57606a">Bus loop · 100 Hz</text><text x="438" y="196" font-size="16" fill="#57606a">Bridge · 2 Mbps</text>
+    <rect x="805" y="105" width="260" height="125" rx="8" fill="#f6f8fa" stroke="#afb8c1"/><text x="823" y="137" font-size="19" font-weight="700" fill="#24292f">Servo bus / 舵机总线</text><text x="823" y="168" font-size="16" fill="#57606a">Serial1 · 1 Mbps</text><text x="823" y="196" font-size="16" fill="#57606a">15 × Feetech 1910</text>
+    <rect x="35" y="302" width="260" height="90" rx="8" fill="#f6f8fa" stroke="#afb8c1"/><text x="53" y="337" font-size="19" font-weight="700" fill="#24292f">Browser / 浏览器</text><text x="53" y="367" font-size="16" fill="#57606a">Web UI · :9527</text>
+    <rect x="805" y="302" width="260" height="90" rx="8" fill="#f6f8fa" stroke="#afb8c1"/><text x="823" y="337" font-size="19" font-weight="700" fill="#24292f">QMI8658 IMU</text><text x="823" y="367" font-size="16" fill="#57606a">Wire · 400 kHz</text>
+    <path d="M295 145H411" stroke="#0969da" stroke-width="3" marker-end="url(#arrow)"/><text x="353" y="128" font-size="13" fill="#0969da" text-anchor="middle">command · 80 B</text>
+    <path d="M420 208H304" stroke="#8250df" stroke-width="3" marker-end="url(#back)"/><text x="358" y="225" font-size="13" fill="#8250df" text-anchor="middle">state · 240 B</text>
+    <path d="M680 166H796" stroke="#0969da" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M165 302V239" stroke="#0969da" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M805 346H745V255H650V239" stroke="#8250df" stroke-width="3" fill="none" marker-end="url(#back)"/><text x="741" y="283" font-size="13" fill="#8250df" text-anchor="end">IMU samples</text>
+  </g>
+</svg>

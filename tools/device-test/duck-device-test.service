@@ -1,0 +1,15 @@
+[Unit]
+Description=XGO Duck USB camera and audio test page
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/duck-device-test
+ExecStart=/usr/bin/python3 %h/duck-device-test/server.py --port 9528
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

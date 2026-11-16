@@ -1,0 +1,275 @@
+:root{color-scheme:dark;font:14px/1.45 Inter,system-ui,-apple-system,sans-serif;color:#f0f4f4;background:#080f14;--mint:#9be6bf;--line:#ffffff25}*{box-sizing:border-box}body{margin:0;overscroll-behavior:none}button,input,a{-webkit-tap-highlight-color:transparent}button,a{touch-action:manipulation}button{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--line);border-radius:12px;background:#1d2b30;padding:10px 15px;min-height:44px}button:disabled{opacity:.4;cursor:not-allowed}button:focus-visible,a:focus-visible{outline:2px solid var(--mint);outline-offset:3px}[hidden]{display:none!important}#cockpit{height:100vh;height:100dvh;position:relative;overflow:hidden;background:radial-gradient(ellipse at 68% 37%,#1b3836 0,transparent 55%),#0a141b}#feed{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#040808}#feed.fill{object-fit:cover}.shade{position:absolute;inset:0;pointer-events:none;background:linear-gradient(#030808b8,transparent 25%,transparent 52%,#030808d9)}.hud{position:absolute;left:0;right:0;z-index:2}.top{top:0;padding:max(18px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) 14px max(24px,env(safe-area-inset-left));display:flex;align-items:center;gap:22px}.brand{display:flex;gap:9px;align-items:center;color:#fff;text-decoration:none;font-size:15px;font-weight:800;letter-spacing:.16em}.brand small{display:block;font-size:8px;letter-spacing:.23em;color:#b2c4c8}.duck-mark{border:1px solid #a8e6cb;border-radius:11px;width:35px;height:35px;display:grid;place-items:center;font-size:22px;color:var(--mint);position:relative}.duck-mark span{font-size:13px;position:absolute;right:1px;top:0}.status-row{display:flex;gap:8px;align-items:center;flex:1}.chip{display:inline-flex;align-items:center;gap:7px;padding:6px 10px;min-height:30px;background:#0b171cc7;border:1px solid var(--line);border-radius:30px;font-size:11px;white-space:nowrap}.chip i{display:block;width:6px;height:6px;background:#aab6ba;border-radius:50%}.chip.online i{background:var(--mint);box-shadow:0 0 10px #8be6b680}.top-actions{display:flex;gap:7px}.icon-button{width:42px;height:42px;min-height:42px;padding:0;background:#0d1b23b8;border:1px solid var(--line);border-radius:50%;font-size:23px;display:grid;place-items:center;backdrop-filter:blur(12px)}.welcome{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 24px 175px;text-align:center}.eyebrow{font-size:9px;letter-spacing:.17em;font-weight:650;color:#b5c7ca}.welcome .eyebrow{color:var(--mint)}h1{font-size:clamp(30px,4vw,52px);line-height:1.08;font-weight:550;letter-spacing:-.055em;margin:16px 0 12px}p{color:#b6c5cc}.welcome p{margin:0 0 20px;font-size:13px}.primary{background:var(--mint);color:#0c2820;border:0;font-weight:650;min-width:170px;display:flex;align-items:center;justify-content:space-between;gap:30px}.welcome-note{font-size:10px;color:#8da5aa;margin-top:13px}.side-tools{position:absolute;z-index:2;right:max(24px,env(safe-area-inset-right));top:50%;transform:translateY(-50%);display:grid;gap:9px}.reticle{pointer-events:none;position:absolute;left:50%;top:46%;width:40px;height:28px;transform:translate(-50%,-50%);opacity:.4}.reticle i{position:absolute;width:9px;height:8px;border:1px solid #fff}.reticle i:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}.reticle i:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}.reticle i:nth-child(3){bottom:0;left:0;border-top:0;border-right:0}.reticle i:nth-child(4){bottom:0;right:0;border-top:0;border-left:0}.bottom{bottom:0;display:flex;justify-content:space-between;align-items:end;gap:25px;padding:20px max(24px,env(safe-area-inset-right)) max(20px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left))}.flight-state{display:flex;flex-direction:column;gap:3px}.flight-state strong{font-size:18px;font-weight:550}.flight-state>span:last-of-type{font:10px/1.4 ui-monospace,monospace;color:#bcc9ce}.stop{background:#3b1d27d9;border-color:#c178815e;color:#ffaeb4;font-size:12px;margin-top:12px;min-height:38px;padding:8px 14px;align-self:start}.intercom{width:440px;max-width:64vw}.intercom-heading{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.text-button{padding:0 4px;min-height:24px;border:0;background:none;font-size:11px;color:var(--mint)}.talk-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.talk-button{display:flex;align-items:center;text-align:left;gap:12px;border:1px solid #aac8bd40;background:#132a29e8;backdrop-filter:blur(15px);padding:13px 16px;min-height:67px;touch-action:none;user-select:none;-webkit-user-select:none}.talk-button .button-icon{color:var(--mint);font-size:26px}.talk-button b{display:block;font-size:13px;font-weight:650}.talk-button small{display:block;color:#a2b7b9;font-size:10px;margin-top:3px}.talk-button.secondary{background:#10222ee8;border-color:#789db63d}.talk-button.active{background:var(--mint);color:#0b2a20;border-color:var(--mint)}.talk-button.active small,.talk-button.active .button-icon{color:#255740}.voice-line{display:flex;align-items:center;gap:12px;min-height:24px;margin-top:5px}.voice-line>span{font-size:10px;color:#aabcc0;flex:1}.toast{position:absolute;z-index:8;left:50%;top:88px;transform:translateX(-50%);width:max-content;max-width:85%;border:1px solid #b8d5c444;border-radius:10px;background:#172a2ef5;padding:11px 18px;font-size:12px;box-shadow:0 8px 35px #0005}#restoreHud{position:absolute;bottom:max(18px,env(safe-area-inset-bottom));right:18px;background:#14202ca8;border-radius:24px;font-size:12px}body.clean .hud,body.clean .side-tools,body.clean .reticle{display:none}
+dialog{border:1px solid #34444e;background:#0e1821;color:#eef4f5;border-radius:20px;padding:0;width:min(860px,calc(100vw - 32px));max-width:none;height:min(800px,calc(100dvh - 28px));max-height:none;box-shadow:0 30px 100px #0009;overflow:hidden}dialog::backdrop{background:#0008;backdrop-filter:blur(8px)}.dialog-head{display:flex;justify-content:space-between;align-items:center;padding:18px 24px 12px}.dialog-head h2{margin:2px 0 0;font-size:23px;font-weight:550}.settings-tabs{display:flex;gap:6px;padding:0 24px 12px;border-bottom:1px solid #ffffff15;overflow-x:auto}.settings-tabs button{background:transparent;border:0;color:#afc0ca;white-space:nowrap;font-size:12px}.settings-tabs button[aria-current]{background:#254039;color:#b8f3d3}.quick-panel{overflow:auto;height:calc(100% - 135px);padding:0 24px 24px;overscroll-behavior:contain}.quick-panel section{border-bottom:1px solid #ffffff15;padding:18px 0}.quick-panel h3{font-size:15px;margin:0 0 12px}.quick-panel p{font-size:12px;margin:10px 0}.quick-panel button,.file-button{font-size:12px;margin:7px 5px 0 0}.setting-row{display:flex;justify-content:space-between;font-size:13px}.quick-panel input[type=range]{display:block;width:100%;accent-color:var(--mint);margin:14px 0}.copy-field{display:block;width:100%;padding:10px;border:1px solid #3f535a;border-radius:8px;background:#081219;color:var(--mint);font:11px ui-monospace,monospace}.muted{color:#8ea2af!important}.file-button{position:relative;display:inline-block;border:1px solid var(--line);padding:12px 15px;border-radius:12px;background:#1d2b30;overflow:hidden;cursor:pointer}.file-button input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}.desktop-link{color:var(--mint);font-size:13px}#framePanel{height:calc(100% - 135px);display:flex;flex-direction:column}.frame-hint{font-size:11px;padding:8px 24px;margin:0;background:#13232c}iframe{width:100%;flex:1;border:0;min-height:0;background:#0b121a}
+@media(orientation:landscape) and (max-height:500px){.top{padding-top:max(10px,env(safe-area-inset-top));gap:16px}.bottom{padding-top:8px;padding-bottom:max(10px,env(safe-area-inset-bottom))}.welcome{padding-top:65px;padding-bottom:150px}.welcome h1{font-size:29px;margin:8px 0}.welcome p{margin-bottom:10px}.welcome-note{display:none}.welcome .eyebrow{font-size:8px}.talk-button{min-height:56px;padding:9px 12px}.intercom{width:395px}.stop{margin-top:7px}.side-tools{gap:6px;top:44%}.side-tools .icon-button{width:35px;height:35px;min-height:35px;font-size:20px}.toast{top:62px}dialog{height:calc(100dvh - 12px)}.dialog-head{padding:10px 20px 5px}.dialog-head h2{font-size:18px}.dialog-head .eyebrow{display:none}.settings-tabs{padding:0 20px 5px}.settings-tabs button{min-height:36px}.quick-panel,#framePanel{height:calc(100% - 101px)}}
+@media(orientation:portrait){.top{flex-wrap:wrap;padding:20px 18px;gap:12px}.brand{flex:1}.top-actions{order:2}.status-row{order:3;flex-basis:100%}.welcome{padding:125px 28px 260px}.welcome h1{font-size:40px}.welcome p{max-width:250px}.bottom{flex-direction:column;align-items:stretch;padding:18px;gap:16px}.flight-state{display:grid;grid-template-columns:1fr auto;column-gap:15px}.flight-state .eyebrow{grid-column:1}.flight-state strong{grid-column:1}.flight-state>span:last-of-type{grid-column:1}.flight-state .stop{grid-column:2;grid-row:1/4;align-self:center;margin:0}.intercom{max-width:none;width:100%}.side-tools{right:18px;top:43%}.side-tools .icon-button{width:37px;height:37px;min-height:37px}.reticle{top:42%}.talk-button{padding:12px;gap:9px}.talk-button small{font-size:9px}dialog{width:calc(100vw - 16px)}.dialog-head,.settings-tabs{padding-left:16px;padding-right:16px}.quick-panel{padding-left:16px;padding-right:16px}}
+
+/* Fullscreen follows the expanded viewport, including after browser chrome hides. */
+html:fullscreen,html:-webkit-full-screen{width:100%;height:100%;overflow:hidden}
+html:fullscreen #cockpit,html:-webkit-full-screen #cockpit{height:100vh;height:100dvh;width:100%}
+.fullscreen-button{display:flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:0 12px;border-radius:22px;background:#0d1b23e8;font-size:11px;white-space:nowrap}
+.fullscreen-button>span:first-child{font-size:23px}
+.fullscreen-button[aria-pressed=true]{border-color:var(--mint);color:var(--mint)}
+
+/* Camera and light controls remain visible while the video is running. */
+.top{flex-wrap:wrap;row-gap:12px}.device-controls{display:flex;flex-basis:100%;align-items:center;gap:12px 22px;flex-wrap:wrap}.control-group{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.control-group button{min-height:40px;padding:8px 13px;font-size:12px;background:#0d1b23e8;white-space:nowrap}.control-group .camera-on{background:var(--mint);color:#0c2820;border-color:var(--mint);font-weight:650}.control-group button[aria-pressed=true]{border-color:var(--mint);color:var(--mint)}.control-state{font-size:11px;line-height:1.5;color:#c2d4d1;max-width:300px}.language-button{border-radius:22px;min-height:42px;padding:0 12px;font-size:12px;background:#0d1b23e8;white-space:nowrap}.listen-only{width:100%;min-height:64px;touch-action:manipulation}.intercom{width:300px;max-width:48vw}.welcome{padding-top:150px;padding-bottom:160px}.welcome h1{max-width:620px}.welcome p{max-width:360px}html[lang=zh-CN] .eyebrow{letter-spacing:.12em}html[lang=zh-CN] h1{letter-spacing:-.025em}
+@media(orientation:portrait){.top{padding-top:max(16px,env(safe-area-inset-top));padding-left:max(18px,env(safe-area-inset-left));padding-right:max(18px,env(safe-area-inset-right));gap:10px}.brand{font-size:13px}.top-actions{gap:6px}.device-controls{order:4;gap:8px;align-items:start;flex-direction:column}.control-group button{min-height:38px;padding:7px 11px}.light-controls{gap:7px}.control-state{font-size:10px;max-width:130px}.intercom{width:100%;max-width:none}.welcome{padding-top:230px;padding-bottom:215px}.welcome h1{font-size:clamp(28px,8vw,40px)}.welcome-note{max-width:240px}.side-tools{top:48%}.bottom{gap:12px}.listen-only{min-height:62px}}
+@media(orientation:landscape) and (max-height:500px){.top{row-gap:7px;padding-bottom:6px}.device-controls{gap:8px 16px}.control-group button{min-height:32px;padding:5px 10px;font-size:11px}.control-state{font-size:10px;max-width:230px}.language-button{min-height:36px}.top-actions .icon-button,.top-actions .fullscreen-button{min-height:36px;height:36px}.intercom{width:285px}.listen-only{min-height:50px;padding:8px 12px}.welcome{padding-top:110px;padding-bottom:105px}.welcome h1{font-size:27px}.welcome .eyebrow{display:none}.welcome p{margin-bottom:0}.side-tools{top:48%}}
+@media(max-width:370px){.brand{gap:6px;font-size:11px}.duck-mark{width:30px;height:30px}.top-actions{gap:5px}.top-actions .icon-button{width:34px;height:36px;min-height:36px;font-size:20px}.fullscreen-button{padding:0 8px;font-size:10px;min-height:36px}.language-button{min-height:36px;padding:0 9px}.status-row{gap:5px}.chip{font-size:10px;padding:5px 8px}.control-state{max-width:100px}.welcome h1{font-size:29px}.welcome-note{display:none}}
+/* Measure the HUD so translated labels do not overlap the welcome content. */
+.welcome{top:var(--hud-top,150px);bottom:var(--hud-bottom,160px);padding:12px 48px}.welcome h1{margin:12px 0}.welcome p{margin:0}.welcome-note{margin-top:10px}@media(orientation:portrait) and (max-height:700px){.welcome .eyebrow,.welcome-note{display:none}.welcome h1{font-size:25px;margin:6px 0}.welcome p{font-size:11px;max-width:240px}.welcome{padding:8px 42px}.bottom{gap:8px;padding-bottom:max(12px,env(safe-area-inset-bottom))}.flight-state strong{font-size:16px}.listen-only{min-height:54px;padding:8px 12px}}
+
+/* Speaker check and microphone listening remain separate, explicit controls. */
+.intercom{width:600px;max-width:64vw}.intercom-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.intercom-actions .talk-button{min-width:0;min-height:72px;touch-action:manipulation}.intercom-actions .talk-button>span:last-child{min-width:0}.intercom-actions .talk-button small{line-height:1.45}.speaker-test{background:#17352ee8;border-color:#9be6bf55}
+@media(orientation:portrait){.intercom{width:100%;max-width:none}.intercom-actions .talk-button{padding:12px 10px;gap:8px}}
+@media(orientation:landscape) and (max-height:500px){.intercom{width:470px;max-width:68vw}.intercom-actions .talk-button{min-height:54px;padding:8px 10px;gap:8px}}
+
+.status-row{flex-wrap:wrap}
+#batteryVoltage.low-voltage{background:#3b1d27;border-color:#c17881;color:#ffc1c5}
+@media(max-width:370px){
+  .status-row{gap:4px}
+  .status-row .chip{padding-inline:6px}
+  #batteryLabel,#bindingRegionChip{display:none}
+}
+
+#cockpit{--stick-size:clamp(78px,min(20vw,23dvh),220px)}
+.bottom{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  grid-template-areas:"sticks sticks sticks" "robot actions audio";
+  align-items:end;
+  gap:12px 16px;
+  padding-top:8px;
+  pointer-events:none;
+}
+.flight-state{grid-area:robot;pointer-events:auto;justify-self:start}
+.flight-actions{display:flex;align-items:center;gap:10px;margin-top:12px}
+.flight-actions .stop{margin:0;white-space:nowrap}
+.flight-actions .desktop-link{display:inline-flex;align-items:center;min-height:38px;font-size:11px;white-space:nowrap}
+.motion-sticks{
+  grid-area:sticks;
+  display:flex;
+  justify-content:space-between;
+  padding-inline:clamp(0px,11vw,210px);
+}
+.motion-stick{display:grid;justify-items:center;gap:5px}
+.stick-pad{
+  position:relative;
+  display:grid;
+  place-items:center;
+  width:var(--stick-size);
+  aspect-ratio:1;
+  border:1px solid #a2ddce73;
+  border-radius:50%;
+  background:radial-gradient(circle,#10262c66 25%,#0a1922ce 100%);
+  box-shadow:inset 0 0 0 5px #d1f8e60c,0 7px 24px #0004;
+  color:#d6ebe6;
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+  pointer-events:auto;
+}
+.stick-pad[aria-disabled=true]{opacity:.55;cursor:default}
+.stick-pad.is-held{border-color:var(--mint);cursor:grabbing}
+.stick-arrow{position:absolute;font-size:clamp(12px,2vw,19px);line-height:1;pointer-events:none}
+.stick-arrow.up{top:12%;left:50%;transform:translateX(-50%)}
+.stick-arrow.down{bottom:12%;left:50%;transform:translateX(-50%)}
+.stick-arrow.left{left:12%;top:50%;transform:translateY(-50%)}
+.stick-arrow.right{right:12%;top:50%;transform:translateY(-50%)}
+.roller-pad .stick-arrow.left,.roller-pad .stick-arrow.right{display:none}
+.stick-knob{
+  width:36%;
+  aspect-ratio:1;
+  border:1px solid #a5efd3ae;
+  border-radius:50%;
+  background:radial-gradient(circle at 37% 28%,#6aad9a,#2f5d55 75%);
+  box-shadow:0 4px 12px #0005;
+  pointer-events:none;
+}
+.stick-label{
+  padding:3px 8px;
+  border-radius:20px;
+  background:#0b171cd9;
+  color:#deeceb;
+  font-size:11px;
+  white-space:nowrap;
+}
+.motion-toolbar{grid-area:actions;min-width:0;max-width:100%;justify-self:center}
+.keyboard-hint{display:none;justify-content:center;margin:0 0 6px;color:#d0e6df;font-size:11px}
+@media(any-hover:hover) and (any-pointer:fine){
+  .keyboard-hint{display:flex;flex-wrap:wrap;gap:4px 12px}
+}
+.keyboard-hint>span{display:inline-flex;align-items:center;gap:3px}
+.keyboard-hint>[hidden]{display:none}
+.keyboard-hint kbd{
+  padding:2px 4px;
+  border:1px solid #a5d9cb50;
+  border-radius:4px;
+  background:#0d202af0;
+  color:#edfff7;
+}
+.motion-status-row{display:flex;justify-content:center;align-items:center;gap:8px;margin-bottom:6px}
+#motionStatus{
+  min-width:0;
+  min-height:1.3em;
+  margin:0;
+  overflow:hidden;
+  text-align:center;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#d0e6df;
+  font-size:11px;
+  pointer-events:auto;
+}
+#motionStatus[data-warning]{color:#ffd6a3}
+#openWalkingHelp{flex:none;min-height:28px;padding:3px 8px;border-radius:8px;color:var(--mint);font-size:11px;white-space:nowrap;pointer-events:auto}
+#walkingHelpDialog{width:min(500px,calc(100vw - 32px));height:auto;max-height:calc(100dvh - 28px);overflow:auto}
+#walkingHelpDialog h2{font-size:20px}
+.walking-help-body{padding:0 24px 20px;color:#d0e6df}
+.walking-help-body p{margin:0}
+.walking-help-body ol{margin:10px 0 0;padding-inline-start:20px}
+.walking-help-body li+li{margin-top:10px}
+.walking-help-body a{color:var(--mint)}
+.cockpit-action-rows{
+  --action-gap:5px;
+  display:grid;
+  gap:var(--action-gap);
+  padding:3px;
+  pointer-events:auto;
+}
+.motion-action-rows{display:grid;gap:var(--action-gap)}
+.cockpit-action-row{
+  display:grid;
+  grid-template-columns:repeat(7,minmax(0,1fr));
+  gap:var(--action-gap);
+}
+.motion-action-rows .cockpit-action-row+.cockpit-action-row{grid-template-columns:repeat(6,minmax(0,1fr))}
+.cockpit-action-row button{
+  min-width:0;
+  min-height:42px;
+  border-radius:10px;
+  padding:7px 11px;
+  background:#0d202aef;
+  border-color:#a5d9cb40;
+  font-size:12px;
+  line-height:1.2;
+  overflow-wrap:break-word;
+  text-wrap:balance;
+}
+.cockpit-action-row .stand-action,.cockpit-action-row button[data-active],.duck-call-row button{
+  color:#b5f5d4;
+  background:#1a3b33f5;
+  border-color:#8cdecf65;
+}
+.cockpit-action-row .stop-action{color:#ffd4c0;border-color:#d0a18d61}
+.duck-call-row button[aria-pressed="true"]{border-color:var(--mint);opacity:1}
+.duck-call-status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);margin:0}
+.portrait-hint{display:none}
+@media(orientation:portrait) and (pointer:coarse) and (max-width:600px){
+  .motion-sticks,.cockpit-action-rows,.motion-status-row,.motion-toolbar .keyboard-hint{display:none}
+  .portrait-hint{display:block;margin:0;padding:10px;text-align:center;color:#d0e6df;font-size:12px}
+}
+.bottom .intercom{grid-area:audio;width:auto;min-width:0;max-width:100%;justify-self:end;pointer-events:auto}
+.bottom .intercom-actions{display:flex;gap:6px;justify-content:end;flex-wrap:wrap}
+.bottom .intercom-actions .talk-button{
+  display:inline-flex;
+  gap:6px;
+  width:auto;
+  min-height:42px;
+  padding:6px 9px;
+  border-radius:10px;
+  white-space:nowrap;
+}
+.bottom .talk-button .button-icon{font-size:17px}
+.bottom .talk-button b{font-size:11px}
+#speakerVolumeValue{font-size:11px;color:var(--mint);font-variant-numeric:tabular-nums}
+.speaker-actions{display:flex;flex-wrap:wrap;align-items:stretch;gap:6px}
+.quick-panel .speaker-actions>*{margin:0}
+.speaker-actions .file-button{display:inline-flex;align-items:center;padding:10px 15px}
+.speaker-actions .file-button:has(input:disabled){opacity:.4;cursor:not-allowed}
+.speaker-actions .file-button:focus-within{outline:2px solid var(--mint);outline-offset:3px}
+#volumeStatus:empty{display:none}
+.bottom .voice-line{min-height:0;margin:0;text-align:right}
+.voice-line>span:empty{display:none}
+.voice-line>span:not(:empty){padding-top:4px}
+@media(max-width:1080px){
+  .bottom{grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"sticks sticks" "actions actions" "robot audio"}
+}
+@media(orientation:portrait){
+  #cockpit{--stick-size:clamp(66px,20vw,116px)}
+  .bottom{
+    grid-template-columns:auto minmax(0,1fr);
+    gap:6px;
+    padding:8px max(12px,env(safe-area-inset-right)) max(10px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+  }
+  .motion-sticks{padding-inline:9vw}
+  .stick-label{font-size:10px}
+  .motion-toolbar{width:100%}
+  .cockpit-action-rows{--action-gap:3px}
+  .cockpit-action-row button{padding:4px 2px;font-size:11px}
+  .bottom .flight-state{display:flex}
+  .flight-actions{margin-top:2px}
+  .bottom .flight-state .eyebrow{display:none}
+}
+@media(orientation:portrait) and (max-height:670px){
+  .device-controls .control-group button{min-height:32px;padding-block:5px}
+  .bottom{row-gap:4px}
+  .flight-state strong,#telemetry{display:none}
+  .flight-actions{gap:6px;margin:0}
+  .flight-state .stop{min-height:42px;padding-inline:9px}
+  .bottom .intercom-actions .talk-button{padding-inline:6px;gap:4px}
+  .bottom .voice-line{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  .motion-status-row{margin-bottom:4px}
+  .cockpit-action-rows{padding-block:0}
+  .cockpit-action-row button{min-height:36px;padding-inline:1px;font-size:10px}
+}
+@media(orientation:portrait) and (max-width:370px){
+  .bottom .intercom{width:100%}
+  .bottom .intercom-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
+  .bottom .intercom-actions .talk-button{justify-content:center;text-align:center;white-space:normal;overflow-wrap:anywhere;padding:4px 2px;gap:0}
+  .bottom .intercom-actions .button-icon{display:none}
+  #speakerVolume{flex-direction:column}
+}
+@media(orientation:landscape) and (max-height:500px){
+  #cockpit{--stick-size:clamp(66px,21dvh,100px)}
+  .top{column-gap:8px}
+  .device-controls{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+  .device-controls .control-group{flex:none}
+  .status-row,.top-actions{gap:5px}
+  .status-row .chip{padding-inline:7px;font-size:10px}
+  .bottom{grid-template-areas:"sticks sticks" "robot audio";grid-template-columns:minmax(0,1fr) auto;row-gap:4px}
+  .motion-sticks{padding-inline:0}
+  .motion-toolbar{
+    grid-area:sticks;
+    align-self:end;
+    max-width:calc(100% - 2 * var(--stick-size) - 16px);
+  }
+  .motion-status-row{margin-bottom:0}
+  #openWalkingHelp{min-height:22px;padding-block:0}
+  .cockpit-action-row button{min-height:36px;padding:4px 8px}
+  .bottom .flight-state{
+    display:grid;
+    grid-template-columns:auto auto;
+    align-items:center;
+    column-gap:8px;
+  }
+  .flight-state .eyebrow{display:none}
+  .flight-state strong{grid-column:1;font-size:15px}
+  .flight-state>span:last-of-type{grid-column:1}
+  .flight-actions{grid-column:2;grid-row:1/3;margin:0}
+}
+.brand small{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.brand .app-version{padding:0 4px;font-size:10px;letter-spacing:0}
+@media(orientation:landscape) and (max-height:500px),(max-width:370px){
+  .brand-caption{display:none}
+}
+@media(orientation:landscape) and (max-height:420px) and (max-width:740px){
+  .brand{display:grid;grid-template-columns:35px;justify-items:center;gap:1px}
+  .brand .duck-mark{width:26px;height:24px;border-radius:8px;font-size:17px}
+  .brand .duck-mark span{font-size:9px}
+  .brand .app-version{padding:0;border:0;background:none;font-size:8px;line-height:1.1}
+  .brand-name,.status-row .optional,#batteryLabel,#bindingRegionChip{display:none}
+  .device-controls,.control-group{gap:5px}
+  .control-group button{padding-inline:6px;font-size:10px}
+  .cockpit-action-row button{padding-inline:3px;font-size:11px}
+}
