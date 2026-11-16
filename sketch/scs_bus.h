@@ -16,6 +16,8 @@ static uint8_t servoRxDataLen = 0;
 // ID 0 is a valid servo address, just like IDs 1..253.
 static uint8_t servoPingId = 0xFF;
 static bool servoPingSeen = false;
+static uint8_t servoCalAckId = 0xFF;
+static bool servoCalAckSeen = false, servoCalAckOk = false;
 static uint8_t servoReadId = 0xFF;
 static bool servoReadSeen = false;
 static uint16_t servoReadPos = 0;
@@ -312,6 +314,11 @@ static void parseServoRx() {
           }
           uint8_t sid = servoRxBuffer[2];
           uint8_t dataLen = servoRxDataLen;
+          if (dataLen == 2 && servoCalAckId <= 253 && sid == servoCalAckId) {
+            servoCalAckSeen = true;
+            servoCalAckOk = servoRxBuffer[4] == 0;
+            break;
+          }
           if (dataLen == 2 && servoPingId <= 253 && sid == servoPingId) {
             // Even a device error is evidence that this address responded.
             servoPingSeen = true;
@@ -365,6 +372,28 @@ static void waitServoReply() {
     k_sleep(K_USEC(100));
   }
   parseServoRx();
+}
+
+static bool servoCalibrateChecked(uint8_t id, bool parameterized, uint16_t position) {
+  drainServoRx();
+  servoCalAckId = id;
+  servoCalAckSeen = servoCalAckOk = false;
+  if (parameterized) {
+    uint8_t data[2];
+    packWordLE(data, position);
+    scsWriteBuf(id, 0x0B, data, sizeof(data));
+    Serial1.flush();
+  } else {
+    servoMid(id);
+  }
+  const uint32_t started = micros();
+  while (!servoCalAckSeen && (uint32_t)(micros() - started) < SERVO_REPLY_US) {
+    parseServoRx();
+    if (!servoCalAckSeen) k_sleep(K_USEC(100));
+  }
+  parseServoRx();
+  servoCalAckId = 0xFF;
+  return servoCalAckSeen && servoCalAckOk;
 }
 
 static bool pingServo(uint8_t id) {

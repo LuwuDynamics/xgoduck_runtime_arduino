@@ -1,5 +1,6 @@
 const $=id=>document.getElementById(id);
 const MOTORS=[10,11,12,13,14,20,21,22,23,24,30,31,32,33,34];
+const UNIFIED_PHOTOS=[[983,770],[620,743],[690,661],[599,669]];
 // Used when calibrate-joints.json cannot be loaded: the buttons still work, just without photos and pictures.
 const FALLBACK_ZONES=[
   {key:'head',ids:[30,31,32,33,34],title:{en:'Head & neck',zh:'头颈'}},
@@ -13,6 +14,7 @@ let rawPos=[];
 let errors={};
 let imuState=null, imuRequest=null, imuError=null;
 let imuFeedbackReady=false, servosEnabled=false;
+let calibrationMode=null, mcuCalibrating=false, unifiedBusy=false, unifiedNote=null;
 let guide=null;
 let note={key:'entering'};
 
@@ -38,6 +40,7 @@ const strings={
     exit:'Exit',unloadAll:'Unload all',setCenter:'Set center',
     entering:'Entering calibration and unloading all servos…',
     unloaded:'All servos are unloaded. Turn one joint by hand, then set its center.',
+    unifiedUnloaded:'All servos are unloaded. Put Duck in the reference pose.',
     centeringMsg:'Setting the center of ID {id}…',centeredMsg:'The center of ID {id} has been set.',
     allDone:'All 15 servos are set. Click Unload all, then Exit.',
     closed:'Calibration closed. All servos are unloaded.',
@@ -57,7 +60,31 @@ const strings={
     legendWrong:'Red part and arrow: a wrong position, turn it back the way the arrow shows',
     progress:'Set this session {done} / {total}',zoneIds:'IDs {first}–{last}',legPerspective:' (robot’s perspective)',
     photoAlt:'Photo of the servos, each marked with its white ID tag',photoOpen:'Open the full-size photo',poseAlt:'ID {id} {name}: zero pose',
-    finishTitle:'Finished?',finishText:'Click Unload all, then Exit. After that, go back to Control to stand Duck up.',
+    finishTitle:'Finished?',finishText:'Unload all servos. If you need to calibrate the IMU, do it below before clicking Exit.',
+    methodTitle:'Choose a calibration method',recommended:'Recommended',
+    methodInstructions:'Choose one method. Unified calibration is simpler and recommended, but more sensitive to assembly tolerances.',
+    unifiedCalibration:'Unified calibration',individualCalibration:'Calibrate individually',
+    unifiedMethodCopy:'Use four reference photos to calibrate the joints together, then calibrate ID 30 and the IMU separately.',
+    individualMethodCopy:'Use the original guides to set each of the 15 servo centers, then calibrate the IMU. Use this method to fine-tune specific joints.',
+    openUnified:'Start unified calibration',openIndividual:'Start individual calibration',switchMethod:'Switch calibration method',
+    unifiedSequence:'Main joints → ID 30 → IMU',
+    unifiedPose:'Calibrate the main joints',photoNumber:'Photo {number}',
+    unifiedPoseHelp:'Position Duck as shown in the four photos. Calibrate the neck and IMU separately in the next steps.',
+    unifiedPoseWarning:'Unload the servos before moving the joints by hand. Keep the wires clear of the gaps between the legs and body.',
+    unifiedPhotoAlts:['Front view of the reference pose','Side view of the head and neck','Close both legs together','Move both legs back until they touch the body'],
+    unifiedSteps:[
+      'Match photos 1 and 2. Tilt the neck back as far as it goes. Calibrate the neck separately below. Lower the head against the neck and close the beak.',
+      'Squeeze both legs together with both hands until they close completely (photo 3).',
+      'Move both legs back at the same time until they touch the body (photo 4). Move the wires to one side to avoid pinching them.',
+      'Let go and click Complete calibration.'
+    ],
+    neckCalibration:'Calibrate ID 30 separately',neckInstruction:'Keep the neck parallel to the body and click Calibrate.',
+    calibrateNeck:'Calibrate',completeCalibration:'Complete calibration',
+    unifiedWorking:'Calibrating the joints…',
+    unifiedSaved:'Joint calibration saved. Calibrate ID 30 separately below.',
+    unifiedFailed:'Calibration may be incomplete. Keep Duck in the calibration pose and retry.',
+    unifiedUnloadFirst:'Unload all joints before unified calibration.',
+    unifiedAllOnline:'All 15 servos must be online for unified calibration.',
     credits:'Photos: the official XGO Duck developer guide. Zero-pose pictures: rendered from the XGO Duck URDF model.',
     guideLink:'Open the official calibration guide ↗',pictureOpen:'Enlarge picture',pictureClose:'Close picture',
     guideUnavailable:'Picture guide unavailable. You can still set centers using the official guide linked below.',
@@ -91,6 +118,7 @@ const strings={
     gloss:{exit:'退出',unloadAll:'全部卸力',setCenter:'设置中位'},
     entering:'正在进入标定，所有舵机卸力中…',
     unloaded:'所有舵机已卸力。先用手把一个关节摆到图示位置，再设定它的中位。',
+    unifiedUnloaded:'所有舵机已卸力。请按参考图摆放小鸭。',
     centeringMsg:'正在设定 ID {id} 的中位…',centeredMsg:'ID {id} 已设中位。',
     allDone:'15 个舵机都已设好。先点 Unload all，再点 Exit。',
     closed:'标定已关闭，所有舵机已卸力。',
@@ -110,7 +138,31 @@ const strings={
     legendWrong:'红色部件和箭头：错误的位置，按箭头方向转回来',
     progress:'本轮已设 {done} / {total}',zoneIds:'ID {first}–{last}',legPerspective:'（机器人的视角）',
     photoAlt:'舵机实物照片，每个舵机贴有白色编号牌',photoOpen:'打开原尺寸照片',poseAlt:'ID {id} {name}：零位姿态',
-    finishTitle:'都做完了？',finishText:'先点 Unload all，再点 Exit。之后回到 Control 页让 Duck 站起来。',
+    finishTitle:'都做完了？',finishText:'先点「全部卸力」。如需标定 IMU，请在下方完成后再点「退出」。',
+    methodTitle:'选择标定方式',recommended:'推荐',
+    methodInstructions:'任选一种即可。统一标定操作简单，推荐使用，但更容易受到装配误差影响。',
+    unifiedCalibration:'统一标定',individualCalibration:'逐个标定',
+    unifiedMethodCopy:'按四张姿态图一次标定关节，再单独标定 30 号关节和 IMU。适合首次装机和快速校准。',
+    individualMethodCopy:'按原有图例逐个设置 15 个舵机的中位，最后标定 IMU。适合局部调整和精确校准。',
+    openUnified:'进入统一标定',openIndividual:'进入逐个标定',switchMethod:'切换标定方式',
+    unifiedSequence:'主体关节 → 30 号关节 → IMU',
+    unifiedPose:'主体关节中位标定',photoNumber:'图 {number}',
+    unifiedPoseHelp:'按下方四张图片摆好小鸭。之后再单独标定 30 号关节和 IMU。',
+    unifiedPoseWarning:'手动摆位前先确认舵机已卸力。把线束拨开，避免被腿和躯干夹住。',
+    unifiedPhotoAlts:['标定姿势正面','头颈摆放侧面','同时捏住双腿，确保腿完全闭合','双腿后掰至接触躯干'],
+    unifiedSteps:[
+      '按图 1 和图 2 摆放小鸭。脖子向后仰到最大，无需贴紧结构，后续会单独标定。头低下来贴着脖子，嘴巴紧闭。',
+      '双手同时捏住左右腿，确保腿完全闭合（图 3）。',
+      '双手同时向后掰，让左右腿与躯干接触（图 4）。把线调整到一边，避免夹到线。',
+      '松手，点击「完成标定」。'
+    ],
+    neckCalibration:'单独标定 30 号关节',neckInstruction:'保持脖子和躯干平行，点击「标定」。',
+    calibrateNeck:'标定',completeCalibration:'完成标定',
+    unifiedWorking:'正在标定关节…',
+    unifiedSaved:'关节标定已保存。请在下方单独标定 30 号关节。',
+    unifiedFailed:'部分舵机可能尚未写入。请保持标定姿势，再重试。',
+    unifiedUnloadFirst:'统一标定前请先让所有舵机卸力。',
+    unifiedAllOnline:'统一标定需要 15 个舵机全部在线。',
     credits:'实物照片：XGO Duck 官方开发者指南。零位姿态图：由 XGO Duck 的 URDF 模型渲染。',
     guideLink:'打开官方标定指南 ↗',pictureOpen:'放大图片',pictureClose:'关闭大图',
     guideUnavailable:'图示暂不可用，仍可对照下方官方指南设置中位。',
@@ -153,8 +205,8 @@ async function readJSON(url,options={},timeout=3000){
     return x;
   }finally{clearTimeout(timer);}
 }
-async function post(path, body={}){
-  return readJSON('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+async function post(path, body={}, timeout=3000){
+  return readJSON('/api/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)},timeout);
 }
 function renderMessage(){$('message').textContent=note.text??t(note.key,note.values);}
 function setNote(key,values){note={key,values};renderMessage();}
@@ -164,6 +216,8 @@ function errorText(e){
   if(id)return t('noServo',{id});
   const known={'not in calibrate mode':'notCalibrating','MCU feedback is stale':'staleFeedback',
     'centering acknowledgement timeout':'centerTimeout','calibration session changed':'sessionChanged',
+    'Unload all joints before sitting calibration.':'unifiedUnloadFirst',
+    'All 15 servos must be online for sitting calibration.':'unifiedAllOnline',
     'Unload all joints before calibrating the IMU.':'imuUnloadFirst',
     'Hold the board upright with the battery connector pointing up.':'imuUpright',
     'Movement detected. Hold the board still and try again.':'imuMovement',
@@ -209,7 +263,7 @@ function photoFigure(zone,photo){
     (zone.focus==='left'||zone.focus==='right')&&h('span',{class:'cal-dim '+(zone.focus==='left'?'right':'left'),'aria-hidden':'true'})
   );
 }
-function card(id){
+function card(id,instruction=null,buttonKey='setCenter'){
   const i=index(id), info=joint(id), name=pick(info.name);
   return h('article',{class:'cal-card',id:'row'+i},
     h('div',{class:'cal-card-head'},
@@ -218,12 +272,24 @@ function card(id){
       h('span',{class:'cal-state',id:'state'+i})),
     info.image&&h('button',{type:'button',class:'cal-enlarge','data-picture':info.image,'aria-label':t('pictureOpen')+' · ID '+id},
       h('img',{class:'cal-pose',src:info.image,width:340,height:330,loading:'lazy',alt:t('poseAlt',{id,name})})),
-    info.pose&&h('p',{class:'cal-how',text:pick(info.pose)}),
+    (instruction||info.pose)&&h('p',{class:'cal-how',text:instruction||pick(info.pose)}),
     h('p',{class:'cal-error',id:'err'+i,role:'alert',hidden:true}),
     h('div',{class:'cal-card-foot'},
-      h('button',{type:'button','data-center':i,disabled:true},label('setCenter')),
+      h('button',{type:'button','data-center':i,disabled:true},label(buttonKey)),
       h('span',{class:'cal-raw',id:'raw'+i}))
   );
+}
+function renderUnified(){
+  $('unified-photos').replaceChildren(...UNIFIED_PHOTOS.map(([width,height],i)=>{
+    const number=t('photoNumber',{number:i+1});
+    const src=`cal-unified-${i+1}.png`;
+    return h('figure',{},
+      h('button',{type:'button',class:'cal-enlarge','data-picture':src,'aria-label':t('pictureOpen')+' · '+number},
+        h('img',{src,width,height,loading:'lazy',alt:list('unifiedPhotoAlts')[i]})),
+      h('figcaption',{},h('b',{text:number}),h('span',{text:list('unifiedPhotoAlts')[i]})));
+  }));
+  $('unified-steps').replaceChildren(...list('unifiedSteps').map(step=>h('li',{text:step})));
+  $('unified-neck').replaceChildren(card(30,t('neckInstruction'),'calibrateNeck'));
 }
 function renderZones(){
   $('zones').replaceChildren(...zones().map(zone=>{
@@ -241,7 +307,7 @@ function renderZones(){
         h('div',{class:'cal-side'},
           zone.note&&h('p',{class:'cal-note',text:pick(zone.note)}),
           h('ul',{class:'cal-legend'},legend('part',t('legendPart')),legend('line',t('legendLine')),legend('ghost',t('legendWrong'))))),
-      h('div',{class:'cal-cards'},zone.ids.map(card))
+      h('div',{class:'cal-cards'},zone.ids.map(id=>card(id)))
     );
   }));
 }
@@ -260,7 +326,8 @@ function renderFinish(){
 function renderRaw(){
   if(!built)return;
   MOTORS.forEach((_,i)=>{
-    $(`raw${i}`).textContent=rawPos[i]===undefined?t('waiting'):presentMask&(1<<i)?t('encoder',{value:rawPos[i]}):t('noFeedback');
+    const readout=$(`raw${i}`);
+    if(readout)readout.textContent=rawPos[i]===undefined?t('waiting'):presentMask&(1<<i)?t('encoder',{value:rawPos[i]}):t('noFeedback');
   });
 }
 function imuBusy() {
@@ -271,7 +338,7 @@ function imuBlockReason() {
   if (!fresh) return 'imuWaiting';
   if (!imuState) return 'imuUnavailable';
   if (!imuFeedbackReady) return 'imuNoFeedback';
-  if (sessionBusy || centering !== null) return 'imuWaitForServo';
+  if (sessionBusy || centering !== null || unifiedBusy) return 'imuWaitForServo';
   if (!active) return 'imuEnterFirst';
   if (servosEnabled || held.some(Boolean)) return 'imuUnloadFirst';
   return '';
@@ -281,6 +348,7 @@ function refreshImu() {
   const blocked = imuBlockReason();
   const sampling = fresh && Boolean(imuState?.active);
   $('imu-start').disabled = Boolean(blocked) || imuBusy();
+  $('imu-unload').hidden = active&&!servosEnabled&&!held.some(Boolean);
   $('imu-progress').hidden = !sampling;
   $('imu-progress').value = imuState?.progress ?? 0;
 
@@ -309,16 +377,26 @@ function refreshImu() {
 function refreshRows(){
   if(!built)return;
   const imuIsBusy = imuBusy();
+  const busy=sessionBusy||unifiedBusy||centering!==null||imuIsBusy;
+  document.querySelectorAll('[data-calibration-mode]').forEach(button=>{button.disabled=busy;});
+  $('exit').disabled=!calibrationMode;
+  $('calibration-back').disabled=busy;
   refreshImu();
+  $('complete-calibration').disabled=!unifiedReady();
+  $('unified-unload').hidden=active&&!servosEnabled&&!held.some(Boolean);
+  const status=$('unified-status');
+  status.hidden=!unifiedNote;
+  status.textContent=unifiedNote?[t(unifiedNote.key),unifiedNote.error].filter(Boolean).join(' '):'';
   document.querySelectorAll('[data-center]').forEach(btn=>{
     const i=+btn.dataset.center;
-    btn.disabled=!active||!fresh||sessionBusy||centering!==null||imuIsBusy||held[i]||!(presentMask&(1<<i));
+    btn.disabled=!active||!fresh||busy||held[i]||!(presentMask&(1<<i));
     $(`row${i}`).classList.toggle('done',held[i]);
     $(`state${i}`).textContent=centering===i?t('stateCentering'):!fresh?t('waiting'):held[i]?t('stateCentered'):t('stateUnloaded');
     $(`err${i}`).textContent=errors[i]||'';
     $(`err${i}`).hidden=!errors[i];
   });
-  document.querySelectorAll('[data-action=unload]').forEach(btn=>{btn.disabled=sessionBusy||imuIsBusy||centering!==null;});
+  document.querySelectorAll('[data-action=unload]').forEach(btn=>{btn.disabled=busy;});
+  if(calibrationMode!=='individual')return;
   let total=0;
   zones().forEach(zone=>{
     const done=zone.ids.filter(id=>held[index(id)]).length;
@@ -342,13 +420,28 @@ function renderAll(){
   $('picture-dialog').setAttribute('aria-label',t('pictureOpen'));
   const button=$('language');
   button.textContent=t('languageButton');button.title=t('switchLanguage');button.setAttribute('aria-label',t('switchLanguage'));
-  renderIntro();renderBar();renderZones();renderFinish();
+  const unified=calibrationMode==='unified';
+  $('cal-choice').hidden=Boolean(calibrationMode);
+  $('cal-selected').hidden=!calibrationMode;
+  $('unified-heading').hidden=!unified;
+  $('message').hidden=!calibrationMode;
+  $('individual-calibration').hidden=calibrationMode!=='individual';
+  $('unified-calibration').hidden=!unified;
+  $('imu-panel').hidden=!calibrationMode;
+  $('imu-step').hidden=!unified;
+  if(unified){
+    $('zones').replaceChildren();
+    renderUnified();
+  }else if(calibrationMode==='individual'){
+    $('unified-neck').replaceChildren();
+    renderIntro();renderBar();renderZones();renderFinish();
+  }
   built=true;
   renderMessage();renderRaw();refreshRows();
 }
 
 async function startImu() {
-  if (imuBusy() || imuBlockReason()) return;
+  if (imuBusy()) return;
   const revision = ++epoch;
   imuError = null;
   imuRequest = post('imu-calibration', {action: 'start'});
@@ -366,7 +459,7 @@ async function startImu() {
 }
 
 async function center(i){
-  if(!active||!fresh||sessionBusy||centering!==null||imuBusy()||held[i]||!(presentMask&(1<<i)))return;
+  if(!active||!fresh||sessionBusy||unifiedBusy||centering!==null||imuBusy()||held[i]||!(presentMask&(1<<i)))return;
   const revision=++epoch;
   centering=i;
   delete errors[i];
@@ -381,8 +474,31 @@ async function center(i){
   }catch(e){if(revision===epoch){errors[i]=errorText(e);showError(e);}}
   finally{if(revision===epoch)epoch++;centering=null;refreshRows();}
 }
+function unifiedReady(){
+  return calibrationMode==='unified'&&active&&fresh&&mcuCalibrating&&!servosEnabled&&!held.some(Boolean)
+    &&presentMask===(1<<MOTORS.length)-1&&!sessionBusy&&!unifiedBusy&&centering===null&&!imuBusy();
+}
+async function calibrateUnified(){
+  if(!unifiedReady())return;
+  const revision=++epoch;
+  unifiedBusy=true;
+  unifiedNote={key:'unifiedWorking'};
+  refreshRows();
+  try{
+    const result=await post('cal/sitting',{},4000);
+    if(result.ok!==true||result.positions?.length!==MOTORS.length)throw new Error(t('invalidReply'));
+    if(revision!==epoch||!active)return;
+    unifiedNote={key:'unifiedSaved'};
+  }catch(e){
+    if(revision===epoch)unifiedNote={key:'unifiedFailed',error:errorText(e)};
+  }finally{
+    if(revision===epoch)epoch++;
+    unifiedBusy=false;
+    refreshRows();
+  }
+}
 async function enter(){
-  if(sessionBusy||centering!==null||imuBusy())return false;
+  if(sessionBusy||unifiedBusy||centering!==null||imuBusy())return false;
   const revision=++epoch;
   sessionBusy=true;fresh=false;active=false;refreshRows();
   try{
@@ -392,7 +508,7 @@ async function enter(){
     held.fill(false);
     errors={};
     imuError=null;
-    setNote('unloaded');
+    setNote(calibrationMode==='unified'?'unifiedUnloaded':'unloaded');
     return true;
   }catch(e){if(revision===epoch)showError(e);return false;}
   finally{if(revision===epoch)sessionBusy=false;refreshRows();}
@@ -400,6 +516,7 @@ async function enter(){
 async function exit(){
   const revision=++epoch;
   sessionBusy=true;active=false;fresh=false;
+  if(unifiedBusy)unifiedNote={key:'closed'};
   refreshRows();
   try{
     // Exit after an in-flight start so the controller can cancel that sample.
@@ -411,8 +528,24 @@ async function exit(){
     imuState=null;
     imuError=null;
     setNote('closed');
+    return true;
   }catch(e){if(revision===epoch)showError(e);}
   finally{if(revision===epoch)sessionBusy=false;refreshRows();}
+}
+function selectCalibration(mode){
+  calibrationMode=mode;
+  unifiedNote=null;
+  setNote('entering');
+  renderAll();
+  enter();
+  $('cal-selected').focus();
+}
+async function showCalibrationMethods(){
+  const previous=calibrationMode;
+  if(!await exit())return;
+  calibrationMode=null;
+  renderAll();
+  document.querySelector(`[data-calibration-mode="${previous}"]`).focus();
 }
 document.addEventListener('click',event=>{
   const button=event.target.closest('button');
@@ -422,21 +555,26 @@ document.addEventListener('click',event=>{
     image.src=button.dataset.picture;image.alt=button.querySelector('img')?.alt||t('pictureOpen');
     $('picture-dialog').showModal();
   }
+  else if(button.dataset.calibrationMode)selectCalibration(button.dataset.calibrationMode);
   else if(button.dataset.center!==undefined)center(+button.dataset.center);
   else if(button.dataset.action==='unload')enter();
   else if(button.dataset.action==='exit')exit();
 });
 $('exit').onclick=exit;
-$('imu-start').onclick=startImu;
+$('calibration-back').onclick=showCalibrationMethods;
+$('imu-start').onclick=()=>{if(!imuBlockReason())startImu();};
+$('complete-calibration').onclick=calibrateUnified;
 $('language').onclick=()=>{language=language==='zh'?'en':'zh';renderAll();};
 $('picture-close').onclick=()=>{$('picture-dialog').close();};
 $('picture-dialog').onclick=event=>{if(event.target===$('picture-dialog'))$('picture-dialog').close();};
 window.addEventListener('languagechange',()=>{language=systemLanguage();renderAll();});
-window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/cal/exit',new Blob(['{}'],{type:'application/json'})));
+window.addEventListener('pagehide',()=>{
+  if(calibrationMode)navigator.sendBeacon('/api/cal/exit',new Blob(['{}'],{type:'application/json'}));
+});
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&(active||sessionBusy))exit();});
 
 setInterval(async()=>{
-  if(statusBusy||sessionBusy||document.hidden)return;
+  if(!calibrationMode||statusBusy||sessionBusy||document.hidden)return;
   const revision=epoch;
   statusBusy=true;
   try{
@@ -450,6 +588,7 @@ setInterval(async()=>{
     imuState=s.imu_calibration||null;
     imuFeedbackReady=Boolean(s.imu_ok && Number.isFinite(s.feedback_age_ms) && s.feedback_age_ms < 150);
     servosEnabled=Boolean(s.enabled);
+    mcuCalibrating=s.mcu_calibrating===true;
     polled=true;
     fresh=true;
     if(note.key==='connectionLost')setNote('feedbackRestored');
@@ -473,5 +612,4 @@ async function loadGuide(){
   }catch{guideUnavailable=true;}
 }
 renderAll();
-if(!document.hidden)enter();
 loadGuide().then(renderAll);

@@ -1,5 +1,6 @@
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 .page-calibrate{max-width:1040px}
+.page-calibrate [hidden]{display:none}
 .page-calibrate h1{font-size:30px}
 .page-calibrate #message{margin:14px 0 0}
 .page-calibrate button small{margin-left:.4em;font-size:.85em;font-weight:400;opacity:.85}
@@ -89,6 +90,58 @@
 .cal-finish p{margin:0 0 14px}
 .cal-finish .hint{margin:14px 0 0}
 .cal-finish .hint a{color:#8ce2cc}
+/* Method selection and unified calibration */
+.cal-choice{margin-top:28px}
+.cal-choice h2,.cal-selected h2{margin:0;font-size:23px}
+.cal-choice p,.cal-selected p{margin:5px 0 0;color:#9cafc3}
+.cal-modes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;margin-top:20px}
+.cal-method{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:24px;text-align:left;color:#dce5ef;border-color:#26384b;border-radius:16px;background:linear-gradient(150deg,#172a3c,#101d2b 75%)}
+.cal-method:hover:not(:disabled),.cal-method:focus-visible{border-color:#65bba8;background:linear-gradient(150deg,#1b3545,#142535 75%)}
+.cal-method-head{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.cal-method-icon,.cal-step{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border:1px solid #2f6b66;border-radius:10px;background:#153b40;color:#8ce2cc;font-weight:700}
+.cal-method-icon{font-size:21px}
+.cal-recommended{padding:3px 9px;border-radius:999px;background:#1d493d;color:#a5efd8;font-size:13px;font-weight:700}
+.cal-method strong{font-size:22px}
+.cal-method-copy{flex:1;color:#afc3d4}
+.cal-method-link{margin-top:6px;color:#8ce2cc;font-size:14px;font-weight:700}
+.cal-selected{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-top:22px}
+#calibration-back{margin-left:auto;padding:8px 12px;background:#0e1924}
+#calibration-back:hover:not(:disabled){background:#28415a}
+
+.cal-unified-panel,#unified-calibration:not([hidden])+.cal-imu{padding:24px;border-radius:16px}
+.cal-panel-heading,.cal-imu-heading:has(.cal-step:not([hidden])){display:flex;gap:12px;align-items:center;margin-bottom:16px}
+.cal-panel-heading h2,.cal-imu-heading:has(.cal-step:not([hidden])) h2{margin:0;font-size:20px}
+.cal-panel-heading p{margin:4px 0 0;color:#9cafc3;font-size:14px}
+.cal-reference-photos{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 20px}
+.cal-reference-photos figure{min-width:0;margin:0;overflow:hidden;border:1px solid #3c5b78;border-radius:10px;background:#0e1924}
+.cal-reference-photos img{display:block;width:100%;height:190px;object-fit:contain}
+.cal-reference-photos figcaption{display:grid;gap:2px;padding:8px 10px;color:#afc3d4;font-size:13px;border-top:1px solid #26384b}
+.cal-reference-photos figcaption b{color:#dce5ef}
+#unified-steps{gap:10px;margin-bottom:16px}
+.cal-action-line{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:16px}
+#complete-calibration{background:#1d6a58;border-color:#2c9a80}
+#complete-calibration:hover:not(:disabled){background:#25806b}
+#unified-status{margin:0;color:#afc3d4;font-size:14px}
+#unified-neck .cal-card{display:grid;grid-template-columns:minmax(0,240px) minmax(0,1fr);align-items:start}
+#unified-neck .cal-enlarge{grid-column:1;grid-row:1/span 4;align-self:center}
+#unified-neck .cal-card-foot button{flex:0 1 auto}
+#unified-calibration:not([hidden])+.cal-imu{grid-template-columns:minmax(0,1fr) 160px}
+@media(max-width:760px){
+  .cal-reference-photos{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cal-reference-photos img{height:160px}
+  #unified-neck .cal-card{grid-template-columns:minmax(0,180px) minmax(0,1fr)}
+}
+@media(max-width:620px){
+  .cal-modes{grid-template-columns:minmax(0,1fr);gap:12px}
+  .cal-method{padding:16px}
+  .page-calibrate .cal-unified-panel,#unified-calibration:not([hidden])+.cal-imu{padding:14px}
+  #unified-calibration:not([hidden])+.cal-imu{grid-template-columns:minmax(0,1fr) 88px}
+}
+@media(max-width:460px){
+  .cal-reference-photos img{height:128px}
+  #unified-neck .cal-card{display:flex}
+  #unified-neck .cal-enlarge{align-self:flex-start;max-width:240px}
+}
 .cal-picture-dialog{max-width:96vw;max-height:94vh;margin:auto;padding:12px;border:1px solid #3c5b78;border-radius:14px;background:#0e1924;color:#dce5ef}
 .cal-picture-dialog::backdrop{background:rgba(0,0,0,.8)}
 .cal-picture-dialog button{display:block;margin:0 0 12px auto}

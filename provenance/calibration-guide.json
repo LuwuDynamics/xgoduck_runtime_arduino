@@ -1,5 +1,5 @@
 {
-  "scope": "Static reference assets and calibration-page UI; no changes to calibration firmware, motion, IMU, gains or models.",
+  "scope": "Calibration page and its static references for unified and individual joint calibration.",
   "assembly_photo": {
     "page": "https://www.xgorobot.com/duck-developer-guide/06-assembly.html",
     "image": "https://www.xgorobot.com/duck-developer-guide/assets/06-assembly-01.png",
@@ -74,9 +74,9 @@
     34
   ],
   "sha256": {
-    "assets/calibrate.html": "47f29c89f39a5d5cd06b25f0a5b1592720806d6990cca1d7e63146c8a8ccd7f4",
-    "assets/calibrate.js": "6206175a0f80ff6369c45a9c5fc996c8e4c2861f89fe30924e895ee5a7a962b9",
-    "assets/calibrate.css": "2a8c99f004d5da8981e897ee144909b346c3c077387acf9d485aff6fd97a4bb8",
+    "assets/calibrate.html": "f5e724556e6194eadadd0aeeaace436b80fb961f51bd9b0c43cf331c5c40fde5",
+    "assets/calibrate.js": "66f4d5481f021b209ea51127066667ab1c8793781e236703c191015910c99709",
+    "assets/calibrate.css": "5a5d3d271a076e333f6ba099cefcb61106bebe5189f9f639cf926ae761efcbfe",
     "assets/calibrate-joints.json": "374301c5c61b45323a86feabae9c9df3b7a74c76e92b06632104b8d82b6de533",
     "assets/cal-photo-head.webp": "f5462e5783a75c89bcfa83109d11d281164de49df29e01a6811064342b591909",
     "assets/cal-photo-legs.webp": "973617f39f5046f4b1b9f1f908b6f9bf496d5ee0ad5a25335e5b51d4b6f1866b",
@@ -96,13 +96,26 @@
     "assets/cal-31-pose.svg": "5954824b2671908949fc46bd7c6560aac03a9102f6ab31863c5c3f3a91728014",
     "assets/cal-32-pose.svg": "13a3f1a011305f557cf2a63665199087db0fab9e888e1d353425368466b3205c",
     "assets/cal-33-pose.svg": "0c99788a4d40ea43db7a4241d8280d2f544cbea7860c6b5949f95f09e5a3d88b",
-    "assets/cal-34-pose.svg": "9ff3028068644a84d2de34dd800a14af28a773c2bb9550983fb0dc90f0cab550"
+    "assets/cal-34-pose.svg": "9ff3028068644a84d2de34dd800a14af28a773c2bb9550983fb0dc90f0cab550",
+    "assets/cal-unified-1.png": "af942be9ea6890f013e07096406adf7f43039a64857a6ebb786e6151eef4cca9",
+    "assets/cal-unified-2.png": "0cf86b5f19f9fc8f573def8d1f769f930a73b66d08d5535f2b02920568231e81",
+    "assets/cal-unified-3.png": "dddb7e312aff1febcd1810474771547fa66e2f995f8a025c2d2a7ac330500513",
+    "assets/cal-unified-4.png": "e0a1812aba5126aa26784332adbf50a8644804aeae5656dc848ff3548fbc767c"
   },
   "ui_status": "Center set / 已设中位 confirms calibration, not physical torque or holding. The existing MCU enable/goal sequence is unchanged; no torque register readback is inferred from its acknowledgement.",
   "imu_section": {
     "image": "assets/imu-calibration-pose.png",
     "endpoint": "/api/imu-calibration",
-    "position": "Above the servo centering guide",
+    "position": "After servo calibration in both methods",
     "workflow": "Start the existing standing IMU sample after unloading. Display the result from status and pause servo centering while sampling."
+  },
+  "unified_reference_photos": {
+    "source": "User-supplied reference photographs",
+    "files": [
+      "assets/cal-unified-1.png",
+      "assets/cal-unified-2.png",
+      "assets/cal-unified-3.png",
+      "assets/cal-unified-4.png"
+    ]
   }
 }

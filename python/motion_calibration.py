@@ -1,7 +1,7 @@
 """Keep legacy software-center files without applying them to hardware centers.
 
-The stable web/sketch calibrates each servo itself. A robot with nondefault
-software zeros must complete that workflow before the App enables motion.
+The web and sketch calibrate hardware centers. A robot with nondefault
+software zeros must calibrate all servos before the App enables motion.
 Standing IMU calibration uses the upstream offset workflow and the App's
 persistent data directory.
 """
@@ -137,8 +137,8 @@ class AppController(Controller):
                 raise ValueError(self._center_message())
             return super().set_sitstand(action)
 
-    def _remember_center(self, sid):
-        centered = self._centered_ids | {sid}
+    def _remember_centers(self, ids):
+        centered = self._centered_ids.union(ids)
         self._center_path.parent.mkdir(parents=True, exist_ok=True)
         marker = dict(version=1, encoder_center=SERVO_CENTER_POS,
                       legacy_sha256=self._legacy_digest, centered_ids=sorted(centered))
@@ -156,13 +156,22 @@ class AppController(Controller):
         self._centered_ids = centered
         self._needs_centering = self._needs_centering and centered != frozenset(MOTOR_IDS)
 
+    def _record_centering(self, ids):
+        try:
+            self._remember_centers(ids)
+        except OSError as exc:
+            raise ValueError('舵机中点指令已执行，但校准记录保存失败；请检查板端存储后重新校准。') from exc
+
     def cal_center(self, index):
         with self._center_lock:
             reply = super().cal_center(index)
-            try:
-                self._remember_center(reply['id'])
-            except OSError as exc:
-                raise ValueError('舵机中点指令已执行，但校准记录保存失败；请检查板端存储后重新校准。') from exc
+            self._record_centering((reply['id'],))
+            return reply
+
+    def cal_sitting(self, positions):
+        with self._center_lock:
+            reply = super().cal_sitting(positions)
+            self._record_centering(MOTOR_IDS)
             return reply
 
     def servo_op(self, action, target_id=None, *args, **kwargs):
@@ -186,10 +195,7 @@ class AppController(Controller):
             reply = super().servo_op(action, target_id, *args, **kwargs)
             sid = reply.get('target_id')
             if action == 'reset_mid' and reply.get('ok') and sid in MOTOR_IDS:
-                try:
-                    self._remember_center(sid)
-                except OSError as exc:
-                    raise ValueError('舵机中点指令已执行，但校准记录保存失败；请检查板端存储后重新校准。') from exc
+                self._record_centering((sid,))
             return reply
 
     def attach_forward_avoidance(self, guard):

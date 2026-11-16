@@ -36,7 +36,7 @@ static bool pending = false;
 static uint32_t invalidCommands = 0, reportDrops = 0;
 
 static HostBusMode hostMode = HOST_NORMAL;
-static CalPacket pendingCal = {};
+static CalPositionsPacket pendingCal = {};
 static bool calPending = false;
 static CalReplyPacket calReply = {};
 static bool calReplyReady = false;
@@ -46,6 +46,9 @@ static uint32_t calNextUs = 0, calSeq = 0;
 static constexpr uint8_t CAL_MID_REPEATS = 5;
 static constexpr uint32_t CAL_MID_INTERVAL_US = 10000;
 static constexpr uint32_t CAL_MID_SETTLE_US = 100000;
+static CalPositionsPacket calBatch = {};
+static uint8_t calBatchIndex = 0;
+static uint32_t calBatchNextUs = 0;
 static ServoPacket pendingServo = {};
 static bool servoPending = false;
 static ServoReplyPacket servoReply = {};
@@ -129,16 +132,25 @@ static void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {
 }
 
 static void receiveCal(MsgPack::bin_t<uint8_t> bytes) {
-  CalPacket pkt;
-  bool valid = bytes.size() == sizeof(pkt);
+  CalPositionsPacket request = {};
+  const bool parameterized = bytes.size() == sizeof(request);
+  bool valid = parameterized || bytes.size() == sizeof(CalPacket);
   if (valid) {
-    memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQL2", 4) == 0 && pkt.op <= CAL_CENTER_ONE;
+    memcpy(&request, bytes.data(), bytes.size());
+    const CalPacket &pkt = request.command;
+    valid = memcmp(pkt.magic, "DQL2", 4) == 0 &&
+            (parameterized ? pkt.op == CAL_SET_POSITIONS : pkt.op <= CAL_CENTER_ALL);
     if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;
+    if (pkt.op == CAL_CENTER_ALL || pkt.op == CAL_SET_POSITIONS)
+      valid = valid && pkt.index == CAL_ALL_JOINTS;
+    if (parameterized) {
+      for (unsigned i = 0; i < NUM_MOTORS; ++i)
+        valid = valid && request.positions[i] >= POS_MIN && request.positions[i] <= POS_MAX;
+    }
     if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingCal = pkt; calPending = true; atomic_set(&lastHostRxUs, micros()); }
+  if (valid) { pendingCal = request; calPending = true; atomic_set(&lastHostRxUs, micros()); }
   else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
@@ -205,12 +217,14 @@ static void publishCalReply(uint32_t seq, uint8_t index, bool ok) {
   k_mutex_unlock(&hostMu);
 }
 
-static void applyCalOp(const CalPacket &pkt) {
+static void applyCalOp(const CalPositionsPacket &request) {
+  const CalPacket &pkt = request.command;
   switch (pkt.op) {
     case CAL_ENTER:
       hostMode = HOST_CAL;
       rawNotifyEveryTick = true;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
@@ -221,13 +235,14 @@ static void applyCalOp(const CalPacket &pkt) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       setTorqueEnable(false);
       break;
     case CAL_CENTER_ONE:
-      if (hostMode != HOST_CAL || calIndex != 0xFF ||
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op ||
           (calHeldMask & (1u << pkt.index)) || !(servoRxMask & (1u << pkt.index))) {
         publishCalReply(pkt.seq, pkt.index, false);
         break;
@@ -242,10 +257,48 @@ static void applyCalOp(const CalPacket &pkt) {
       calMidCount = 0;
       calNextUs = micros();
       break;
+    case CAL_CENTER_ALL:
+    case CAL_SET_POSITIONS:
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op || calHeldMask ||
+          servoRxMask != (1u << NUM_MOTORS) - 1u) {
+        publishCalReply(pkt.seq, CAL_ALL_JOINTS, false);
+        break;
+      }
+      setTorqueEnable(false);
+      calBatch = request;
+      calBatchIndex = 0;
+      calBatchNextUs = micros() + CAL_MID_INTERVAL_US;
+      break;
   }
 }
 
+static void advanceBatchCalibration() {
+  if (!calBatch.command.op) return;
+  const uint32_t hostRxUs = (uint32_t)atomic_get(&lastHostRxUs);
+  const uint32_t now = micros();
+  if (hostMode != HOST_CAL || !atomic_get(&bridgeReady) ||
+      (uint32_t)(now - hostRxUs) > HOST_HEARTBEAT_US) {
+    calBatch = {};
+    return;
+  }
+  if ((int32_t)(now - calBatchNextUs) < 0) return;
+  if (calBatchIndex == NUM_MOTORS) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, true);
+    calBatch = {};
+    return;
+  }
+  if (!servoCalibrateChecked(MOTOR_IDS[calBatchIndex], calBatch.command.op == CAL_SET_POSITIONS,
+                             calBatch.positions[calBatchIndex])) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, false);
+    calBatch = {};
+    return;
+  }
+  ++calBatchIndex;
+  calBatchNextUs = micros() + (calBatchIndex == NUM_MOTORS ? CAL_MID_SETTLE_US : CAL_MID_INTERVAL_US);
+}
+
 static void advanceCalibration() {
+  advanceBatchCalibration();
   if (hostMode != HOST_CAL || calIndex == 0xFF ||
       (int32_t)(micros() - calNextUs) < 0) return;
   const uint8_t id = MOTOR_IDS[calIndex];
@@ -536,7 +589,7 @@ static void controlTask(void*, void*, void*) {
     const bool imuFresh = sampledImu.sample.ok && sampledImu.seq &&
                          (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;
 
-    CalPacket calPkt;
+    CalPositionsPacket calPkt;
     ServoPacket servoPkt;
     bool gotCal = false, gotServo = false;
     k_mutex_lock(&hostMu, K_FOREVER);

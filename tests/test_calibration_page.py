@@ -58,7 +58,7 @@ class CalibrationPageTest(unittest.TestCase):
         spec = importlib.util.spec_from_file_location('calibration_packager', ROOT / 'tools/package-ai-app.py')
         packager = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(packager)
-        selected = {str(p.relative_to(ROOT)) for p in packager.selected(ROOT)}
+        selected = {p.relative_to(ROOT).as_posix() for p in packager.selected(ROOT)}
         manifest = json.loads((ROOT / 'provenance/calibration-guide.json').read_text())
         self.assertTrue(set(manifest['sha256']).issubset(selected))
 

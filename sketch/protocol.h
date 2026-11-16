@@ -14,8 +14,11 @@ enum HostBusMode : uint8_t { HOST_NORMAL = 0, HOST_CAL = 1, HOST_SERVO_DEBUG = 2
 enum CalOp : uint8_t {
   CAL_ENTER = 0,
   CAL_EXIT = 1,
-  CAL_CENTER_ONE = 2
+  CAL_CENTER_ONE = 2,
+  CAL_CENTER_ALL = 3,
+  CAL_SET_POSITIONS = 4
 };
+constexpr uint8_t CAL_ALL_JOINTS = 0xFF;
 
 enum ServoOp : uint8_t {
   SERVO_ENTER = 0,
@@ -80,6 +83,10 @@ struct __attribute__((packed)) CalPacket {
   uint32_t seq;
   uint8_t op, index;
 };
+struct __attribute__((packed)) CalPositionsPacket {
+  CalPacket command;
+  uint16_t positions[15]; // MOTOR_IDS order, little endian.
+};
 struct __attribute__((packed)) CalReplyPacket {
   char magic[4];
   uint32_t seq;
@@ -112,6 +119,7 @@ static_assert(sizeof(StatePacket) == 240, "State ABI");
 static_assert(sizeof(DiagnosticPacket) == 72, "Diagnostic ABI");
 static_assert(sizeof(VoltagePacket) == 29, "Voltage ABI");
 static_assert(sizeof(CalPacket) == 10, "Cal ABI");
+static_assert(sizeof(CalPositionsPacket) == 40, "Parameterized calibration ABI");
 static_assert(sizeof(CalReplyPacket) == 10, "Cal reply ABI");
 static_assert(sizeof(ServoPacket) == 12, "Servo ABI");
 static_assert(sizeof(RawPacket) == 38, "Raw ABI");

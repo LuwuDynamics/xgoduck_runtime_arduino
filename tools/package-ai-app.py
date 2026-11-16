@@ -29,7 +29,7 @@ def package(output, root=ROOT, toolchain_archive=None):
         source_commit=subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
         source_branch=subprocess.check_output(['git', '-C', str(root), 'branch', '--show-current'], text=True).strip(),
         local_changes=bool(subprocess.check_output(['git', '-C', str(root), 'status', '--porcelain'], text=True)),
-        sha256={str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in files})
+        sha256={path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest() for path in files})
     toolchain_name = None
     if toolchain_archive is not None:
         info = json.loads((ROOT / 'provenance/toolchain.json').read_text())
@@ -45,7 +45,7 @@ def package(output, root=ROOT, toolchain_archive=None):
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for path in files:
-            archive.write(path, str(path.relative_to(root)))
+            archive.write(path, path.relative_to(root).as_posix())
         if toolchain_name is not None:
             # The upstream xz archive is already compressed. Keep it unchanged,
             # including licenses, and avoid a second expensive compression pass.

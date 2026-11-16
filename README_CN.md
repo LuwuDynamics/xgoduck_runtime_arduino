@@ -8,18 +8,7 @@
 
 下面按官方开发者指南的七步顺序配置，使用本仓库的 XGO Duck AI 安装包和启动命令。
 
-## XGO Duck 和 XGO Duck AI 怎么选
-
-只需要网页遥控、舵机设置和标定，可以选 **XGO Duck（master）**。想让小鸭语音聊天、查看 USB 摄像头或使用 ToF 测距，选 **XGO Duck AI（本分支）**。 [查看 master 说明](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/blob/master/README.md)
-
-| 功能 | XGO Duck（master） | XGO Duck AI（本分支） |
-| --- | --- | --- |
-| 运动控制 | 网页遥控、舵机设置、标定和行走等动作 | 同样提供网页运动控制、舵机设置和标定 |
-| 语音聊天 | — | 绑定账号并选择智能体后，国内版说「小鸭小鸭」，国际版说「Hey Ducky」。 |
-| 音视频与测距 | — | USB 摄像头预览、拍照、麦克风监听、扬声器测试，以及可选 ToF 测距和前向避障 |
-| 网页入口 | `http://<板子IP>:9527/` 打开运动控制 | `http://<板子IP>/` 打开驾驶舱和 AI 语音交互绑定，`:9527` 打开运动控制 |
-
-两个版本都使用 2 Mbps Bridge。AI 版请下载第 3 步的 `xgoduck_ai.zip`，按第 4 步配置 USB 探测、驾驶舱入口和开机自启。
+第 3 步的 App Lab 安装包包含运动控制、语音聊天、USB 音视频和可选的 ToF 测距功能。按第 4 步配置 USB 探测、驾驶舱入口和开机自启。
 
 ## 1. 设置并连接 Wi-Fi
 
@@ -45,7 +34,7 @@
 
 ### 手动导入
 
-1. 下载并保留 [XGO Duck AI 安装包 xgoduck_ai.zip](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip)。AI 版请使用此专用 ZIP，可用[配套 SHA-256 文件](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip.sha256)核对。
+1. 下载并保留 [XGO Duck AI 安装包 xgoduck_ai.zip](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip)。AI 版请使用此专用 ZIP，可用[配套 SHA-256 文件](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip.sha256)核对。
 2. 在 App Lab 点 **Apps 旁的 ＋ → Import App → Import from computer**，选择下载的 ZIP。
 3. 导入后点击 **XGO Duck AI** 卡片，保持应用停止，进入第 4 步。AI 版的初始化脚本会准备开发板库和 Bridge，配置完成后再点 **Run**。 [官网导入界面图解](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
 
@@ -81,7 +70,7 @@
 用上面的凭据通过 Wi-Fi SSH 直接登录板子。不要把密码写进文件、命令历史或日志。
 先核对系统、空间、App 列表和实际目录。App CLI 命令以 arduino 用户运行。
 如未导入，下载下面的专用 ZIP，用同地址加 .sha256 的文件校验：
-https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip
 板子下载失败时可在电脑下载并校验，再用 SCP 传过去。检查 arduino-app-cli app import --help，
 支持时以 arduino 导入 ZIP，否则引导我在 App Lab 导入。复用已核对的安装。
 更新时先请我扶稳小鸭并确认卸力，再停止旧 App，备份 App 目录和 data/，按 docs/ai-chat.md 迁移。
@@ -120,30 +109,23 @@ App 安装并启动成功后，提醒我回到本 README，按顺序完成第 5 
 
 [按官方图文组装 XGO Duck](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
 
-[音视频安装教程（PDF）](docs/xgo-duck-av-installation.pdf) · [下载中英装配 PPTX（约 69 MB）](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
+[音视频安装教程（PDF）](docs/xgo-duck-av-installation.pdf) · [下载中英装配 PPTX（约 69 MB）](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
 
 <img src="docs/images/wiring/overview-zh.png" alt="XGO Duck 实物端口接线图，标出 UNO Q、载板、摄像头、ToF 模块、扬声器和补光灯" width="960">
 
 ## 7. IMU 标定和舵机标定
 
-打开 `http://<板子IP>:9527/`，确认在线舵机为 **15/15**。用桌面或标定架支撑小鸭，点击顶部 **标定**。进入页面时舵机会卸力。
+打开 `http://<板子IP>:9527/`，确认在线舵机为 **15/15**。用桌面或标定架支撑小鸭，点击顶部 **标定**。选择标定方式后，舵机会卸力。
 
-### 先标定 IMU
+### 标定舵机
 
-1. 在页面顶部看 **IMU 标定** 的姿势图。扶稳小鸭，让 UNO Q 竖直、电池接口朝上、板子下边缘贴在水平桌面上。若已经开始标定舵机，先点 **全部卸力（Unload all）**。
-2. 点 **标定 IMU**，保持静止约 **1.5 秒**，等到 **IMU 标定已保存**。加速度偏移和陀螺仪零偏会一并保存，重启后自动加载。 [IMU 标定细节](docs/imu-calibration.md)
+- **统一标定：** 按四张参考图摆好小鸭，点 **完成标定**。再让脖子与躯干平行，单独标定 30 号关节。
+- **逐个标定：** 按舵机编号照片和零位图逐个摆好关节，点 **设置中位**。等当前关节显示 **已设中位** 再操作下一个。 [关节图示与按钮说明](docs/calibration-guide.md)
 
-<img src="docs/images/calibration/imu-zh.png" alt="标定页顶部的 IMU 标定按钮、主板摆放图和保存成功提示" width="960">
+### 标定 IMU
 
-如果页面顶部没有 IMU 卡片，可在 **控制** 页底部完成 IMU 标定，舵机摆位可对照官方图解。 [官方标定图解](https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html)
-
-### 逐个设定舵机中位
-
-1. 页面下方按 **头颈（30–34）**、**左腿（10–14）**、**右腿（20–24）** 分区。左右以小鸭自身为准。先看实物照片里的白色 ID 牌，找到要调的关节。
-2. 按对应 ID 的零位参考图用手摆好关节，绿色虚线是对齐基准。点 **设置中位（Set center）**，等该项显示 **已设中位**，再标定下一个。照片和参考图都可以点击放大。
-3. 确认本轮已设 **15/15** 后，点 **全部卸力（Unload all）**，再点 **退出（Exit）**。使用标定架时，在卸力后取下小鸭。已保存的中位会留在舵机里。 [关节图示与按钮说明](docs/calibration-guide.md)
-
-<img src="docs/images/calibration/servos-zh.png" alt="舵机标定分区、带白色编号牌的头颈照片和各关节的零位图与设置中位按钮" width="960">
+1. 标定舵机后，点 **全部卸力**，按页面底部的 **IMU 标定** 图例扶稳小鸭。UNO Q 保持竖直，电池接口朝上，主板下边缘贴在水平桌面上。
+2. 点 **标定 IMU**，保持静止约 **1.5 秒**。看到 **IMU 标定已保存** 后点 **退出**。加速度偏移和陀螺仪零偏会一起保存，重启后自动加载。 [IMU 标定细节](docs/imu-calibration.md)
 
 ### 回到控制页检查默认姿态
 
@@ -220,7 +202,7 @@ App 安装并启动成功后，提醒我回到本 README，按顺序完成第 5 
 ### 1. 小鸭走不稳或发抖
 
 1. 先停止移动，扶稳小鸭并卸力。按标定页的编号图核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
-2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)重新标定 IMU 和全部 15 个舵机。新版标定页顶部可以标定 IMU，下方有舵机实物编号和各关节的零位参考图。
+2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)重新标定 IMU 和全部 15 个舵机。
 3. 打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对保存值和运行值。断电重启后，舵机会加载保存值。
 
 本项目基于 Pollen Robotics 的 [Microduck](https://github.com/pollen-robotics/microduck)。[硬件](https://github.com/LuwuDynamics/xgoduck_hardware) · [训练代码](https://github.com/LuwuDynamics/xgoduck_rl)

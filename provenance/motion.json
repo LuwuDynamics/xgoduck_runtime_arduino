@@ -49,31 +49,31 @@
   },
   "sha256": {
     "assets/app.js": "a427db110649d985d8796c45bf2cc92fcea3500cfb8a7f8d20b88829c07b7c54",
-    "assets/calibrate.html": "47f29c89f39a5d5cd06b25f0a5b1592720806d6990cca1d7e63146c8a8ccd7f4",
-    "assets/calibrate.js": "6206175a0f80ff6369c45a9c5fc996c8e4c2861f89fe30924e895ee5a7a962b9",
+    "assets/calibrate.html": "f5e724556e6194eadadd0aeeaace436b80fb961f51bd9b0c43cf331c5c40fde5",
+    "assets/calibrate.js": "66f4d5481f021b209ea51127066667ab1c8793781e236703c191015910c99709",
     "assets/imu-calibration-pose.png": "eb0415f86555cab9fb6f70d017b55aff6ad9dc6ec8e81775bac0a20177ff1da5",
     "assets/index.html": "36cc42f1341c71ddd01feb3d794d13db2ea36eeb87eb7466f9ac58a2e3c51a5f",
     "assets/servo.css": "bf0bc647bb12f451c2a57f603a312dbc7e59cd04456713cf518c0d97806d566a",
     "assets/servo.html": "d4e7a5e6254f7e3007f327678a6ebcbf4f0f76fbdf826583e2be86f6bf845805",
     "assets/servo.js": "c5a640e59792bf3aad30dfd39c12c69a2e9022623db0ca7116dd8e434226677d",
     "assets/style.css": "0a12d244d08622ebed3ee3a1dcd410bf7068c6c15f9d409e128e798ecac37f26",
-    "python/controller.py": "f2fc47e29a2805a16a76371e8261f92be0ba9cd70620934a2d878fa33a996498",
+    "python/controller.py": "4e442911be76cdd3d87b8e360ea6ca26b796d89d2f14e065a5371cef01297037",
     "python/duck_thing.py": "0bb7e95da09c603b5e9a652e8d3c168932a8e07b75567e31c95b1be16dff67eb",
     "python/forward_avoidance.py": "585e44926c1d023f048d0b4f8dbf3a883882cdfb3406409c5085207a51feff3c",
     "python/gamepad.py": "78daad9e936df6c27a2ee9fc2be7921144a0b14efb2136a2d7377796662c12d2",
     "python/heading.py": "322f28038ae4e70fa5b585cef5b9617c50dfc6fa93f68d8550ed0eac59a036cb",
-    "python/main.py": "b9b93b2b50a74c17cb628643ea06eaa448adb1b9d33091b716ed3aa22b9654b9",
+    "python/main.py": "f2c7090877cc43ba6e0ea5483801a7c44bd58708432a890822cc96f92a96c1b8",
     "python/motion_access.py": "1c56647509311565c5baf79af0a6ceb496114149277ca00d45218bb0e1046020",
-    "python/motion_calibration.py": "aa6e41d248b22684db030d422607ab3f282349a34dc9746b4b7d8aee924e9757",
+    "python/motion_calibration.py": "de295ea20396abe878dc39b3419a95b2c449ac73b3e41a0f3a0b6e02c6680c08",
     "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
     "python/proc.py": "b4d038bb5c9844284fbc6ad500ad907e619e39488ec3714f6c2cddfba7fdf488",
     "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
-    "python/rl_core.py": "499536696b904af476f4943f8c955922df3defdd4f06515d683c16192d529a52",
+    "python/rl_core.py": "11aac0dfba063e9c7d4041e240d0de82ef0b67c2894ca23d3fb35d11416e6270",
     "python/runtime_gains.py": "9dbaf0550e8e515bf99a3dc94d086350d8a2c9c759b160723aea1da627a3c7a7",
     "python/speech_mouth.py": "e6be97d6e42b059eaca551ea9530fcafc96dd6f15c81bed83a3386bbebc25259",
     "python/standing_imu.py": "0bbfc08e7f80e8110154aedf36fac79c470440c7e02b35c00f3905e385b75286",
     "python/voice_region.py": "fc0c6c829e1f521203078f991953270df3e6cc67a00377cbf82de0dd04a18a41",
-    "python/wire.py": "a79f1a5f3a99896eee27d8ab1586ca64dd670ed13db3bec60941d01d49a84731",
+    "python/wire.py": "2924a9fc9924e4373ae5ac6afc2cefb6948faca59e19cc9c51fdb9a190ae8672",
     "python/xgoduck_ballkick_left.onnx": "3476e99a4d400dad9ff8a61167dc3bd9556b953cbbfcaffdda24e5d744c32873",
     "python/xgoduck_ballkick_right.onnx": "ddba8e793d5f2c8a47d25756fa4bc0f6d39cf46686ff3929a404ca46c7f7fb46",
     "python/xgoduck_getup.onnx": "0aa9466310dddc17438e42a28d9fa20bd869b4ee0568c7b6d5bfef85e53cbb94",
@@ -83,17 +83,22 @@
     "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
     "python/xgoduck_walk.onnx": "1fc079512fe3fe23e274e7a9d8c9ad007e88439f0385ecf20c9596e57886249f",
     "sketch/duck_config.h": "d533b5033f286848dfd5ce99b551ef2d0f53c38b956331729c7e6c7027756f4f",
-    "sketch/protocol.h": "23d63898dab98dff5017a3a42f955ebffbe7ab1272904799140997f780e36fd8",
+    "sketch/protocol.h": "46e16c89fcc9daad30fa86788ba78d1b411deca429373453c814f17dc08015b1",
     "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
-    "sketch/scs_bus.h": "c0abe9c1cb877afbdbf8fb26173b53a07163f4dd8c844d6ac591ead9c5096717",
-    "sketch/sketch.ino": "44631a97dd417466d2c472b1969cf17b8dc74d727729f4786bb32fd752c7b286",
+    "sketch/scs_bus.h": "30b4acce9c4d213c7763150b54194ee09ccbb9d7a193afb7e7d2f3b170c22007",
+    "sketch/sketch.ino": "63a31531844aedfd3da81acb0d3005186c7cc015c97f375f755ce84cf279265b",
     "sketch/sketch.yaml": "46f0c79abfd9e04755661d3a878d9688cbd51fa35bb958ddf62c92209bf6d2ef",
     "sketch/tof_sensor.h": "72f4463bdfd8da5d307281fa988cd4a6f0d8e6b90f7bda8643ff947ace106303",
     "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
     "tools/bridge_patch.py": "a07d6e63ea15d3de21351e342b4f46d3af678ca90dc9f1723ee2cf853dbddde0",
     "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2",
     "assets/panel-language.js": "ec9aca56887d6255f3332d4a9487ffa400cccb8b2282c6440b1e26081ebbdeef",
-    "assets/xgo-favicon.png": "a625472972c22b00cdd4bd4c73ff8721ec8618e1d7b14a1a3274b49a388114cb"
+    "assets/xgo-favicon.png": "a625472972c22b00cdd4bd4c73ff8721ec8618e1d7b14a1a3274b49a388114cb",
+    "assets/calibrate.css": "5a5d3d271a076e333f6ba099cefcb61106bebe5189f9f639cf926ae761efcbfe",
+    "assets/cal-unified-4.png": "e0a1812aba5126aa26784332adbf50a8644804aeae5656dc848ff3548fbc767c",
+    "assets/cal-unified-3.png": "dddb7e312aff1febcd1810474771547fa66e2f995f8a025c2d2a7ac330500513",
+    "assets/cal-unified-2.png": "0cf86b5f19f9fc8f573def8d1f769f930a73b66d08d5535f2b02920568231e81",
+    "assets/cal-unified-1.png": "af942be9ea6890f013e07096406adf7f43039a64857a6ebb786e6151eef4cca9"
   },
   "stable_exact_files": [
     "assets/imu-calibration-pose.png",
@@ -361,6 +366,45 @@
         "upstream": "          enabled = true; timedOut = false;\n          setMouthKpKd();\n        }",
         "count": 1
       }
+    ],
+    "sitting_calibration_overlays": [
+      {
+        "integrated": "\nstatic HostBusMode hostMode = HOST_NORMAL;\nstatic CalPositionsPacket pendingCal = {};\nstatic bool calPending = false;\nstatic CalReplyPacket calReply = {};\n",
+        "upstream": "\nstatic HostBusMode hostMode = HOST_NORMAL;\nstatic CalPacket pendingCal = {};\nstatic bool calPending = false;\nstatic CalReplyPacket calReply = {};\n"
+      },
+      {
+        "integrated": "static constexpr uint32_t CAL_MID_INTERVAL_US = 10000;\nstatic constexpr uint32_t CAL_MID_SETTLE_US = 100000;\nstatic CalPositionsPacket calBatch = {};\nstatic uint8_t calBatchIndex = 0;\nstatic uint32_t calBatchNextUs = 0;\nstatic ServoPacket pendingServo = {};\nstatic bool servoPending = false;\n",
+        "upstream": "static constexpr uint32_t CAL_MID_INTERVAL_US = 10000;\nstatic constexpr uint32_t CAL_MID_SETTLE_US = 100000;\nstatic ServoPacket pendingServo = {};\nstatic bool servoPending = false;\n"
+      },
+      {
+        "integrated": "\nstatic void receiveCal(MsgPack::bin_t<uint8_t> bytes) {\n  CalPositionsPacket request = {};\n  const bool parameterized = bytes.size() == sizeof(request);\n  bool valid = parameterized || bytes.size() == sizeof(CalPacket);\n  if (valid) {\n    memcpy(&request, bytes.data(), bytes.size());\n    const CalPacket &pkt = request.command;\n    valid = memcmp(pkt.magic, \"DQL2\", 4) == 0 &&\n            (parameterized ? pkt.op == CAL_SET_POSITIONS : pkt.op <= CAL_CENTER_ALL);\n    if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;\n    if (pkt.op == CAL_CENTER_ALL || pkt.op == CAL_SET_POSITIONS)\n      valid = valid && pkt.index == CAL_ALL_JOINTS;\n    if (parameterized) {\n      for (unsigned i = 0; i < NUM_MOTORS; ++i)\n        valid = valid && request.positions[i] >= POS_MIN && request.positions[i] <= POS_MAX;\n    }\n    if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;\n  }\n  k_mutex_lock(&hostMu, K_FOREVER);\n  if (valid) { pendingCal = request; calPending = true; atomic_set(&lastHostRxUs, micros()); }\n  else {\n    k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);\n",
+        "upstream": "\nstatic void receiveCal(MsgPack::bin_t<uint8_t> bytes) {\n  CalPacket pkt;\n  bool valid = bytes.size() == sizeof(pkt);\n  if (valid) {\n    memcpy(&pkt, bytes.data(), sizeof(pkt));\n    valid = memcmp(pkt.magic, \"DQL2\", 4) == 0 && pkt.op <= CAL_CENTER_ONE;\n    if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;\n    if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;\n  }\n  k_mutex_lock(&hostMu, K_FOREVER);\n  if (valid) { pendingCal = pkt; calPending = true; atomic_set(&lastHostRxUs, micros()); }\n  else {\n    k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);\n"
+      },
+      {
+        "integrated": "}\n\nstatic void applyCalOp(const CalPositionsPacket &request) {\n  const CalPacket &pkt = request.command;\n  switch (pkt.op) {\n    case CAL_ENTER:\n",
+        "upstream": "}\n\nstatic void applyCalOp(const CalPacket &pkt) {\n  switch (pkt.op) {\n    case CAL_ENTER:\n"
+      },
+      {
+        "integrated": "      rawNotifyEveryTick = true;\n      calIndex = 0xFF;\n      calBatch = {};\n      k_mutex_lock(&motorsMu, K_FOREVER);\n      calHeldMask = 0;\n",
+        "upstream": "      rawNotifyEveryTick = true;\n      calIndex = 0xFF;\n      k_mutex_lock(&motorsMu, K_FOREVER);\n      calHeldMask = 0;\n"
+      },
+      {
+        "integrated": "      rawNotifyEveryTick = false;\n      calIndex = 0xFF;\n      calBatch = {};\n      k_mutex_lock(&motorsMu, K_FOREVER);\n      calHeldMask = 0;\n",
+        "upstream": "      rawNotifyEveryTick = false;\n      calIndex = 0xFF;\n      k_mutex_lock(&motorsMu, K_FOREVER);\n      calHeldMask = 0;\n"
+      },
+      {
+        "integrated": "      break;\n    case CAL_CENTER_ONE:\n      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op ||\n          (calHeldMask & (1u << pkt.index)) || !(servoRxMask & (1u << pkt.index))) {\n        publishCalReply(pkt.seq, pkt.index, false);\n",
+        "upstream": "      break;\n    case CAL_CENTER_ONE:\n      if (hostMode != HOST_CAL || calIndex != 0xFF ||\n          (calHeldMask & (1u << pkt.index)) || !(servoRxMask & (1u << pkt.index))) {\n        publishCalReply(pkt.seq, pkt.index, false);\n"
+      },
+      {
+        "integrated": "      calNextUs = micros();\n      break;\n    case CAL_CENTER_ALL:\n    case CAL_SET_POSITIONS:\n      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op || calHeldMask ||\n          servoRxMask != (1u << NUM_MOTORS) - 1u) {\n        publishCalReply(pkt.seq, CAL_ALL_JOINTS, false);\n        break;\n      }\n      setTorqueEnable(false);\n      calBatch = request;\n      calBatchIndex = 0;\n      calBatchNextUs = micros() + CAL_MID_INTERVAL_US;\n      break;\n  }\n}\n\nstatic void advanceBatchCalibration() {\n  if (!calBatch.command.op) return;\n  const uint32_t hostRxUs = (uint32_t)atomic_get(&lastHostRxUs);\n  const uint32_t now = micros();\n  if (hostMode != HOST_CAL || !atomic_get(&bridgeReady) ||\n      (uint32_t)(now - hostRxUs) > HOST_HEARTBEAT_US) {\n    calBatch = {};\n    return;\n  }\n  if ((int32_t)(now - calBatchNextUs) < 0) return;\n  if (calBatchIndex == NUM_MOTORS) {\n    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, true);\n    calBatch = {};\n    return;\n  }\n  if (!servoCalibrateChecked(MOTOR_IDS[calBatchIndex], calBatch.command.op == CAL_SET_POSITIONS,\n                             calBatch.positions[calBatchIndex])) {\n    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, false);\n    calBatch = {};\n    return;\n  }\n  ++calBatchIndex;\n  calBatchNextUs = micros() + (calBatchIndex == NUM_MOTORS ? CAL_MID_SETTLE_US : CAL_MID_INTERVAL_US);\n}\n\nstatic void advanceCalibration() {\n  advanceBatchCalibration();\n  if (hostMode != HOST_CAL || calIndex == 0xFF ||\n      (int32_t)(micros() - calNextUs) < 0) return;\n",
+        "upstream": "      calNextUs = micros();\n      break;\n  }\n}\n\nstatic void advanceCalibration() {\n  if (hostMode != HOST_CAL || calIndex == 0xFF ||\n      (int32_t)(micros() - calNextUs) < 0) return;\n"
+      },
+      {
+        "integrated": "                         (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;\n\n    CalPositionsPacket calPkt;\n    ServoPacket servoPkt;\n    bool gotCal = false, gotServo = false;\n",
+        "upstream": "                         (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;\n\n    CalPacket calPkt;\n    ServoPacket servoPkt;\n    bool gotCal = false, gotServo = false;\n",
+        "control_task": true
+      }
     ]
   },
   "mcu_compatibility": {
@@ -549,7 +593,7 @@
   "calibration_guide_overlay": {
     "guide": "docs/calibration-guide.md",
     "provenance": "provenance/calibration-guide.json",
-    "scope": "Calibration page only: three photo zones, 15 URDF pose references, bilingual instructions, in-page image enlargement and session progress. Canonical index mapping, calibration endpoints, MCU centering, stored centers, unload and foreground heartbeat rules are preserved. Late responses cannot reopen an exited session.",
+    "scope": "The calibration page offers unified and individual joint calibration. Unified calibration uses four reference photos, a separate ID 30 center control, and separate IMU calibration. The individual guide preserves 15 URDF pose references, in-page image enlargement, and session progress.",
     "files": [
       "assets/calibrate.html",
       "assets/calibrate.js",
@@ -573,7 +617,11 @@
       "assets/cal-31-pose.svg",
       "assets/cal-32-pose.svg",
       "assets/cal-33-pose.svg",
-      "assets/cal-34-pose.svg"
+      "assets/cal-34-pose.svg",
+      "assets/cal-unified-1.png",
+      "assets/cal-unified-2.png",
+      "assets/cal-unified-3.png",
+      "assets/cal-unified-4.png"
     ]
   },
   "servo_gains_display_overlay": {
@@ -623,5 +671,18 @@
   "website_favicon": {
     "asset": "assets/xgo-favicon.png",
     "source": "https://www.xgorobot.com/images/logo.png"
+  },
+  "default_pose_overlay": {
+    "source_overlays": {
+      "python/rl_core.py": [
+        {
+          "integrated": "    0.0, -5.0, -22.0, -2.0, 20.0,\n    0.0, 5.0, 22.0, 2.0, -20.0,",
+          "upstream": "    0.0, -5.0, -22.0, 0.0, 22.0,\n    0.0, 5.0, 22.0, 0.0, -22.0,"
+        }
+      ]
+    }
+  },
+  "sitting_calibration_overlay": {
+    "scope": "Calibration-only bulk centering and parameterized encoder calibration using servo opcode 0x0B. Both phases acknowledge each servo and keep torque off."
   }
 }

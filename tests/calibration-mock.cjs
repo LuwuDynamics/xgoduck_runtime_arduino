@@ -8,7 +8,7 @@ const ASSETS = path.resolve(__dirname, '../assets');
 
 async function createMock(port=0) {
   const state = {mode:'shadow', held:Array(15).fill(false), mask:32767, imu:false,
-    calls:[], saved:new Set(), failCenter:null, statusDown:false, beats:0,
+    calls:[], saved:new Set(), sittingPositions:null, failCenter:null, statusDown:false, beats:0,
     delayStatus:false, releaseStatus:null, delayCenter:false, releaseCenter:null,
     guideFailure:null, imuOk:true, imuStartError:null, imuSampleError:null,
     imuResult:{state:'idle', progress:0, calibrated:false}};
@@ -29,7 +29,7 @@ async function createMock(port=0) {
         if (state.statusDown) return json(503, {detail:'offline'});
         const snapshot = {mode:state.mode, cal_done:[...state.held], raw_mask:state.mask,
           raw_pos:MOTORS.map((_,i)=>state.held[i]?2048:2200+i),
-          enabled:false, imu_ok:state.imuOk, feedback_age_ms:10,
+          enabled:false, mcu_calibrating:state.mode==='calibrate', imu_ok:state.imuOk, feedback_age_ms:10,
           imu_calibration:imuSnapshot(), last_error:''};
         if (state.delayStatus) {
           state.delayStatus = false;
@@ -61,6 +61,17 @@ async function createMock(port=0) {
             if (state.mode !== 'calibrate') return json(400, {detail:'not in calibrate mode'});
             state.beats++;
             return json(200, {ok:true});
+          case '/api/cal/sitting':
+            if (state.mode !== 'calibrate') return json(400, {detail:'not in calibrate mode'});
+            if (state.imu || state.held.some(Boolean) || state.mask !== 32767) {
+              return json(400, {detail:'Sitting calibration requires all servos online and unloaded.'});
+            }
+            state.sittingPositions = [
+              2092, 2062, 995, 1007, 2092,
+              2002, 2032, 3099, 3087, 2002,
+              1367, 937, 2047, 2047, 2047
+            ];
+            return json(200, {ok:true, positions:state.sittingPositions});
           case '/api/cal/center': {
             const i = body.index;
             if (!Number.isInteger(i) || i<0 || i>=15) return json(400, {detail:'joint index out of range'});

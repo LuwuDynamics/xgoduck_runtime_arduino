@@ -964,6 +964,54 @@ class Controller:
                 with self.lock:
                     self.cal_expected_index = None
 
+    def cal_sitting(self, positions):
+        with self.cal_op_lock:
+            with self.lock:
+                self._require_battery()
+                self._check_imu_idle_locked()
+                if self.mode != 'calibrate':
+                    raise ValueError('not in calibrate mode')
+                generation = self.generation
+                center_seq = (self.cal_seq + 1) & 0xffffffff
+                positions_seq = (center_seq + 1) & 0xffffffff
+                stages = (
+                    (center_seq, encode_cal(CAL_CENTER_ALL, seq=center_seq), '2048'),
+                    (positions_seq, encode_cal_positions(positions, positions_seq), 'target positions'),
+                )
+                self.cal_seq = positions_seq
+                self.cal_expected_index = (center_seq, CAL_ALL_JOINTS)
+            try:
+                for seq, payload, stage in stages:
+                    with self.lock:
+                        self._require_battery()
+                        self._check_imu_idle_locked()
+                        if self.mode != 'calibrate' or self.generation != generation:
+                            raise ValueError('calibration session changed')
+                        fb = self.feedback
+                        now = time.monotonic()
+                        if not fb or now - self.rx_time > .15:
+                            raise ValueError('MCU feedback is stale')
+                        if not fb.calibrating or fb.enabled or any(self.cal_done):
+                            raise ValueError('Unload all joints before sitting calibration.')
+                        if fb.mask != ALL_MASK:
+                            raise ValueError('All 15 servos must be online for sitting calibration.')
+                        self.web_time = now
+                        self.cal_reply = None
+                        self.cal_reply_event.clear()
+                        self.cal_expected_index = (seq, CAL_ALL_JOINTS)
+                        self.bridge.notify('duck_cal', payload)
+                    if not self.cal_reply_event.wait(1.2):
+                        raise ValueError(f'Sitting calibration timed out at {stage}.')
+                    with self.lock:
+                        if self.mode != 'calibrate' or self.generation != generation:
+                            raise ValueError('calibration session changed')
+                        if not self.cal_reply or not self.cal_reply['ok']:
+                            raise ValueError(f'Sitting calibration failed at {stage}.')
+                return {'ok': True, 'positions': list(positions)}
+            finally:
+                with self.lock:
+                    self.cal_expected_index = None
+
     def _require_servo_debug(self):
         if self.mode != 'servo_debug':
             raise ValueError('not in servo_debug mode')

@@ -9,7 +9,7 @@ let browser;
 before(async()=>{browser=await chromium.launch({headless:true,channel:process.env.PLAYWRIGHT_CHANNEL||'chrome'});});
 after(async()=>{await browser?.close();});
 
-async function setup(t,options={},configure=()=>{}) {
+async function setup(t,options={},configure=()=>{},mode='individual') {
   const mock=await createMock();configure(mock.state);
   const context=await browser.newContext({locale:'zh-CN',viewport:{width:1365,height:900},...options});
   const page=await context.newPage();
@@ -17,6 +17,7 @@ async function setup(t,options={},configure=()=>{}) {
   await context.route('**/*',route=>new URL(route.request().url()).origin===mock.url?route.continue():route.abort());
   t.after(async()=>{await context.close();await mock.close();assert.deepEqual(errors,[]);});
   await page.goto(mock.url+'/calibrate.html');
+  if(mode)await page.locator(`[data-calibration-mode="${mode}"]`).click();
   return {...mock,page,context};
 }
 const enabled=(page,i)=>page.waitForFunction(i=>!document.querySelector(`[data-center="${i}"]`)?.disabled,i);
@@ -57,12 +58,12 @@ test('three zones, every real image decodes, bilingual labels, narrow layout and
   }
 });
 
-test('top IMU panel uses the existing start endpoint and blocks conflicting servo operations', async t => {
+test('IMU panel after servo calibration uses the existing start endpoint and blocks conflicting servo operations', async t => {
   const {page, state} = await setup(t);
   const ready = () => poll(page, () => document.getElementById('imu-start').disabled === false);
   await ready();
-  assert.equal(await page.locator('#imu-panel').evaluate(panel =>
-    Boolean(panel.compareDocumentPosition(document.getElementById('intro')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
+  assert.equal(await page.locator('#finish').evaluate(finish =>
+    Boolean(finish.compareDocumentPosition(document.getElementById('imu-panel')) & Node.DOCUMENT_POSITION_FOLLOWING)), true);
 
   state.imuOk = false;
   await poll(page, () => document.getElementById('imu-status').textContent.includes('检查 IMU 连接'));
@@ -74,7 +75,7 @@ test('top IMU panel uses the existing start endpoint and blocks conflicting serv
   await holding(page, 10);
   assert.equal(await page.locator('#imu-start').isDisabled(), true);
   assert.match(await page.locator('#imu-status').textContent(), /全部卸力/);
-  await page.locator('[data-action=unload]').first().click();
+  await page.locator('#imu-unload').click();
   await ready();
 
   state.imuStartError = 'Hold the board upright with the battery connector pointing up.';
@@ -84,7 +85,7 @@ test('top IMU panel uses the existing start endpoint and blocks conflicting serv
   await page.locator('#imu-start').click();
   await page.locator('#imu-progress').waitFor({state:'visible'});
   assert.equal(await page.locator('[data-center="10"]').isDisabled(), true);
-  assert.equal(await page.locator('[data-action=unload]').first().isDisabled(), true);
+  assert.equal(await page.locator('#individual-calibration [data-action=unload]').first().isDisabled(), true);
   assert.equal(await page.locator('#exit').isEnabled(), true);
   await poll(page, () => document.getElementById('imu-status').textContent.includes('已保存'));
   assert.equal(state.mode, 'calibrate');
@@ -92,6 +93,53 @@ test('top IMU panel uses the existing start endpoint and blocks conflicting serv
   assert.equal(await page.locator('[data-center="10"]').isEnabled(), true);
   assert.deepEqual(state.calls.filter(call => call.path === '/api/imu-calibration').map(call => call.body),
     [{action:'start'}, {action:'start'}]);
+});
+
+test('method selection separates unified joints, ID 30 and IMU calibration', async t => {
+  const {page,state}=await setup(t,{viewport:{width:390,height:844}},()=>{},null);
+  for(const id of ['individual-calibration','unified-calibration','imu-panel']){
+    assert.equal(await page.locator('#'+id).isHidden(),true);
+  }
+  assert.equal(state.calls.some(call=>call.path==='/api/cal/enter'),false);
+  await page.getByRole('button',{name:'统一标定',exact:true}).click();
+  assert.equal(await page.locator('#cal-choice').isHidden(),true);
+  assert.equal(await page.locator('#individual-calibration').isHidden(),true);
+  await page.locator('#unified-neck .cal-pose').waitFor();
+  assert.equal(await page.locator('#unified-photos img').count(),4);
+  await page.locator('#unified-photos img').evaluateAll(images=>Promise.all(images.map(img=>img.decode())));
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  assert.equal(await page.locator('#unified-neck-panel').evaluate(neck=>
+    Boolean(neck.compareDocumentPosition(document.getElementById('imu-panel')) & Node.DOCUMENT_POSITION_FOLLOWING)),true);
+  const button=page.locator('#complete-calibration');
+  await page.route('**/api/cal/sitting', route=>route.fulfill({
+    status:400, json:{detail:'Servo calibration failed'}
+  }), {times:1});
+  await button.click();
+  await poll(page,()=>document.getElementById('unified-status').textContent.includes('重试'));
+  assert.equal(state.calls.some(call=>call.path==='/api/imu-calibration'),false);
+
+  await button.click();
+  await poll(page,()=>document.getElementById('unified-status').textContent.includes('关节标定已保存'));
+  assert.equal(state.calls.some(call=>call.path==='/api/imu-calibration'),false);
+  assert.equal(await page.locator('[data-center]').count(),1);
+  await page.locator('#unified-neck button[data-center="10"]').click();
+  await holding(page,10);
+  assert.equal(await page.locator('#imu-start').isDisabled(),true);
+  await page.locator('#imu-unload').click();
+  await page.locator('#imu-start').click();
+  await page.locator('#imu-progress').waitFor({state:'visible'});
+  assert.equal(await button.isDisabled(),true);
+  await poll(page,()=>document.getElementById('imu-status').textContent.includes('已保存'));
+  assert.deepEqual(state.calls.filter(call=>['/api/cal/sitting','/api/cal/center','/api/imu-calibration'].includes(call.path)),
+    [{path:'/api/cal/sitting',body:{}},{path:'/api/cal/center',body:{index:10}},{path:'/api/imu-calibration',body:{action:'start'}}]);
+  await page.locator('#calibration-back').click();
+  await page.locator('#cal-choice').waitFor();
+  assert.ok(state.calls.some(call=>call.path==='/api/cal/exit'));
+  assert.equal(await page.locator('#imu-panel').isHidden(),true);
+  await page.getByRole('button',{name:'逐个标定',exact:true}).click();
+  await enabled(page,10);
+  assert.equal(await page.locator('#individual-calibration').isVisible(),true);
+  assert.equal(await page.locator('#unified-calibration').isHidden(),true);
 });
 
 test('IMU sample errors show the real reason and exit follows a pending start', async t => {
@@ -135,7 +183,7 @@ test('all 15 buttons map to canonical MCU indices, confirmed centers hold, unloa
   }
   assert.deepEqual(state.calls.filter(c=>c.path==='/api/cal/center').map(c=>c.body.index),[10,11,12,13,14,0,1,2,3,4,5,6,7,8,9]);
   assert.match(await page.locator('#message').textContent(),/15/);
-  await page.locator('[data-action=unload]').first().click();await enabled(page,10);
+  await page.locator('#individual-calibration [data-action=unload]').first().click();await enabled(page,10);
   assert.equal(state.saved.size,15);
   assert.equal(await page.locator('.cal-card.done').count(),0);
   assert.match(await page.locator('#total').textContent(),/0 \/ 15/);
@@ -156,7 +204,7 @@ test('a missing servo and an IMU calibration block only permitted actions; a fai
   await enabled(page,11);await page.locator('[data-center="11"]').click();await holding(page,11);
   state.imu=true;
   await poll(page,()=>document.querySelector('[data-center="0"]').disabled);
-  assert.equal(await page.locator('[data-action=unload]').first().isDisabled(),true);
+  assert.equal(await page.locator('#individual-calibration [data-action=unload]').first().isDisabled(),true);
   assert.equal(await page.locator('#exit').isEnabled(),true);
 });
 
@@ -182,7 +230,7 @@ test('exit cannot be undone by an older status response or a late center acknowl
   await page.waitForTimeout(300);
   assert.equal(await page.locator('[data-center="10"]').isDisabled(),true);
   assert.equal(await page.locator('.cal-card.done').count(),0);
-  await page.locator('[data-action=unload]').first().click();await enabled(page,10);
+  await page.locator('#individual-calibration [data-action=unload]').first().click();await enabled(page,10);
   state.delayCenter=true;
   await page.locator('[data-center="10"]').click();
   for(let i=0;i<100&&!state.releaseCenter;i++)await page.waitForTimeout(20);

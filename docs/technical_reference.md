@@ -72,9 +72,9 @@ Startup, arming and calibration preserve the leg/head servos’ existing KP/KD. 
 
 Do this after wiring and confirming every servo ID answers.
 
-1. Open **Calibration** (`/calibrate.html`). All servos unload.
-2. Turn each joint by hand to its mechanical center, then click **Set center & hold**. Only that joint is centered and held at 2048; uncalibrated joints remain unloaded.
-3. Complete all 15 joints, then exit to unload them all. Check Default pose with the robot supported before Walk / get up.
+1. Open **Calibration** and select a method to unload the servos.
+2. **Unified calibration** writes the center and calibrated encoder position for each servo while unloaded. Calibrate ID 30 separately afterward. **Calibrate individually** sets one servo center at a time and holds that joint at 2048.
+3. Unload all servos, calibrate the IMU at the bottom of the page, and exit. Check Default pose with the robot supported before Walk / get up.
 
 Legacy software-center migration is described above and in the AI guide. Do not replace old zeros with 2047 to skip calibration. The page also offers Roller walking, independent model amplitude/action filters, IMU filtering, and separate all-servo protection-switch/current broadcasts; protection settings are changed only when explicitly requested from the page.
 

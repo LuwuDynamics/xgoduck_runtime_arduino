@@ -8,18 +8,7 @@ Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data
 
 The first seven steps follow the official developer guide, with this repository’s XGO Duck AI ZIP and startup commands.
 
-## Choose XGO Duck or XGO Duck AI
-
-Choose **XGO Duck (master)** for browser motion control, servo setup and calibration. Choose **XGO Duck AI (this branch)** if you also want voice chat, a USB camera view or ToF ranging. [Read the master branch guide](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/blob/master/README.md)
-
-| Feature | XGO Duck (master) | XGO Duck AI (this branch) |
-| --- | --- | --- |
-| Motion control | Browser controls, servo setup, calibration and actions such as walking | Browser motion controls, servo setup and calibration |
-| Voice chat | — | Bind an account and choose an agent. Say “Hey Ducky” for International or “小鸭小鸭” for China. |
-| Media and ranging | — | USB camera preview, snapshots, live microphone monitoring, speaker test, and optional ToF ranging and forward obstacle avoidance |
-| Web access | `http://<board-ip>:9527/` for motion control | `http://<board-ip>/` for the cockpit and Link AI, with motion control on port `9527` |
-
-Both apps use a 2 Mbps Bridge. For XGO Duck AI, download `xgoduck_ai.zip` in step 3 and follow step 4 to set up USB detection, the cockpit and automatic startup.
+Motion control, voice chat, USB audio/video and optional ToF ranging are included in the App Lab ZIP in step 3. Follow step 4 to set up USB detection, the cockpit and automatic startup.
 
 ## 1. Set up Wi-Fi
 
@@ -45,7 +34,7 @@ I will enter the password at the terminal prompt.
 
 ### Import manually
 
-1. Download and keep the [XGO Duck AI App Lab ZIP](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip). The [matching SHA-256 file](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip.sha256) lets you verify the download.
+1. Download and keep the [XGO Duck AI App Lab ZIP](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip). The [matching SHA-256 file](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip.sha256) lets you verify the download.
 2. In App Lab, select **＋ next to Apps → Import App → Import from computer** and choose the ZIP.
 3. Open the imported **XGO Duck AI** card and leave the App stopped. Step 4 prepares the board libraries and Bridge before the first **Run**. [Illustrated import guide](https://www.xgorobot.com/duck-developer-guide/03-import-app.html)
 
@@ -81,7 +70,7 @@ For automatic detection, leave the region unset on a fresh install and preserve 
 Sign in to the board over Wi-Fi SSH with the credentials above. Keep the password out of files,
 shell history and logs. Run App CLI commands as the arduino user.
 Check the OS, disk space, installed Apps and their actual paths. If needed, download the dedicated ZIP:
-https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/packages/xgoduck_ai.zip
 Verify it against the same URL with .sha256 appended. If needed, download on my computer and use SCP.
 Check arduino-app-cli app import --help. Import as arduino if supported, or guide me through App Lab.
 Reuse a verified import. For an update, have me support Duck and confirm torque is off before stopping
@@ -125,30 +114,23 @@ completed any of these steps, point me to the next unfinished one.
 
 [Follow the official illustrated assembly guide](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
 
-[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
+[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/master/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
 
 <img src="docs/images/wiring/overview-en.png" alt="XGO Duck physical wiring diagram for the UNO Q, carrier, camera, ToF module, speakers and fill light" width="960">
 
 ## 7. IMU and servo calibration
 
-Open `http://<board-ip>:9527/` and check that **15/15** servos are online. Support Duck on a table or in a calibration stand, then click **Calibration** in the top bar. Opening this page releases the servos.
+Open `http://<board-ip>:9527/` and check that **15/15** servos are online. Support Duck on a table or in a calibration stand, then click **Calibration** in the top bar. Selecting a calibration method releases the servos.
 
-### Calibrate the IMU first
+### Calibrate the servos
 
-1. Use the pose photo in **IMU calibration** at the top of the page. Support Duck with the UNO Q upright, the battery connector pointing up, and the board’s bottom edge against a level table. If you have started setting servo centers, click **Unload all** first.
-2. Click **Calibrate IMU** and hold still for about **1.5 seconds**, until **IMU calibration saved** appears. The app saves the accelerometer offsets and gyro bias together and loads them on restart. [IMU calibration details](docs/imu-calibration.md)
+- **Unified calibration:** Follow the four photos to position Duck. Click **Complete calibration**, then set ID 30 separately with the neck parallel to the body.
+- **Calibrate individually:** Use the ID photos and pose diagrams to set the center of each joint. Wait for **Center set** before proceeding to the next joint. [Joint diagrams and controls](docs/calibration-guide.md)
 
-<img src="docs/images/calibration/imu-en.png" alt="IMU calibration button, board position photo and saved status at the top of the Calibration page" width="960">
+### Calibrate the IMU
 
-If the IMU card is missing, use **Calibrate IMU** at the bottom of **Control** and refer to the official diagrams for the servo poses. [Official calibration guide](https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html)
-
-### Set each servo’s mechanical center
-
-1. The page groups the servos into **Head & neck (30–34)**, **Left leg (10–14)** and **Right leg (20–24)**. Left and right are from Duck’s perspective. Find the joint by its white ID tag in the photo.
-2. Position the joint by hand to match its zero-pose diagram, using the green dashed line for alignment. Click **Set center** and wait for **Center set** before moving to the next joint. Click any photo or diagram to enlarge it.
-3. Once the session count reaches **15/15**, click **Unload all**, then **Exit**. If you are using a calibration stand, take Duck out after unloading. The centers stay saved in the servos. [Joint diagrams and controls](docs/calibration-guide.md)
-
-<img src="docs/images/calibration/servos-en.png" alt="Servo groups, head and neck photos with white ID tags, and joint cards with diagrams and Set center buttons" width="960">
+1. After the servo calibration, click **Unload all**. Follow the image in **IMU calibration** at the bottom of the page. Support Duck with the UNO Q upright, the battery connector pointing up, and the board’s bottom edge against a level table.
+2. Click **Calibrate IMU** and hold still for about **1.5 seconds**. When **IMU calibration saved** appears, click **Exit**. The app saves the accelerometer offsets and gyro bias and loads them on restart. [IMU calibration details](docs/imu-calibration.md)
 
 ### Check Default pose on the Control page
 
@@ -225,7 +207,7 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 ### 1. Duck shakes or walks unsteadily
 
 1. Stop moving, support Duck, and release servo torque. Check each servo's ID, mounting position, and order against the diagrams on the Calibration page. Check the servo horns and retaining screws for looseness.
-2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos. The page has IMU calibration at the top and photos with servo IDs and joint reference poses below.
+2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to recalibrate the IMU and all 15 servos.
 3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

@@ -173,6 +173,16 @@ def cal_center(body: dict):
     try: return controller.cal_center(body['index'])
     except (KeyError, TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
+SITTING_CAL_POSITIONS = (
+    2092, 2062,  995, 1007, 2092,  # Left leg: 10–14
+    2002, 2032, 3099, 3087, 2002,  # Right leg: 20–24
+    1367,  937, 2047, 2047, 2047,  # Neck/head/mouth: 30–34
+)
+
+def cal_sitting(_body: dict = None):
+    try: return controller.cal_sitting(SITTING_CAL_POSITIONS)
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
 def servo_enter(_body: dict = None):
     try: return access.web_mode('servo_debug')
     except ValueError as exc: raise HTTPException(400, str(exc))
@@ -229,6 +239,7 @@ ui.expose_api('POST', '/api/cal/enter', cal_enter)
 ui.expose_api('POST', '/api/cal/exit', cal_exit)
 ui.expose_api('POST', '/api/cal/heartbeat', cal_heartbeat)
 ui.expose_api('POST', '/api/cal/center', cal_center)
+ui.expose_api('POST', '/api/cal/sitting', cal_sitting)
 ui.expose_api('POST', '/api/servo/enter', servo_enter)
 ui.expose_api('POST', '/api/servo/exit', servo_exit)
 ui.expose_api('GET', '/api/servo/gain-check', controller.servo_parameters.check)

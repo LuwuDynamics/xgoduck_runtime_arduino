@@ -233,8 +233,9 @@ def main():
                         change = request(motion_port, token, '/action', {
                             'session': session, 'kind': 'walking_mode', 'walking_mode': 'walk'})
                         assert change['status'] == 'completed'
+                        sample_us = state['controller'].feedback.sample_us
                         Bridge.callbacks['duck_voltage'](wire.VOLTAGE.pack(
-                            b'DQV1', 1, 0, wire.ALL_MASK, *([82] * 15)))
+                            b'DQV1', 1, sample_us, wire.ALL_MASK, *([82] * 15)))
                         motion = client.get('/api/status').json()
                         assert motion['voltage_v'] == 8.2 and len(motion['servo_voltage_v']) == 15
                         assert client.post('/api/heading-hold', json={'enabled': False}).json()['enabled'] is False

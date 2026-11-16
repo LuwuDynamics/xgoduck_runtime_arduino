@@ -40,6 +40,9 @@ class BaselineTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), expected)
         source = (ROOT / 'sketch/sketch.ino').read_text()
+        for overlay in manifest['sketch']['sitting_calibration_overlays']:
+            self.assertEqual(source.count(overlay['integrated']), 1)
+            source = source.replace(overlay['integrated'], overlay['upstream'])
         for line in manifest['sketch']['optional_overlay']:
             self.assertEqual(source.count(line), 1)
             source = source.replace(line+'\n', '')
@@ -66,8 +69,12 @@ class BaselineTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(),
                                  manifest['source']['sha256'][name])
-        for name, overlays in manifest.get('speech_mouth_overlay', {}).get('source_overlays', {}).items():
-            with self.subTest(mouth_overlay=name):
+        source_overlays = {}
+        for group in ('speech_mouth_overlay', 'default_pose_overlay'):
+            for name, overlays in manifest[group]['source_overlays'].items():
+                source_overlays.setdefault(name, []).extend(overlays)
+        for name, overlays in source_overlays.items():
+            with self.subTest(source_overlay=name):
                 source = (ROOT / name).read_text()
                 for overlay in overlays:
                     self.assertEqual(source.count(overlay['integrated']), 1)
@@ -93,6 +100,10 @@ class BaselineTest(unittest.TestCase):
         source = (ROOT / 'sketch/sketch.ino').read_text()
         start = source.index('static void controlTask(')
         task = source[start:source.index('\nstatic void reportTask(', start)]
+        for overlay in provenance['sketch']['sitting_calibration_overlays']:
+            if overlay.get('control_task'):
+                self.assertEqual(task.count(overlay['integrated']), 1)
+                task = task.replace(overlay['integrated'], overlay['upstream'])
         servo_test_overlays = [o for o in provenance['sketch']['servo_test_overlays'] if o.get('control_task')]
         for overlay in servo_test_overlays + manifest['gain_call_overlays'] + manifest['battery_overlays']:
             self.assertEqual(task.count(overlay['integrated']), overlay.get('count', 1))
