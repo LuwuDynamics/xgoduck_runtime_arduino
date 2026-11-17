@@ -15,12 +15,22 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const media={camera:{available:true,running:false,ready:false,device:'/dev/video2',frames:0,fps:0,error:'',light:{supported:true,enabled:false,error:''}},audio:{available:true,volume:100,state:'idle'}};
     let region={cloud_region:'cn',custom_endpoint:false,configured:true};
     const usb={available:true,host:true,mode:'host'};
-    const battery={voltage_v:7.8,low:false};
+    const battery={voltage_v:7.8,below_threshold:false,low:false};
     const robot={mode:'shadow',enabled:false,feedback_hz:100,control_ready:true,battery,
-      recovery:{phase:'walk',angle_deg:0},input_source:'web'};
+      recovery:{phase:'walk',angle_deg:0},input_source:'web',roller:{enabled:false},inference_hz:50,deployment:{}};
+    let gamepadConnected=false,gamepadEnabled=false,gamepadLearning=null,gamepadBindingMessage='',gamepadScanning=false,gamepadBluetoothError='';
+    const gamepadBindings={walk:'start',hold:'south',off:'east',pick:null,roulade:null,
+      sit:null,roller:null,left_kick:null,right_kick:null};
+    const gamepadStatus=(snapshot={...usb})=>({
+      bluetooth:{available:true,powered:true,discovering:gamepadScanning,scan_remaining:25,
+        error:gamepadBluetoothError,devices:gamepadConnected?[{name:'Test controller',address:'02:00:00:00:00:01',connected:true,paired:true}]:[]},
+      input:{connected:gamepadConnected,name:'Test controller'},
+      control:{enabled:gamepadEnabled,bindings:gamepadBindings,learning:gamepadLearning,
+        binding_message:gamepadBindingMessage,roller_mode:robot.roller.enabled},usb:snapshot
+    });
     const tof={state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
-    let tofHTTP=200,tofDelay=0,blockForward=false,failVolume=false;
+    let tofHTTP=200,tofDelay=0,blockForward=false,failVolume=false,failRoller=false;
     let holdVolume=false,receivedVolume,releaseVolume;
     let holdNext=false,releaseStatus,capturedStatus;
     let holdNextUsb=false,releaseUsbStatus,capturedUsbStatus;
@@ -51,14 +61,35 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
             if(body.kind==='torque_off')Object.assign(robot,{mode:'off',enabled:false});
             return route.fulfill({json:{ok:true,forward_blocked:blockForward&&body.twist?.[0]>0}});
           }
+          if(url.pathname==='/api/roller'){
+            assert.equal(typeof body.enabled,'boolean');
+            if(failRoller)return route.fulfill({status:400,json:{detail:'Wait for the current action.'}});
+            robot.roller.enabled=body.enabled;
+            return route.fulfill({json:{enabled:body.enabled}});
+          }
           if(url.pathname==='/api/gamepad/usb'){
             assert.equal(request.headers()['x-duck-gamepad'],'1');
             assert.equal(typeof body.host,'boolean');
             Object.assign(usb,{host:body.host,mode:body.host?'host':'device'});
             return route.fulfill({json:{usb}});
           }
+          if(url.pathname==='/api/gamepad/control'){
+            gamepadEnabled=body.enabled;
+            return route.fulfill({json:gamepadStatus()});
+          }
+          if(['/api/gamepad/scan','/api/gamepad/stop-scan'].includes(url.pathname)){
+            gamepadScanning=url.pathname.endsWith('/scan');
+            return route.fulfill({json:gamepadStatus()});
+          }
+          if(url.pathname==='/api/gamepad/bindings'){
+            assert.equal(request.headers()['x-duck-gamepad'],'1');
+            assert.deepEqual(body,{operation:'learn',action:'sit'});
+            gamepadLearning=body.action;
+            gamepadBindingMessage='Release held buttons, then press one button (15 seconds).';
+            return route.fulfill({json:gamepadStatus()});
+          }
           if(url.pathname==='/api/media/camera/light')media.camera.light.enabled=body.enabled;
-          else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:true,fps:30});
+          else if(url.pathname==='/api/media/camera/start')Object.assign(media.camera,{running:true,ready:false,fps:30});
           else if(url.pathname==='/api/media/camera/stop')Object.assign(media.camera,{running:false,ready:false});
           else if(url.pathname==='/api/media/audio/volume'){
             assert.equal(request.headers()['x-device-test'],'1');
@@ -81,41 +112,75 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         if(url.pathname==='/api/gamepad/status'){
           const snapshot={...usb};
           if(holdNextUsb){holdNextUsb=false;capturedUsbStatus();await new Promise(resolve=>releaseUsbStatus=resolve);}
-          return route.fulfill({json:{input:{connected:false},control:{enabled:false},usb:snapshot}});
+          return route.fulfill({json:gamepadStatus(snapshot)});
         }
         if(url.pathname==='/api/media/status'){
           const snapshot=structuredClone(media);
           if(holdNext){holdNext=false;capturedStatus();await new Promise(resolve=>releaseStatus=resolve);}
           return route.fulfill({json:snapshot});
         }
-        if(url.pathname==='/api/media/camera/stream')return route.fulfill({contentType:'image/png',body:pixel});
+        if(['/api/media/camera/stream','/api/media/camera/frame'].includes(url.pathname))
+          return route.fulfill({contentType:'image/png',body:pixel});
         return route.fulfill({status:404,json:{error:'Not found'}});
       }
-      const name=url.pathname==='/'?'mobile.html':url.pathname.slice(1),file=path.join(root,name);
+      const name=url.pathname==='/'?(url.port==='9527'?'index.html':'mobile.html'):url.pathname.slice(1),file=path.join(root,name);
       if(!fs.existsSync(file))return route.fulfill({status:404,body:''});
       const type=name.endsWith('.js')?'application/javascript':name.endsWith('.css')?'text/css':name.endsWith('.html')?'text/html':name.endsWith('.png')?'image/png':'application/json';
       return route.fulfill({contentType:type,body:fs.readFileSync(file)});
     };
     await page.route(origin+'/**',mockCockpit);
     await page.goto(origin+'/');
+    const toolsDialog=page.locator('#deviceToolsDialog'),actionsDialog=page.locator('#actionsDialog');
+    const depthDialog=page.locator('#depthDialog');
+    const openTools=()=>page.locator('#openDeviceTools').click();
+    const closeTools=()=>toolsDialog.locator('.dialog-head button').click();
+    const openActions=()=>page.locator('#openActions').click();
+    const closeActions=()=>actionsDialog.locator('.dialog-head button').click();
+    const selectHud=async mode=>{
+      await page.locator('#clean').click();
+      await page.locator('[data-hud-choice='+mode+']').click();
+    };
+    const phoneShortcuts=['#link','#startCamera','#full','#clean','#moveStick','#turnStick','[data-motion=stand]','[data-motion=sit]',
+      '.quack-action','[data-motion=stop]','#openActions','#rollerMode','#torqueOff'];
+    const phoneExtras=['.brand','#language','#padLink','#openBinding','#batteryVoltage','#settings',
+      '#openDepth','#openDeviceTools','#openWalkingHelp','#controlPageLink','#restoreHud'];
+    const checkPhoneHud=async()=>{
+      assert.equal(await page.locator('body').getAttribute('data-hud'),'sticks');
+      for(const selector of phoneShortcuts)assert.equal(await page.locator(selector).isVisible(),true,selector+' missing from driving view.');
+      for(const selector of phoneExtras)assert.equal(await page.locator(selector).isHidden(),true,selector+' visible in driving view.');
+      assert.equal(await page.locator('#stopCamera').isHidden(),true);
+    };
     assert.equal(await page.locator('#controlPageLink').getAttribute('href'),'http://duck-mobile.test:9527/');
     assert.equal(page.url(),origin+'/');
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
+    await checkPhoneHud();
+    assert.equal(await page.locator('#clean').innerText(),'视图');
+    await selectHud('video');
+    await page.locator('#restoreHud').click();
+    await checkPhoneHud();
+    await selectHud('all');
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN');
+    assert.equal(await page.locator('#lightState').textContent(),'请先开启摄像头');
     assert.equal(await page.locator('#openBinding [data-i18n="bindAi"]').innerText(),'AI 语音交互绑定');
     assert.equal(await page.locator('link[rel="icon"]').getAttribute('href'),'/xgo-favicon.png');
     const versionBadge=page.locator('[data-app-version]');
     await versionBadge.waitFor({state:'visible'});
     assert.equal(await versionBadge.innerText(),'v'+version);
-    assert.equal(await page.locator('#portraitHint').isVisible(),true);
-    assert.equal(await page.locator('#moveStick').isHidden(),true);
+    assert.equal(await page.locator('#moveStick').isVisible(),true);
+    assert.equal(await page.locator('#turnStick').isVisible(),true);
     assert.equal(await page.locator('#duckCalls').isHidden(),true);
+    for(const selector of ['[data-motion=stand]','[data-motion=sit]','.quack-action','[data-motion=stop]','#rollerMode'])
+      assert.equal(await page.locator(selector).isVisible(),true,selector+' must remain visible in portrait.');
     assert.equal(await page.locator('#usbHostQuick[aria-checked="true"]').innerText(),'USB Host：已开启');
     assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'电压 7.8 V');
     assert.equal(await page.locator('#speakerVolume b').innerText(),'音量');
-    Object.assign(battery,{voltage_v:7.3,low:true});
-    await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 7.3 V"]').waitFor();
+    battery.voltage_v=6.0;
+    await page.locator('#batteryVoltage:not(.low-voltage)[aria-label="电压 6.0 V"]').waitFor();
+    Object.assign(battery,{voltage_v:5.9,below_threshold:true});
+    await page.locator('#batteryVoltage:not(.low-voltage)[aria-label="电压 5.9 V"]').waitFor();
+    battery.low=true;
+    await page.locator('#batteryVoltage.low-voltage[aria-label="低电压 5.9 V"]').waitFor();
     assert.equal(new URL(await page.locator('.brand').getAttribute('href')).port,'9527');
     assert.equal(await page.locator('#talk,#micSetup,#prepareMic,#flagAddress').count(),0);
     assert.equal(writes.length,0,'Opening the cockpit must not send hardware commands.');
@@ -123,11 +188,20 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('.tof-cell').count(),64);
     assert.equal(await page.locator('.tof-cell.is-valid').count(),63);
     assert.equal(await page.locator('#tofNearest').innerText(),'12.0');
-    assert.equal(await page.locator('#welcome').isHidden(),true);
+    assert.equal(await page.locator('#tofBody').isHidden(),true);
+    assert.equal(await page.locator('#welcome').isVisible(),true);
     await page.locator('#language').click();
     assert.equal(await page.locator('#startCamera').innerText(),'Start camera');
-    assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'Low voltage 7.3 V');
+    assert.equal(await page.locator('#batteryVoltage').getAttribute('aria-label'),'Low voltage 5.9 V');
+    Object.assign(battery,{voltage_v:7.3,below_threshold:false});
+    await page.locator('#batteryVoltage:not(.low-voltage)[aria-label="Voltage 7.3 V"]').waitFor();
+    assert.equal(await page.locator('#motionStatus').textContent(),'Low battery · motion locked');
+    await selectHud('sticks');
+    assert.equal(await page.locator('#batteryVoltage').isHidden(),true);
+    await page.getByText('Low battery · motion locked',{exact:true}).waitFor();
     await page.reload();await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
+    await checkPhoneHud();
+    await selectHud('all');
     assert.equal(await page.locator('html').getAttribute('lang'),'zh-CN','Reload follows the system language rather than a previous manual toggle.');
     await page.locator('#language').click();await page.getByRole('button',{name:'Start camera',exact:true}).waitFor();
     await page.locator('#settings').click();await page.getByRole('heading',{name:'Speaker',exact:true}).waitFor();
@@ -136,7 +210,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
 
     assert.equal(await page.locator('#speakerVolume b').innerText(),'Volume');
     assert.equal(await page.locator('#speakerVolumeValue').innerText(),'100%');
-    await page.locator('#speakerVolume').click();
+    await openTools();await page.locator('#speakerVolume').click();
     const slider=page.locator('#volume');
     assert.equal(await slider.inputValue(),'100');
     assert.equal(await page.evaluate(()=>document.activeElement.id),'volume');
@@ -168,33 +242,87 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.locator('#closeConfig').click();
 
     const beforeCamera=writes.length;
+    const checkLightDisabled=async status=>{
+      await page.locator('#lightState').getByText(status,{exact:true}).waitFor();
+      assert.equal(await page.locator('#lightOn').isDisabled(),true);
+      assert.equal(await page.locator('#lightOff').isDisabled(),true);
+    };
+    await openTools();
+    await checkLightDisabled('Start the camera first');
+    await page.locator('#lightOn').evaluate(button=>button.onclick());
+    await closeTools();
+    await page.locator('#startCamera').click();
+    await page.locator('.camera-controls[data-state=running]').waitFor({state:'attached'});
+    await openTools();
+    await checkLightDisabled('STARTING');
+    media.camera.ready=true;
+    await page.locator('#lightOn:enabled').waitFor();
     const captured=new Promise(resolve=>capturedStatus=resolve);holdNext=true;
     await Promise.race([captured,new Promise((_,reject)=>setTimeout(()=>reject(Error('No status poll')),4000))]);
     await page.locator('#lightOn').click();await page.getByText('Light on',{exact:true}).waitFor();
     releaseStatus();await page.waitForTimeout(100);
     assert.equal(await page.locator('#lightState').innerText(),'Light on','An older poll must not undo a completed command.');
-    await page.locator('#startCamera').click();await page.waitForFunction(()=>!document.getElementById('feed').hidden);
+    await closeTools();
+    await page.waitForFunction(()=>!document.getElementById('feed').hidden);
     assert.equal(await page.locator('#stopCamera').isDisabled(),false);
+    const checkPreviewInput=async()=>{
+      const input=await page.locator('#feed').evaluate(feed=>{
+        const {left,top,width,height}=feed.getBoundingClientRect();
+        const hit=document.elementFromPoint(left+width/2,top+height/2);
+        const blocked=node=>!node.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}));
+        return {hit:hit.id,draggable:feed.draggable,menuBlocked:blocked(hit),feedMenuBlocked:blocked(feed)};
+      });
+      assert.deepEqual(input,{hit:'cockpit',draggable:false,menuBlocked:true,feedMenuBlocked:true});
+    };
+    await checkPreviewInput();
+    await selectHud('sticks');
+    assert.equal(await page.locator('#startCamera').isHidden(),true);
+    assert.equal(await page.locator('#stopCamera').isVisible(),true);
+    const beforeHideCamera=writes.length;
+    await selectHud('video');
+    assert.equal(await page.locator('.top,.bottom').evaluateAll(nodes=>nodes.every(node=>!node.getClientRects().length)),true);
+    assert.equal(await page.locator('#feed').isVisible(),true);
+    await checkPreviewInput();
+    await page.locator('#restoreHud').click();
+    assert.equal(await page.locator('#stopCamera').isVisible(),true);
+    assert.equal(writes.length,beforeHideCamera,'Changing the view must leave the stream running.');
+    await selectHud('all');
+    await openTools();
+    const [photo]=await Promise.all([page.waitForEvent('download'),page.locator('#snapshot').click()]);
+    assert.match(photo.suggestedFilename(),/^duck-\d+\.jpg$/);
     await page.locator('#lightOff').click();await page.getByText('Light off',{exact:true}).waitFor();
     assert.equal(media.camera.running,true,'Switching the lamp must preserve video.');
+    await closeTools();
     await page.locator('#stopCamera').click();await page.waitForFunction(()=>document.getElementById('feed').hidden);
-    await page.locator('#tofToggle').click();await page.waitForFunction(()=>!document.getElementById('welcome').hidden);
-    assert.equal(await page.locator('#tofBody').isHidden(),true);
-    await page.locator('#tofToggle').click();
+    await openTools();
+    await checkLightDisabled('Start the camera first');
+    await closeTools();
+    await selectHud('sticks');
+    media.camera.available=false;
+    await page.locator('.camera-controls[data-state=unavailable]').waitFor({state:'attached'});
+    assert.equal(await page.locator('#startCamera').isHidden(),true);
+    assert.equal(await page.locator('[data-motion=stand]').isVisible(),true);
+    media.camera.available=true;
+    await page.locator('#startCamera:enabled').waitFor();
+    await selectHud('all');
+    await page.locator('#openDepth').click();
+    assert.equal(await page.locator('#tofBody').isVisible(),true);
+    await depthDialog.locator('.dialog-head button').click();
+    await page.waitForFunction(()=>!document.getElementById('welcome').hidden);
     assert.deepEqual(writes.slice(beforeCamera).map(x=>[x.path,x.body]),[
-      ['/api/media/camera/light',{enabled:true}],['/api/media/camera/start',{}],
+      ['/api/media/camera/start',{}],['/api/media/camera/light',{enabled:true}],
       ['/api/media/camera/light',{enabled:false}],['/api/media/camera/stop',{}]
     ]);
 
     const capturedUsb=new Promise(resolve=>capturedUsbStatus=resolve);holdNextUsb=true;
     await Promise.race([capturedUsb,new Promise((_,reject)=>setTimeout(()=>reject(Error('No USB status poll')),4000))]);
-    await page.locator('#usbHostQuick').click();
+    await openTools();await page.locator('#usbHostQuick').click();
     await page.locator('#usbHostQuick[aria-checked="false"]:enabled').waitFor();
     assert.equal(await page.locator('#usbHostQuick').innerText(),'USB Host: Off');
     assert.deepEqual(writes.at(-1),{path:'/api/gamepad/usb',body:{host:false}});
     releaseUsbStatus();await page.waitForTimeout(100);
     assert.equal(await page.locator('#usbHostQuick').getAttribute('aria-checked'),'false','An older poll must not undo a USB switch.');
-    await page.locator('#settings').click();
+    await closeTools();await page.locator('#settings').click();
     assert.equal(await page.locator('#usbHost').getAttribute('aria-checked'),'false');
     await page.locator('#usbHost').click();
     await page.locator('#usbHost[aria-checked="true"]:enabled').waitFor();
@@ -202,18 +330,26 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#usbHostQuick').innerText(),'USB Host: On');
     assert.deepEqual(writes.at(-1),{path:'/api/gamepad/usb',body:{host:true}});
 
-    await page.locator('#listen').click();await page.getByRole('button',{name:/Stop listening/}).waitFor();
-    await page.locator('#language').click();await page.getByRole('button',{name:/停止监听/}).waitFor();
+    await openTools();await page.locator('#listen').click();await page.getByRole('button',{name:/Stop listening/}).waitFor();
+    await closeTools();await page.locator('#language').click();await openTools();await page.getByRole('button',{name:/停止监听/}).waitFor();
     await page.locator('#listen').click();
     await page.waitForFunction(()=>window.__liveClosed===1);
     assert.equal(await page.evaluate(()=>window.__phoneMicCalls),0);
     assert.equal(await page.evaluate(()=>window.__liveOpened),1);
     assert.equal(await page.locator('#voiceState').innerText(),'实时监听已停止');
+    await closeTools();
 
-    await page.locator('#full').click();await page.waitForFunction(()=>!!document.fullscreenElement);
-    assert.equal(await page.locator('#fullLabel').innerText(),'退出全屏');
-    await page.locator('#language').click();assert.equal(await page.locator('#fullLabel').innerText(),'Exit fullscreen');
-    await page.locator('#full').click();await page.waitForFunction(()=>!document.fullscreenElement);
+    await page.locator('#full').click();
+    await page.waitForFunction(()=>document.fullscreenElement||!document.getElementById('notice').hidden);
+    if(await page.evaluate(()=>!!document.fullscreenElement)){
+      assert.equal(await page.locator('#fullLabel').innerText(),'退出全屏');
+      await page.locator('#language').click();assert.equal(await page.locator('#fullLabel').innerText(),'Exit fullscreen');
+      await page.locator('#full').click();await page.waitForFunction(()=>!document.fullscreenElement);
+    }else{
+      assert.match(await page.locator('#notice').innerText(),/无法进入全屏/);
+      await page.locator('#language').click();
+      assert.equal(await page.locator('#fullLabel').innerText(),'Fullscreen');
+    }
 
     // Stale/absent/missing-RPC/network data must never look like a live zero.
     for(const [state,fresh,age,expected] of [['ranging',true,1500,'stale'],['absent',false,0,'absent'],['unavailable',false,0,'unavailable']]){
@@ -229,11 +365,11 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#tofPanel').getAttribute('data-state'),'stale','Delayed HTTP replies cannot refresh old measurements.');
     assert.equal(await page.locator('#tofCenter').innerText(),'—');
     tofDelay=0;await page.waitForFunction(()=>document.getElementById('tofCenter').textContent==='75.0');
-    await page.locator('#clean').click();assert.equal(await page.locator('.tof-layer').isVisible(),false);
-    await page.locator('#restoreHud').click();assert.equal(await page.locator('.tof-layer').isVisible(),true);
+    await selectHud('video');
+    assert.equal(await page.locator('.tof-layer,.top,.bottom').evaluateAll(nodes=>nodes.every(node=>node.getBoundingClientRect().height===0)),true);
+    await page.locator('#restoreHud').click();assert.equal(await page.locator('#openDepth').isVisible(),true);
 
     await page.setViewportSize({width:844,height:390});
-    assert.equal(await page.locator('#portraitHint').isHidden(),true);
     Object.assign(battery,{voltage_v:8.1,low:false});
     Object.assign(robot,{mode:'policy',enabled:false,recovery:{phase:'getup',angle_deg:110}});
     const motionText=fragment=>page.waitForFunction(fragment=>
@@ -241,6 +377,17 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await motionText('The servos are off');
     await page.locator('[data-motion=stand]:enabled').waitFor();
     assert.equal(await page.locator('#moveStick').getAttribute('aria-disabled'),'true');
+    const phoneNotice=page.locator('#remote-control-notice');
+    const beforeNotice=writes.length;
+    await page.locator('[data-motion=stand]').click();
+    await phoneNotice.getByRole('heading',{name:'We recommend fitting the rear protective cover before driving'}).waitFor();
+    const noticeBounds=await phoneNotice.boundingBox();
+    assert(noticeBounds.y>=0&&noticeBounds.y+noticeBounds.height<=390,'The notice must fit a phone in landscape.');
+    await page.keyboard.press('Escape');
+    await phoneNotice.waitFor({state:'hidden'});
+    await page.locator('[data-motion=stand]').click();
+    await phoneNotice.getByRole('button',{name:'Got it'}).click();
+    assert.equal(writes.length,beforeNotice,'Opening, dismissing and confirming the notice must not send a stand command.');
     await page.locator('[data-motion=stand]').click();
     await motionText('Enabling the servos');
     Object.assign(robot,{mode:'shadow',arming:false,arm_failed:true});
@@ -253,11 +400,16 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     robot.recovery={phase:'walk',angle_deg:0};
     await page.locator('#moveStick[aria-disabled=false]').waitFor();
     assert.equal(writes.at(-1).body.kind,'stand');
+    await selectHud('sticks');
+    await checkPhoneHud();
     const cdp=await context.newCDPSession(page);
     const touch=(type,touchPoints=[])=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
-    const move=await page.locator('#moveStick').boundingBox(),turn=await page.locator('#turnStick').boundingBox();
-    const left={x:move.x+move.width*.31,y:move.y+move.height*.31,id:1};
-    const right={x:turn.x+turn.width*.74,y:turn.y+turn.height*.5,id:2};
+    const stickPoint=async(id,x,y,touchId)=>{
+      const box=await page.locator(id).boundingBox();
+      return {x:box.x+box.width*x,y:box.y+box.height*y,id:touchId};
+    };
+    const left=()=>stickPoint('#moveStick',.31,.31,1);
+    const right=()=>stickPoint('#turnStick',.74,.5,2);
     let nextWrite=writes.length;
     const waitMotion=predicate=>new Promise((resolve,reject)=>{
       const deadline=Date.now()+3500;
@@ -267,7 +419,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
         else if(Date.now()>=deadline){clearInterval(timer);reject(Error('No matching cockpit command for '+predicate));}
       },15);
     });
-    await touch('touchStart',[left,right]);
+    await touch('touchStart',[await left(),await right()]);
     await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>0&&body.twist[1]>0&&body.twist[2]<0);
     blockForward=true;
     await page.waitForFunction(()=>document.getElementById('motionStatus').textContent.includes('Forward paused by ToF'));
@@ -278,48 +430,120 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await page.waitForTimeout(200);
     assert.equal(writes.length,released);
     blockForward=false;
-    await touch('touchStart',[right]);
+    await selectHud('all');
+    const statusInFlight=new Promise(resolve=>capturedStatus=resolve);holdNext=true;
+    await statusInFlight;
+    await page.locator('#rollerMode[aria-checked=false]:enabled').click();
+    await page.locator('#rollerMode[aria-checked=true]:enabled').waitFor();
+    releaseStatus();
+    await page.waitForTimeout(100);
+    assert.equal(await page.locator('#rollerMode').getAttribute('aria-checked'),'true','An older poll must not undo a roller switch.');
+    assert.deepEqual(writes.at(-1),{path:'/api/roller',body:{enabled:true}});
+    assert.equal(await page.locator('#moveStick.roller-pad').count(),1);
+    assert.equal(await page.locator('#moveStickLabel').textContent(),'Forward / back');
+    assert.equal(await page.locator('#keyboardStrafe').isHidden(),true);
+    await touch('touchStart',[await left(),await right()]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>0&&body.twist[1]===0&&body.twist[2]<0&&body.twist[2]>=-.25);
+    await touch('touchEnd');
+    await waitMotion(body=>body?.kind==='release');
+    failRoller=true;
+    await page.locator('#rollerMode').click();
+    await motionText('Could not switch roller mode');
+    assert.equal(await page.locator('#rollerMode').getAttribute('aria-checked'),'true');
+    failRoller=false;
+    await page.locator('#rollerMode').click();
+    await page.locator('#rollerMode[aria-checked=false]:enabled').waitFor();
+    await touch('touchStart',[await right()]);
     await waitMotion(body=>body?.kind==='drive'&&body.twist[2]<0);
     await page.setViewportSize({width:390,height:844});
     await waitMotion(body=>body?.kind==='release');
-    assert.equal(await page.locator('#portraitHint').isVisible(),true);
+    await touch('touchEnd');
+
+    await selectHud('sticks');
+    await checkPhoneHud();
+    await touch('touchStart',[await left(),await right()]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>0&&body.twist[1]>0&&body.twist[2]<0);
+    await touch('touchMove',[await stickPoint('#moveStick',.31,.69,1),await stickPoint('#turnStick',.26,.5,2)]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]<0&&body.twist[1]>0&&body.twist[2]>0);
+    await touch('touchEnd');
+    await waitMotion(body=>body?.kind==='release');
+    assert.equal(await page.locator('.stick-pad.is-held').count(),0);
+    await touch('touchStart',[await right()]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[2]<0);
+    await page.setViewportSize({width:844,height:390});
+    await waitMotion(body=>body?.kind==='release');
+    assert.equal(await page.locator('.stick-pad.is-held').count(),0);
     await touch('touchEnd');
     await cdp.detach();
+    await page.setViewportSize({width:390,height:844});
+    Object.assign(robot,{mode:'hold',gravity:[0,0,-1]});
+    await page.locator('#moveStick[aria-disabled=true]').waitFor({state:'attached'});
+    await page.locator('[data-motion=sit]:enabled').click();
+    await waitMotion(body=>body?.kind==='sit');
+    await page.locator('.quack-action:enabled').click();
+    await waitMotion(body=>body?.source==='duck-greet');
+    media.audio.state='idle';
+    Object.assign(robot,{mode:'policy'});
     await page.setViewportSize({width:844,height:390});
+    await openActions();
     await page.locator('[data-motion=pick]').click();
     await waitMotion(body=>body?.kind==='pick');
+    await closeActions();
     await page.locator('[data-motion=stop]').click();
     await waitMotion(body=>body?.kind==='stop');
     await page.locator('#torqueOff').click();
     await waitMotion(body=>body?.kind==='torque_off');
     await page.locator('#moveStick[aria-disabled=true]').waitFor();
+    await selectHud('all');
 
     if(output)fs.mkdirSync(output,{recursive:true});
     for(const language of ['zh','en']){
       await page.evaluate(language=>window.DuckI18n.setLanguage(language),language);
-      for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['landscape',844,390],['small-landscape',667,375],['desktop',1280,800]]){
+      for(const [name,width,height] of [['portrait',390,844],['compact',320,568],['wide-landscape',960,540],['landscape',844,390],['small-landscape',667,320],['short-landscape',568,280],['desktop',1280,800]]){
         await page.setViewportSize({width,height});await page.waitForTimeout(100);
-        const boxes=await page.evaluate(()=>['startCamera','stopCamera','lightOn','lightOff','snapshot','clean','language','listen','speakerTest','speakerVolume','torqueOff','batteryVoltage','controlPageLink','usbHostQuick','moveStick','turnStick','motionStatus','openWalkingHelp'].map(id=>({id,...document.getElementById(id).getBoundingClientRect().toJSON()})));
+        const boxes=await page.locator('button:visible, .stick-pad:visible, #batteryVoltage:visible, #controlPageLink:visible, #motionStatus:visible')
+          .evaluateAll(nodes=>nodes.map(node=>({id:node.id||node.textContent,...node.getBoundingClientRect().toJSON()})));
         for(const box of boxes)assert(box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: ${box.id} off screen`);
         const badge=await versionBadge.boundingBox();
         assert(badge&&badge.x>=0&&badge.y>=0&&badge.x+badge.width<=width+1&&badge.y+badge.height<=height+1,
           `${language}/${name}: App version off screen`);
         const portrait=height>width;
-        assert.equal(await page.locator('#portraitHint').isVisible(),portrait);
-        assert.equal(await page.locator('#moveStick').isVisible(),!portrait);
-        assert.equal(await page.locator('#duckCalls').isVisible(),!portrait);
-        assert.equal(await page.locator('#openWalkingHelp').isVisible(),!portrait);
-        const actionRows=await page.locator('.cockpit-action-row').evaluateAll(rows=>rows.map(row=>
-          [...row.children].map(button=>button.getBoundingClientRect().toJSON())));
-        assert.deepEqual(actionRows.map(row=>row.length),[7,6,7]);
-        for(let i=1;i<actionRows.length;i++)
-          assert(actionRows[i-1][0].bottom<=actionRows[i][0].top,`${language}/${name}: action rows overlap`);
-        for(const row of actionRows)for(const box of row)
-          assert(box.x>=0&&box.y===row[0].y&&box.right<=width+1&&box.bottom<=height+1,`${language}/${name}: action off screen`);
-        const bounds=await page.evaluate(()=>({panel:document.getElementById('tofPanel').getBoundingClientRect().toJSON(),top:document.querySelector('.top').getBoundingClientRect().bottom,bottom:document.querySelector('.bottom').getBoundingClientRect().top,values:['tofCenter','tofNearest'].map(id=>document.getElementById(id).getBoundingClientRect().toJSON())}));
-        assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);
-        for(const value of bounds.values)assert(value.top>=bounds.panel.top&&value.bottom<=bounds.panel.bottom,`${language}/${name}: ToF distance clipped`);
+        const compact=name!=='desktop';
+        const [moveBox,turnBox]=['moveStick','turnStick'].map(id=>boxes.find(box=>box.id===id));
+        assert(moveBox&&turnBox&&moveBox.right<turnBox.left,`${language}/${name}: both sticks must be visible and separate`);
+        if(portrait)assert(moveBox.width>=80&&turnBox.width>=80,`${language}/${name}: portrait joysticks are too small`);
+        if(compact&&!portrait){
+          const diameter=Math.floor(Math.min(156,width*.20,height*.32));
+          assert(moveBox.width>=diameter&&turnBox.width>=diameter,`${language}/${name}: landscape joysticks are too small`);
+        }
+        assert.equal(await page.locator('#duckCalls').isVisible(),!compact);
+        assert.equal(await page.locator('#openActions').isVisible(),compact);
+        const actions=await page.locator('.cockpit-action-rows button:visible').evaluateAll(nodes=>nodes.map(node=>node.getBoundingClientRect().toJSON()));
+        assert.equal(actions.length,compact?5:20);
+        if(compact)assert(actions.every(box=>box.top===actions[0].top&&box.bottom===actions[0].bottom),`${language}/${name}: quick actions must share a row`);
+        for(const stick of boxes.filter(box=>['moveStick','turnStick'].includes(box.id)))
+          for(const action of actions)assert(stick.right<=action.left||stick.left>=action.right||stick.bottom<=action.top||stick.top>=action.bottom,`${language}/${name}: stick overlaps action`);
+        assert.equal(await page.locator('#openDepth').isVisible(),compact);
+        assert.equal(await page.locator('#tofPanel').isVisible(),!compact);
+        if(!compact){
+          const bounds=await page.evaluate(()=>({panel:document.getElementById('tofPanel').getBoundingClientRect().toJSON(),top:document.querySelector('.top').getBoundingClientRect().bottom,bottom:document.querySelector('.bottom').getBoundingClientRect().top,values:['tofCenter','tofNearest'].map(id=>document.getElementById(id).getBoundingClientRect().toJSON())}));
+          assert(bounds.panel.top>=bounds.top-1&&bounds.panel.bottom<=bounds.bottom+1,`${language}/${name}: ToF overlaps controls`);
+          for(const value of bounds.values)assert(value.top>=bounds.panel.top&&value.bottom<=bounds.panel.bottom,`${language}/${name}: ToF distance clipped`);
+        }
         assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),`${language}/${name}: horizontal overflow`);
+        if(compact){
+          await selectHud('sticks');
+          await checkPhoneHud();
+          const phoneBoxes=await page.locator('button:visible,.stick-pad:visible').evaluateAll(nodes=>
+            nodes.map(node=>({isStick:node.classList.contains('stick-pad'),...node.getBoundingClientRect().toJSON()})));
+          assert(phoneBoxes.every(box=>box.x>=0&&box.y>=0&&box.right<=width+1&&box.bottom<=height+1),`${language}/${name}: driving controls off screen`);
+          for(const stick of phoneBoxes.filter(box=>box.isStick))
+            for(const button of phoneBoxes.filter(box=>!box.isStick))
+              assert(stick.right<=button.left||stick.left>=button.right||stick.bottom<=button.top||stick.top>=button.bottom,
+                `${language}/${name}: stick overlaps another driving control`);
+          if(output)await page.screenshot({path:path.join(output,language+'-'+name+'-default.png')});
+          await selectHud('all');
+        }
         if(name==='small-landscape'){
           await page.locator('#openWalkingHelp').click();
           const help=page.locator('#walkingHelpDialog[open]');
@@ -334,6 +558,18 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
           assert.equal(await help.count(),0);
         }
         if(output)await page.screenshot({path:path.join(output,language+'-'+name+'.png')});
+        if(name==='small-landscape'){
+          await page.locator('#openDepth').click();
+          assert.equal(await page.locator('#tofCompact').textContent(),'75.0 cm');
+          assert.equal(await page.locator('#tofGrid').isVisible(),true);
+          const box=await depthDialog.boundingBox();
+          assert(box.y>=0&&box.y+box.height<=height+1,`${language}/${name}: ToF dialog off screen`);
+          await depthDialog.locator('.dialog-head button').click();
+          await openActions();
+          assert.equal(await actionsDialog.locator('[data-duck-sound]').count(),7);
+          if(output)await page.screenshot({path:path.join(output,language+'-actions.png')});
+          await closeActions();
+        }
       }
     }
     assert.equal(await page.locator('#keyboardHint').isHidden(),true);
@@ -343,6 +579,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     desktop.on('pageerror',error=>errors.push(error.message));
     await desktop.route(origin+'/**',mockCockpit);
     await desktop.goto(origin+'/');
+    assert.equal(await desktop.locator('body').getAttribute('data-hud'),'all');
     await desktop.locator('#speakerVolume').click();
     const audioBoxes=await desktop.locator('.speaker-actions > *').evaluateAll(buttons=>
       buttons.map(button=>button.getBoundingClientRect().toJSON()));
@@ -361,6 +598,12 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(writes.length,beforeKeys,'A direction key must not arm the robot.');
     Object.assign(robot,{mode:'policy',enabled:true,arming:false,arm_failed:false});
     await desktop.locator('#moveStick[aria-disabled=false]').waitFor();
+    await desktop.keyboard.down('w');
+    await desktop.locator('#remote-control-notice').getByRole('button',{name:'Got it'}).click();
+    await desktop.keyboard.down('w');
+    await desktop.waitForTimeout(120);
+    assert.equal(writes.length,beforeKeys,'A key held through the notice must not start driving.');
+    await desktop.keyboard.up('w');
     await desktop.keyboard.down('w');
     await waitMotion(body=>body?.kind==='begin'&&body.twist[0]>0);
     await desktop.keyboard.down('a');await desktop.keyboard.down('q');
@@ -396,7 +639,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await desktop.locator('#walkingHelpDialog[open]').count(),0);
 
     for(const kind of ['head_left','head_right','head_center','mouth_open','mouth_close','default_pose']){
-      await desktop.locator(`.motion-action-rows [data-motion="${kind}"]:enabled`).click();
+      await desktop.locator(`#additionalActions [data-motion="${kind}"]:enabled`).click();
       await waitMotion(body=>body?.kind===kind);
     }
     const beforeModal=writes.length;
@@ -406,11 +649,11 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await desktop.locator('#closeConfig').click();
     assert.equal(await desktop.locator('#duckCalls [data-duck-sound]').count(),7);
     for(const kind of ['greet','wheee']){
-      await desktop.locator(`[data-duck-sound="${kind}"]:enabled`).click();
+      await desktop.locator(`#duckCalls [data-duck-sound="${kind}"]:enabled`).click();
       await waitMotion(body=>body?.source==='duck-'+kind);
-      await desktop.locator(`[data-duck-sound="${kind}"][aria-pressed=true]:disabled`).waitFor();
+      await desktop.locator(`#duckCalls [data-duck-sound="${kind}"][aria-pressed=true]:disabled`).waitFor();
       media.audio.state='idle';
-      await desktop.locator(`[data-duck-sound="${kind}"]:enabled`).waitFor();
+      await desktop.locator(`#duckCalls [data-duck-sound="${kind}"]:enabled`).waitFor();
     }
     if(output)await desktop.screenshot({path:path.join(output,'desktop-duck-calls.png')});
     await desktop.close();
@@ -418,7 +661,8 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const control=await browser.newPage({locale:'zh-CN',viewport:{width:800,height:800}});
     control.on('pageerror',error=>errors.push(error.message));
     await control.route(origin+'/**',mockCockpit);
-    await control.goto(origin+'/index.html');
+    await control.route(origin+':9527/**',mockCockpit);
+    await control.goto(origin+':9527/');
     const disclosure=control.locator('#walking-help');
     const summary=disclosure.locator('summary');
     assert.equal(await summary.innerText(),'走不稳？');
@@ -433,8 +677,30 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(writes.filter(call=>call.path==='/api/mode').length,modeWrites,'Space on walking help must not unload the servos.');
     assert.deepEqual(await disclosure.locator('a').evaluateAll(links=>links.map(link=>link.getAttribute('href'))),
       ['/calibrate.html','/servo.html']);
+    const controlNotice=control.locator('#remote-control-notice');
+    const hold=control.locator('[data-mode=hold]:enabled');
+    const modes=()=>writes.filter(call=>call.path==='/api/mode').map(call=>call.body.mode);
+    await control.locator('#stop').click();
+    assert.equal(modes().at(-1),'off','Torque off is available before confirmation.');
+    await hold.focus();
+    await control.keyboard.down('Enter');
+    await controlNotice.getByRole('heading',{name:'遥控前建议安装后部保护壳'}).waitFor();
+    await control.keyboard.down('Enter');
+    assert.equal(await controlNotice.isVisible(),true,'Holding Enter must not confirm the notice.');
+    await control.keyboard.up('Enter');
+    await controlNotice.getByRole('button',{name:'知道了'}).focus();
+    await control.keyboard.press('Space');
+    await controlNotice.waitFor({state:'hidden'});
+    assert.deepEqual(modes().slice(modeWrites),['off'],'Confirming must not change the mode or replay the original command.');
+    await hold.click();
+    assert.equal(modes().at(-1),'hold');
     await control.locator('#language').click();
     assert.equal(await summary.innerText(),'Unsteady walking?');
+    await control.goto(origin+'/');
+    const standRequest=control.waitForRequest(request=>request.url().endsWith('/api/cockpit/motion')&&request.postDataJSON().kind==='stand');
+    await control.locator('[data-motion=stand]:enabled').click();
+    await standRequest;
+    assert.equal(await controlNotice.isVisible(),false,'The cockpit shares confirmation with port 9527 on the same host.');
     await control.close();
 
     const binding=await browser.newPage({locale:'zh-CN',viewport:{width:1200,height:800}});
@@ -461,9 +727,68 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     await bindingDialog.waitFor();
     assert(!writes.slice(startupWrites).some(call=>call.path==='/api/voice/region'||call.path==='/api/media/camera/start'),
       'Camera detection may show the dialog but must not select a region or start the camera.');
+    await binding.locator('#closeBinding').click();
+    gamepadConnected=true;
+    await binding.locator('#padLink').click();
+    const gamepadFrame=binding.frameLocator('#settingsFrame');
+    await gamepadFrame.getByRole('heading',{name:'USB 连接',exact:true}).waitFor();
+    await gamepadFrame.getByText('蓝牙已开启',{exact:true}).waitFor();
+    await gamepadFrame.getByRole('button',{name:'扫描手柄',exact:true}).click();
+    await gamepadFrame.getByText('正在扫描 · 25 秒',{exact:true}).waitFor();
+    await gamepadFrame.getByRole('button',{name:'停止扫描',exact:true}).click();
+    await gamepadFrame.locator('#scan:enabled').waitFor();
+    const matches=label=>gamepadFrame.locator('.binding-row').filter({hasText:label});
+    for(const label of ['坐下','切换轮滑模式','左脚踢球','右脚踢球'])await matches(label).waitFor();
+    const beforeLocaleChange=writes.length;
+    const iframe=await binding.locator('#settingsFrame').elementHandle();
+    await binding.evaluate(()=>window.DuckI18n.setLanguage('en'));
+    await gamepadFrame.getByRole('heading',{name:'Bluetooth controllers',exact:true}).waitFor();
+    assert.equal(await gamepadFrame.locator('html').getAttribute('lang'),'en');
+    assert.equal(await gamepadFrame.getByRole('button',{name:'Disconnect',exact:true}).count(),1);
+    await gamepadFrame.getByRole('switch',{name:'USB Host: On'}).waitFor();
+    await binding.evaluate(()=>window.DuckI18n.setLanguage('zh'));
+    await gamepadFrame.getByRole('button',{name:'断开连接',exact:true}).waitFor();
+    assert.equal(await gamepadFrame.locator('html').getAttribute('lang'),'zh-CN');
+    assert.equal(await iframe.getAttribute('src'),'/gamepad.html?cockpit=1');
+    assert.equal(writes.length,beforeLocaleChange,'Language switching must not issue a device command.');
+
+    await matches('坐下').getByRole('button',{name:'绑定',exact:true}).click();
+    await gamepadFrame.getByText('松开已按住的按键，然后在 15 秒内只按一个键。',{exact:true}).waitFor();
+    gamepadBindingMessage='Button already assigned to walk. Clear or rebind that action first.';
+    gamepadLearning=null;
+    await gamepadFrame.getByText('该按键已用于「行走 / 起身」。请先清除或重新绑定原动作。',{exact:true}).waitFor();
+    gamepadBindings.sit='west';
+    gamepadBindingMessage='Binding saved.';
+    await matches('坐下').getByText('X / 左侧键',{exact:true}).waitFor();
+    await gamepadFrame.getByText('已保存按键映射。',{exact:true}).waitFor();
+
+    gamepadBluetoothError='org.bluez.Error.Failed: br-connection-create-socket';
+    await gamepadFrame.getByText('手柄操作失败，请检查连接后重试。',{exact:true}).waitFor();
+    const enable=gamepadFrame.locator('#enable:enabled');
+    await enable.click();
+    await binding.locator('#remote-control-notice').getByRole('button',{name:'知道了'}).click();
+    assert.equal(gamepadEnabled,false,'Enabling a controller from the cockpit also requires a fresh click after the notice.');
+    await enable.click();
+    await gamepadFrame.getByText('已启用',{exact:true}).waitFor();
+    await gamepadFrame.locator('#error').waitFor({state:'hidden'});
+    gamepadConnected=false;
+    await gamepadFrame.getByText('手柄操作失败，请检查连接后重试。',{exact:true}).waitFor();
+    gamepadConnected=true;
+    gamepadBluetoothError='';
     await binding.close();
 
+    const standaloneGamepad=await browser.newPage({locale:'fr-FR',viewport:{width:390,height:844}});
+    standaloneGamepad.on('pageerror',error=>errors.push(error.message));
+    await standaloneGamepad.route('http://duck-mobile.test:9527/**',mockCockpit);
+    await standaloneGamepad.goto('http://duck-mobile.test:9527/gamepad.html');
+    await standaloneGamepad.getByRole('heading',{name:'Bluetooth controllers',exact:true}).waitFor();
+    assert.equal(await standaloneGamepad.title(),'Gamepad · XGO Duck');
+    await standaloneGamepad.locator('#language').click();
+    await standaloneGamepad.getByRole('heading',{name:'蓝牙手柄',exact:true}).waitFor();
+    assert.equal(await standaloneGamepad.title(),'手柄 · XGO Duck');
+    await standaloneGamepad.close();
+
     assert.deepEqual(errors,[]);
-    console.log('PASS: cockpit browser regression, including the camera-gated region dialog and manual binding without a camera.');
+    console.log('PASS: cockpit, control and gamepad browser regression, including language sync and action bindings.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

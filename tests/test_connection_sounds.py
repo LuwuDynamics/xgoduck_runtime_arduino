@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 import wave
+from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python'))
 from connection_sounds import ConnectionSounds
@@ -103,7 +104,8 @@ class OfflineConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.temp.cleanup)
         cfg = VoiceConfig(Path(self.temp.name) / 'voice.json')
         cfg.update({'output_gain_db': 6})
-        self.runtime = Runtime('test', 0, config=cfg, onboarding=SimpleNamespace(ready=False))
+        self.runtime = Runtime('test', 0, config=cfg,
+                               onboarding=SimpleNamespace(ready=False, snapshot=Mock(return_value={})))
         self.runtime.gate = Mock()
         self.runtime.gate.busy.return_value = False
         self.runtime.bench = SimpleNamespace(lock=threading.Lock(), closed=False, audio=None, tts_busy=False)
@@ -152,6 +154,22 @@ class OfflineConnectionSoundTest(unittest.IsolatedAsyncioTestCase):
                 expected = pcm + pause + pcm + pause + pcm
                 self.assertEqual(run.call_args.kwargs['input'], expected)
                 self.assertGreater(run.call_args.kwargs['timeout'], len(expected) / 32000)
+
+    async def test_binding_prompt_reads_the_current_ipv4_in_both_languages(self):
+        self.runtime.onboarding.snapshot.return_value = {'ipv4': '192.168.31.20'}
+        bank = Path(__file__).resolve().parents[1] / 'python/assets/bind-ip-parts.zip'
+        parts = ('1', '9', '2', 'dot', '1', '6', '8', 'dot', '3', '1', 'dot', '2', '0')
+        with ZipFile(bank) as clips:
+            for language in ('cn', 'en'):
+                with self.subTest(language=language):
+                    self.runtime.config.update({'language': language})
+                    expected = bytes(5760).join((clips.read(f'{language}/prefix.pcm'),
+                        bytes(1440).join(clips.read(f'{language}/{part}.pcm') for part in parts),
+                        clips.read(f'{language}/suffix.pcm')))
+                    with patch('voice_process.usb_audio_cards', return_value=self.cards), \
+                         patch('voice_process.subprocess.run') as run:
+                        self.assertTrue(await self.runtime.play_connection_sound('binding_required', 'speech', 1.))
+                    self.assertEqual(run.call_args.kwargs['input'], bytes(16000).join([expected] * 3))
 
     async def test_voice_success_does_not_start_an_offline_stream(self):
         with patch('voice_process.subprocess.run') as run:

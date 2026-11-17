@@ -362,6 +362,15 @@ class DuckSoundPlaybackTest(unittest.IsolatedAsyncioTestCase):
         await task
         self.app.wakeword.start.assert_called_once()
 
+    async def test_duck_call_restores_playback_wake_detection_during_chat(self):
+        self.app.state, self.app.wakeword._running = 'speaking', True
+        self.app._wake_interrupt_enabled = True
+        task = await self.playing()
+        self.app.wakeword.stop.assert_called_once()
+        self.app.audio.idle = True
+        await task
+        self.app.wakeword.start.assert_called_once()
+
     async def test_deferred_speech_has_a_hard_memory_bound_and_takes_over_on_overflow(self):
         task = await self.playing()
         self.app._handle_tts({'state': 'start'})

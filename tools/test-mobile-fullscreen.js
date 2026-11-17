@@ -6,15 +6,16 @@ function fixture({legacy=false, unsupported=false}={}) {
   const listeners={}, attrs={}, elements={full:{setAttribute:(k,v)=>attrs[k]=v,addEventListener:(k,f)=>listeners[k]=f},fullLabel:{},notice:{hidden:true}};
   const doc={getElementById:id=>elements[id],addEventListener:(k,f)=>listeners[k]=f,documentElement:{}};
   const key=legacy?'webkitFullscreenElement':'fullscreenElement';
-  let calls=0, reject=false;
+  let calls=0, orientationChanges=0, reject=false;
   if(!unsupported)doc.documentElement[legacy?'webkitRequestFullscreen':'requestFullscreen']=function(options){
     calls++; assert.equal(this,doc.documentElement); assert.equal(options.navigationUI,'hide');
     if(reject)return Promise.reject(Error('Permission denied'));
     doc[key]=this;return Promise.resolve();
   };
   doc[legacy?'webkitExitFullscreen':'exitFullscreen']=async()=>{doc[key]=null;};
-  vm.runInNewContext(source,{document:doc,window:{addEventListener:(k,f)=>listeners[k]=f},screen:{orientation:{lock:()=>new Promise(()=>{}),unlock:()=>{}}}});
-  return {listeners,attrs,elements,doc,key,get calls(){return calls;},set reject(value){reject=value;}};
+  const orientation={lock:()=>{orientationChanges++;return Promise.resolve();},unlock:()=>{orientationChanges++;}};
+  vm.runInNewContext(source,{document:doc,window:{addEventListener:(k,f)=>listeners[k]=f},screen:{orientation}});
+  return {listeners,attrs,elements,doc,key,get calls(){return calls;},get orientationChanges(){return orientationChanges;},set reject(value){reject=value;}};
 }
 (async()=>{
   for(const legacy of [false,true]) {
@@ -24,7 +25,8 @@ function fixture({legacy=false, unsupported=false}={}) {
     await entered;
     assert.equal(f.attrs['aria-pressed'],'true');
     await f.listeners.click();
-    assert.equal(f.attrs['aria-pressed'],'false','a pending orientation lock must not block exit');
+    assert.equal(f.attrs['aria-pressed'],'false');
+    assert.equal(f.orientationChanges,0,'Entering and leaving fullscreen must respect the phone orientation.');
     await f.listeners.click();
     f.doc[f.key]=null;f.listeners[legacy?'webkitfullscreenchange':'fullscreenchange']();
     assert.equal(f.elements.fullLabel.textContent,'Fullscreen','browser-driven exit updates UI');

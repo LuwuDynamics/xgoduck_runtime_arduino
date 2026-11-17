@@ -19,7 +19,7 @@ class NoAudio:
     def close_input(self):
         pass
 
-    def set_capture_enabled(self, enabled):
+    def set_capture_enabled(self, enabled, *, after_playback=None):
         pass
 
     def clear_play_queue(self, **kwargs):

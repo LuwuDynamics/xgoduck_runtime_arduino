@@ -1,5 +1,6 @@
 const $=id=>document.getElementById(id);
 const {t,setText}=window.DuckPanelLanguage;
+const allowRemote=()=>window.DuckRemoteNotice?.allow()!==false;
 const cockpitURL=new URL('/',location.href);
 cockpitURL.port='';
 $('cockpit-link')?.setAttribute('href',cockpitURL.href);
@@ -120,6 +121,11 @@ for(let i=0;i<4;i++){
 }
 $('head-controls').insertAdjacentHTML('beforeend','<label><span id="mouth-label"></span><input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>');
 setText('mouth-label',()=>t('Mouth','嘴部'));
+document.querySelectorAll('#head-controls input').forEach(input=>{
+  input.addEventListener('input',()=>{if(!allowRemote())input.value='0';});
+});
+document.querySelectorAll('[data-mode="hold"], [data-mode="policy"], #pick, #roulade, #sitstand, #left_kick, #right_kick')
+  .forEach(button=>window.DuckRemoteNotice?.bindButton(button));
 function showPreparation(active){
   actionPreparing=!!active;
   if(actionPreparing)for(const id of ['pick','roulade','sitstand','left_kick','right_kick','roller-mode'])$(id).disabled=true;
@@ -258,7 +264,7 @@ function joystick(id,side){
     knob.style.transform=`translate(${dx}px,${dy}px)`;
     sticks[side]={x:dx/radius,y:-dy/radius};updateMotion();
   }
-  zone.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;e.preventDefault();pointer=e.pointerId;zone.setPointerCapture(pointer);move(e);sendCommand();};
+  zone.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;e.preventDefault();if(!allowRemote())return;pointer=e.pointerId;zone.setPointerCapture(pointer);move(e);sendCommand();};
   zone.onpointermove=e=>{if(e.pointerId===pointer)move(e);};
   const release=e=>{if(e.pointerId!==pointer)return;reset();updateMotion();sendCommand();};
   zone.onpointerup=zone.onpointercancel=zone.onlostpointercapture=release;
@@ -401,7 +407,12 @@ for(const [id,action]of [['imu-calibrate','start'],['imu-reset','reset']])$(id).
 };
 function keyCommand(){updateMotion();sendCommand();}
 $('walking-help')?.addEventListener('toggle',e=>{if(e.currentTarget.open&&(keys.size||motion.some(Boolean)))zero();});
-window.addEventListener('keydown',e=>{if(e.target.closest?.('#walking-help'))return;if(e.code==='Space'){if(e.target===$('language'))return;e.preventDefault();$('stop').click();return;}const k=e.key.toLowerCase();if('wasdqe'.includes(k)&&k.length===1){keys.add(k);keyCommand();}});
+window.addEventListener('keydown',e=>{
+  if(e.defaultPrevented||e.target.closest?.('#walking-help, #remote-control-notice'))return;
+  if(e.code==='Space'){if(e.target===$('language'))return;e.preventDefault();$('stop').click();return;}
+  const k=e.key.toLowerCase();
+  if(!e.repeat&&k.length===1&&'wasdqe'.includes(k)&&allowRemote()){keys.add(k);keyCommand();}
+});
 window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(keys.delete(k))keyCommand();});
 window.addEventListener('blur',()=>zero());
 document.addEventListener('visibilitychange',()=>{if(document.hidden)zero();});

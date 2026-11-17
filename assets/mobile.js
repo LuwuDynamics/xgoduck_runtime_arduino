@@ -5,7 +5,14 @@
   let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,usbRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
   let duckCall=null;
+  let chosenHud,previousHud;
   const duckSounds=[...document.querySelectorAll('[data-duck-sound]')];
+  const compactLayout=window.matchMedia('(max-width:600px), (max-width:1080px) and (max-height:520px), (pointer:coarse) and (max-width:1080px)');
+  const topHud=document.querySelector('.top'),bottomHud=document.querySelector('.bottom');
+  const cameraControls=document.querySelector('.camera-controls'),viewButton=$('clean'),restoreHud=$('restoreHud');
+  const deviceOptions=$('deviceOptions'),additionalActions=$('additionalActions'),intercom=$('intercom');
+  const displayDialog=$('displayDialog'),deviceToolsDialog=$('deviceToolsDialog'),actionsDialog=$('actionsDialog');
+  const depthDialog=$('depthDialog'),depthLayer=document.querySelector('.tof-layer'),tofPanel=$('tofPanel');
   const usbButtons=[$('usbHostQuick'),$('usbHost')];
   const dialog=$('config'),volumeButton=$('speakerVolume'),volumeSlider=$('volume'),volumeStatus=$('volumeStatus');
   $('applyVolume')?.remove(); // An older cached page may still contain this button.
@@ -23,6 +30,7 @@
     'Failed to fetch':'connectionFailed','Load failed':'connectionFailed'
   };
   const message=error=>{const text=error?.message||String(error||'');return errorKeys[text]?t(errorKeys[text]):text||t('requestFailed');};
+  const canControlLight=camera=>!!(camera?.available&&camera.running&&camera.ready&&camera.light?.supported);
   function notify(text,hold=false){clearTimeout(noticeTimer);$('notice').textContent=text;$('notice').hidden=!text;if(text&&!hold)noticeTimer=setTimeout(()=>$('notice').hidden=true,6500);}
   function audioStatus(key,values={}){audioState=key;audioValues=values;$('voiceState').textContent=t(key,values);}
   async function api(path,body,raw=false){
@@ -36,27 +44,39 @@
     const cam=media?.camera,a=media?.audio,light=cam?.light,controlsBusy=cameraBusy||lightBusy;
     $('link').textContent='';$('link').append(document.createElement('i'),document.createTextNode(t(robot?'online':'reconnecting')));$('link').classList.toggle('online',!!robot);
     const battery=robot?.battery, voltage=battery?.voltage_v, batteryChip=$('batteryVoltage');
-    const voltageLabel=t(battery?.low?'voltageLow':'voltage'), voltageText=Number.isFinite(voltage)?voltage.toFixed(1)+' V':'—';
+    const showLowVoltage=battery?.low===true&&battery.below_threshold===true;
+    const voltageLabel=t(showLowVoltage?'voltageLow':'voltage'), voltageText=Number.isFinite(voltage)?voltage.toFixed(1)+' V':'—';
     $('batteryLabel').textContent=voltageLabel+' ';
     $('batteryValue').textContent=voltageText;
     batteryChip.setAttribute('aria-label',voltageLabel+' '+voltageText);
     batteryChip.title=t('voltageSource');
-    batteryChip.classList.toggle('low-voltage',battery?.low===true);
+    batteryChip.classList.toggle('low-voltage',showLowVoltage);
     const previewFps=Number.isFinite(cam?.preview_fps_limit)?`≤${cam.preview_fps_limit}`:cam?.fps||0;
     $('videoStats').textContent=cam?.running&&cam.ready?t('cameraLive',{fps:previewFps}):t(cam?.running?'cameraStarting':'cameraOff');
     $('robotMode').textContent=robot?(modeKeys[robot.mode]?t(modeKeys[robot.mode]):robot.mode):t('disconnected');
     $('telemetry').textContent=robot?t('feedback',{hz:Number(robot.feedback_hz||0).toFixed(0),torque:t(robot.enabled?'torqueOn':'torqueOff')}):t('waitingFeedback');
     $('padLink').textContent=t(gamepad?.input?.connected?(gamepad.control?.enabled?'gamepadActive':'gamepadReady'):'gamepadMissing');
     $('snapshot').disabled=!cam?.ready||!cam?.running;
+    cameraControls.dataset.state=cam?.running?'running':cam?.available?'ready':'unavailable';
     $('startCamera').disabled=controlsBusy||!cam?.available||cam.running;
     $('stopCamera').disabled=controlsBusy||!cam?.running;
     $('startCamera').textContent=t(cameraBusy&&!cam?.running?'startingCamera':cam&&!cam.available?'cameraMissing':'startCamera');
     $('stopCamera').textContent=t(cameraBusy&&cam?.running?'stoppingCamera':'stopCamera');
-    $('lightOn').disabled=controlsBusy||!light?.supported||light.enabled===true;
-    $('lightOff').disabled=controlsBusy||!light?.supported||light.enabled===false;
-    $('lightOn').setAttribute('aria-pressed',String(light?.enabled===true));$('lightOff').setAttribute('aria-pressed',String(light?.enabled===false));
-    $('lightState').textContent=lightBusy?t('lightChanging'):light?.error?message(light.error):t(!cam?.available?'lightUnavailable':!light?.supported?'lightUnsupported':light.enabled===true?'lightEnabled':light.enabled===false?'lightDisabled':'lightUnknown');
-    const fill=$('feed').classList.contains('fill');$('fit').setAttribute('aria-label',t(fill?'fitView':'fillView'));
+    const viewLabel=t(compactLayout.matches?'viewMenu':'hideControls');
+    if(viewButton.textContent!==viewLabel)viewButton.textContent=viewLabel;
+    const lightReady=canControlLight(cam);
+    const lampOn=lightReady&&light.enabled===true, lampOff=lightReady&&light.enabled===false;
+    $('lightOn').disabled=controlsBusy||!lightReady||lampOn;
+    $('lightOff').disabled=controlsBusy||!lightReady||lampOff;
+    $('lightOn').setAttribute('aria-pressed',String(lampOn));
+    $('lightOff').setAttribute('aria-pressed',String(lampOff));
+    const lightStatus=!cam?.available?'lightUnavailable':!light?.supported?'lightUnsupported':
+      !cam.running&&!cameraBusy?'lightNeedsCamera':!lightReady?'cameraStarting':
+      lampOn?'lightEnabled':lampOff?'lightDisabled':'lightUnknown';
+    $('lightState').textContent=lightBusy?t('lightChanging'):
+      lightReady&&light.error?message(light.error):t(lightStatus);
+    const fill=$('feed').classList.contains('fill');
+    $('fit').textContent=t(fill?'fitView':'fillView');$('fit').setAttribute('aria-pressed',String(fill));
     const volumeText=Number.isFinite(a?.volume)?a.volume+'%':'—';
     const busy=!!live||mediaBusy;
     if(volumeButton){
@@ -98,7 +118,11 @@
     const want=cam?.running&&!document.hidden;
     if(want&&!streaming){streaming=true;$('feed').src='/api/media/camera/stream?t='+Date.now();}
     if(!want&&streaming){streaming=false;$('feed').removeAttribute('src');}
-    $('feed').hidden=!want||!cam?.ready;$('welcome').hidden=!!want||!!window.DuckToF?.expanded;document.querySelector('.reticle').hidden=!want;
+    const waitingForFrame=want&&!cam.ready;
+    $('feed').hidden=!want||waitingForFrame;
+    $('welcome').hidden=want&&!waitingForFrame||!!window.DuckToF?.expanded;
+    $('cameraPlaceholder').textContent=t(waitingForFrame?'startingCamera':cam&&!cam.available?'cameraMissing':'cameraClosed');
+    document.querySelector('.reticle').hidden=$('feed').hidden;
   }
   async function requestWake(){try{if(navigator.wakeLock&&!wake)wake=await navigator.wakeLock.request('screen');wake?.addEventListener('release',()=>wake=null,{once:true});}catch{}}
   async function camera(start){
@@ -109,17 +133,44 @@
   }
   $('startCamera').onclick=()=>camera(true);$('stopCamera').onclick=()=>camera(false);
   async function light(enabled){
-    if(cameraBusy||lightBusy)return;
+    if(cameraBusy||lightBusy||!canControlLight(media?.camera))return;
     lightBusy=true;mediaRevision++;render();
     try{media=await api('media/camera/light',{enabled});}
     catch(error){notify(message(error));}finally{lightBusy=false;render();}
   }
   $('lightOn').onclick=()=>light(true);$('lightOff').onclick=()=>light(false);
-  $('feed').onerror=()=>{streaming=false;if(media?.camera?.running)notify(t('cameraInterrupted'));};
-  $('fit').onclick=()=>{const fill=$('feed').classList.toggle('fill');render();notify(t(fill?'fillNotice':'fitNotice'));};
+  const cockpit=$('cockpit'),feed=$('feed');
+  cockpit.addEventListener('contextmenu',event=>{
+    if(event.target===cockpit||event.target===feed||event.target.closest('.stick-pad'))event.preventDefault();
+  });
+  feed.onerror=()=>{streaming=false;if(media?.camera?.running)notify(t('cameraInterrupted'));};
+  $('fit').onclick=()=>{const fill=feed.classList.toggle('fill');render();notify(t(fill?'fillNotice':'fitNotice'));};
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement)requestWake();});
-  $('clean').onclick=()=>{document.body.classList.add('clean');$('restoreHud').hidden=false;};
-  $('restoreHud').onclick=()=>{document.body.classList.remove('clean');$('restoreHud').hidden=true;};
+  function openCockpitDialog(panel){
+    window.DuckMotion.release();
+    panel.showModal();
+  }
+  viewButton.onclick=()=>openCockpitDialog(displayDialog);
+  $('openDeviceTools').onclick=()=>openCockpitDialog(deviceToolsDialog);
+  $('openActions').onclick=()=>openCockpitDialog(actionsDialog);
+  $('openDepth').onclick=()=>openCockpitDialog(depthDialog);
+  const displayChoices=[...displayDialog.querySelectorAll('[data-hud-choice]')];
+  function applyHud(){
+    const mode=chosenHud??(compactLayout.matches?'sticks':'all');
+    document.body.dataset.hud=mode;
+    for(const choice of displayChoices)choice.setAttribute('aria-pressed',String(choice.dataset.hudChoice===mode));
+    restoreHud.hidden=mode==='all'||mode==='sticks'&&compactLayout.matches;
+  }
+  function setHud(mode){
+    if(mode==='video')previousHud=chosenHud;
+    chosenHud=mode;
+    applyHud();
+    displayDialog.close();
+    window.DuckMotion.release();
+    (restoreHud.hidden?viewButton:restoreHud).focus({preventScroll:true});
+  }
+  for(const button of displayChoices)button.onclick=()=>setHud(button.dataset.hudChoice);
+  restoreHud.onclick=()=>setHud(chosenHud==='video'?previousHud:'all');
   $('snapshot').onclick=async()=>{try{
     const response=await fetch('/api/media/camera/frame');if(!response.ok)throw Error(t('photoMissing'));
     const url=URL.createObjectURL(await response.blob()),link=document.createElement('a');link.href=url;link.download='duck-'+Date.now()+'.jpg';link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
@@ -134,8 +185,16 @@
   $('settings').onclick=()=>settings();$('padLink').onclick=()=>settings('gamepad');
   document.querySelectorAll('[data-panel]').forEach(button=>button.onclick=()=>panel(button.dataset.panel));
   $('closeConfig').onclick=()=>dialog.close();dialog.addEventListener('close',()=>{$('settingsFrame').src='about:blank';});
+  function syncGamepadLanguage(){
+    const frame=$('settingsFrame');
+    if(activePanel==='gamepad' && frame.contentDocument){
+      frame.contentWindow.DuckI18n?.setLanguage(window.DuckI18n.language);
+    }
+  }
   $('settingsFrame').onload=()=>{try{
     const doc=$('settingsFrame').contentDocument;if(!doc?.body)return;
+    syncGamepadLanguage();
+    if(activePanel==='gamepad')window.DuckRemoteNotice?.bindButton(doc.getElementById('enable'));
     const style=doc.createElement('style');style.textContent='header{display:none!important}main{padding:8px 14px!important;max-width:100%!important}section{margin-top:10px!important}.audio-grid{grid-template-columns:1fr!important}body{font-size:14px}.servo-grid{overflow:auto}';doc.head.append(style);doc.querySelectorAll('a').forEach(link=>link.target='_top');
   }catch{}};
   async function switchUsb(){
@@ -146,6 +205,7 @@
   }
   usbButtons.forEach(button=>button.onclick=switchUsb);
   volumeButton?.addEventListener('click',()=>{
+    deviceToolsDialog.close();
     settings();
     volumeSlider.focus({preventScroll:true});volumeSlider.scrollIntoView({block:'center'});
   });
@@ -258,19 +318,41 @@
     window.DuckBinding?.updateCameraAvailability(false);
   }
   document.addEventListener('visibilitychange',()=>{if(document.hidden)leave();else{render();if(media?.camera.running)requestWake();}});
-  window.addEventListener('pagehide',leave);window.addEventListener('duck-languagechange',()=>{notify('');render();});
+  window.addEventListener('pagehide',leave);
+  window.addEventListener('duck-languagechange',()=>{notify('');render();syncGamepadLanguage();});
   window.addEventListener('duck-tof-layout',render);
   function layout(){
     const root=$('cockpit');
-    root.style.setProperty('--hud-top',document.querySelector('.top').offsetHeight+'px');
-    root.style.setProperty('--hud-bottom',document.querySelector('.bottom').offsetHeight+'px');
+    root.style.setProperty('--hud-top',topHud.offsetHeight+'px');
+    root.style.setProperty('--hud-bottom',bottomHud.offsetHeight+'px');
   }
-  if(window.ResizeObserver){const observer=new ResizeObserver(layout);observer.observe(document.querySelector('.top'));observer.observe(document.querySelector('.bottom'));}
+  function placeControls(){
+    const compact=compactLayout.matches;
+    document.body.classList.toggle('compact-cockpit',compact);
+    if(!compact){
+      deviceToolsDialog.close();actionsDialog.close();depthDialog.close();
+      $('clean').before(deviceOptions);
+      document.querySelector('.stop-action').before(additionalActions);
+      document.querySelector('.audio-dock').append(intercom);
+      depthLayer.append(tofPanel);
+    }else{
+      $('compactDeviceTools').append(deviceOptions,intercom);
+      $('compactActions').append(additionalActions);
+      $('compactDepth').append(tofPanel);
+    }
+    depthLayer.hidden=compact;
+    applyHud();
+    window.DuckToF?.setCompact(compact);
+    layout();
+    render();
+  }
+  if(window.ResizeObserver){const observer=new ResizeObserver(layout);observer.observe(topHud);observer.observe(bottomHud);}
   window.addEventListener('resize',layout);layout();
+  compactLayout.addEventListener('change',placeControls);placeControls();
   async function poll(){
     try{
       if(document.hidden)return;
-      const revision=mediaRevision,usbSnapshot=usbRevision;
+      const revision=mediaRevision,usbSnapshot=usbRevision,motionSnapshot=window.DuckMotion.revision;
       const results=await Promise.allSettled([api('status'),api('media/status'),api('gamepad/status')]);
       robot=results[0].status==='fulfilled'?results[0].value:null;
       if(revision===mediaRevision&&!cameraBusy&&!lightBusy&&!mediaBusy){
@@ -278,9 +360,9 @@
         window.DuckBinding?.updateCameraAvailability(media?.camera?.available===true&&!document.hidden);
       }
       if(!usbBusy&&usbSnapshot===usbRevision)gamepad=results[2].status==='fulfilled'?results[2].value:null;
-      window.DuckMotion?.update(robot,gamepad?.control?.enabled===true);
+      window.DuckMotion.update(robot,gamepad?.control?.enabled===true,motionSnapshot);
       render();
     }finally{setTimeout(poll,1500);}
   }
-  render();poll();
+  poll();
 })();

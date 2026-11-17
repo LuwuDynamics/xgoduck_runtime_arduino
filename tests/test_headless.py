@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,11 +16,12 @@ sys.path[:0] = [str(ROOT / 'python'), str(ROOT / 'tools/ai-support'),
                str(ROOT / 'python/vendor/luwu_os/apps/voice_chat')]
 from onboarding import Onboarding, CloudProbe, HardwareClient, ota_url
 from voice_config import VoiceConfig
-from provisioning import (Session, Wifi, frame, crc, wifi_frames, split_nmcli, run_command,
+from provisioning import (Session, Wifi, frame, crc, wifi_frames, split_nmcli, run_command, wifi_device_status,
     CTRL, DATA, SSID, PASSWORD, CONNECT, STATUS, SCAN, WIFI_STATE, WIFI_LIST, CUSTOM,
     FRAGMENT, CHECKSUM, REQUIRE_ACK, read_board_serial_number)
 from blufi import SetupManager, Peripheral, Advertisement, Notify, Write, UUID
 from install_config import write_units
+from startup_ip_display import display_startup_ip
 
 IDENTITY = '02:12:34:56:AB:CD'
 BOARD_SERIAL = '001234'
@@ -30,11 +31,12 @@ MQTT = {'endpoint': 'mock:1883', 'client_id': 'fixture', 'password': 'test-only-
 class FakeHardware:
     def __init__(self):
         self.connected, self.advertising = False, True
+        self.ipv4 = None
         self.device_id = IDENTITY
         self.calls = []
 
     async def snapshot(self):
-        return dict(network=dict(connected=self.connected), advertising=self.advertising, device_id=self.device_id,
+        return dict(network=dict(connected=self.connected, ipv4=self.ipv4), advertising=self.advertising, device_id=self.device_id,
                     name='XGO-DuckABCD', error='')
 
     async def advertise(self, enabled):
@@ -87,6 +89,24 @@ class LifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.hardware.advertising)
         self.assertNotIn('test-only-secret', json.dumps(self.onboard.snapshot()))
         self.assertEqual((self.folder / 'binding.json').stat().st_mode & 0o777, 0o600)
+
+    async def test_ipv4_is_current_and_clears_on_disconnect(self):
+        self.hardware.connected = True
+        self.hardware.ipv4 = '192.168.31.20'
+        await self.tick()
+        self.assertEqual(self.onboard.snapshot()['ipv4'], '192.168.31.20')
+        self.hardware.ipv4 = '192.168.31.244'
+        await self.tick()
+        self.assertEqual(self.onboard.snapshot()['ipv4'], '192.168.31.244')
+        self.hardware.connected = False
+        await self.tick()
+        self.assertIsNone(self.onboard.snapshot()['ipv4'])
+
+    async def test_ip_display_retries_an_unready_router(self):
+        with patch('startup_ip_display.send_octet', side_effect=[TimeoutError(), True]) as send, \
+             patch('startup_ip_display.asyncio.sleep', new_callable=AsyncMock):
+            await display_startup_ip(lambda: '192.168.31.244')
+        self.assertEqual([call.args for call in send.call_args_list], [(244,), (244,)])
 
     async def test_cached_binding_offline_recovery_and_unknown_cloud_are_separate(self):
         self.hardware.connected = True
@@ -441,20 +461,38 @@ class PacketTest(unittest.IsolatedAsyncioTestCase):
 
 
 class WifiTest(unittest.IsolatedAsyncioTestCase):
+    async def test_status_reads_the_wifi_ipv4_and_ignores_link_local(self):
+        async def run(args, **kwargs):
+            if 'GENERAL.STATE,IP4.ADDRESS' in args:
+                return 0, ('GENERAL.STATE:100 (connected)\nIP4.ADDRESS[1]:169.254.0.123/16\n'
+                           'IP4.ADDRESS[2]:192.168.31.20/24\nIP4.ADDRESS[3]:192.168.2.20/24\n')
+            return 0, 'profile-uuid:wlan0\n'
+        result = await Wifi(run).status()
+        self.assertTrue(result['connected'])
+        self.assertEqual(result['ipv4'], '192.168.31.20')
+        self.assertEqual(result['connection_uuid'], 'profile-uuid')
+
     async def test_scan_handles_escaped_ssid_colons_backslashes_and_duplicates(self):
         async def run(args, **kwargs):
             if 'SSID,SIGNAL' in args:
+                self.assertEqual(kwargs['locale'], 'C.UTF-8')
                 return 0, 'Office\\:A:65\nOffice\\:A:85\nSlash\\\\Name:50\n办公室:70\n:99\n'
             return 0, ''
         aps = await Wifi(run).scan()
         self.assertEqual(aps, [('Office:A', -15), ('办公室', -30), ('Slash\\Name', -50)])
+
+    def test_current_wifi_status_preserves_chinese_ssid(self):
+        with patch('provisioning.subprocess.run', return_value=Mock(stdout='*:小鸭实验:85\n')) as run:
+            self.assertEqual(wifi_device_status(), {'type': 'wifi', 'ssid': '小鸭实验', 'signal': 'strong'})
+        self.assertEqual(run.call_args.kwargs['env']['LC_ALL'], 'C.UTF-8')
+        self.assertEqual(run.call_args.kwargs['env']['LANG'], 'C.UTF-8')
 
     async def exercise_connection(self, success):
         active, candidate, calls = 'old-id', None, []
         async def run(args, **kwargs):
             nonlocal active, candidate
             calls.append(args)
-            if 'GENERAL.STATE,GENERAL.CONNECTION' in args:
+            if 'GENERAL.STATE,IP4.ADDRESS' in args:
                 return 0, 'GENERAL.STATE:' + ('100 (connected)' if active else '30 (disconnected)') + '\n'
             if 'UUID,DEVICE' in args:
                 return 0, active + ':wlan0\n' if active else ''
@@ -522,6 +560,20 @@ class HostConfigurationTest(unittest.IsolatedAsyncioTestCase):
             self.assertIn('RemainAfterExit=yes', usb)
             self.assertIn('Before=xgoduck-ai-hardware.service arduino-app-cli.service', usb)
             self.assertIn('xgoduck-ai-usb-startup.service', unit)
+
+    async def test_installed_release_checks_firmware_before_default_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / 'xgoduck-release'
+            root.mkdir()
+            (root / 'release.yaml').write_text('target: unoq\n')
+            system = Path(directory) / 'system'
+            write_units(root, IDENTITY, system)
+            dropin = (system / 'arduino-app-cli.service.d/xgoduck-ai.conf').read_text()
+            self.assertIn(f'release_firmware.py --if-default "{root}"', dropin)
+            self.assertIn('TimeoutStartSec=10min', dropin)
+            self.assertNotIn('sketch_cache.py', dropin)
+            hardware = (system / 'xgoduck-ai-hardware.service').read_text()
+            self.assertIn(f'--socket "{root}/data/gamepad.sock"', hardware)
 
     async def test_first_boot_retry_is_only_for_our_default_and_never_after_manual_stop(self):
         with tempfile.TemporaryDirectory() as directory:

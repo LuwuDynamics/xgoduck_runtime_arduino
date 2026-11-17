@@ -54,10 +54,12 @@
     },
     "12": {
       "image": "cal-12-pose.svg",
+      "image_version": "left-profile",
       "name": {"en": "Hip pitch", "zh": "髋·前后摆"},
+      "photo": {"src": "cal-photo-12.jpg", "width": 1279, "height": 1706, "en": "Left leg ID 12 · Reference photo", "zh": "左腿 ID 12 · 实拍参考"},
       "pose": {
-        "en": "From the side, align the upper leg’s top edge with the horizontal dashed line and the lower leg with the vertical line. They form a right angle, not a straight standing leg.",
-        "zh": "从侧面看，大腿连杆上沿对齐水平虚线，小腿对齐竖直虚线，摆成直角，不是把整条腿拉直。"
+        "en": "Look at Duck’s left side with its front to the left. Align the top edge of the hip cover with the horizontal guide and the lower leg with the vertical guide. Enlarge the photo in the top-right corner to see the servo.",
+        "zh": "从小鸭左侧看，前方朝左。髋部盖板上沿对齐水平虚线，小腿对齐竖直虚线。可放大右上角的实拍查看舵机位置。"
       }
     },
     "13": {
@@ -95,6 +97,7 @@
     "22": {
       "image": "cal-22-pose.svg",
       "name": {"en": "Hip pitch", "zh": "髋·前后摆"},
+      "photo": {"src": "cal-photo-22.jpg", "width": 1279, "height": 1706, "en": "Right leg ID 22 · Reference photo", "zh": "右腿 ID 22 · 实拍参考"},
       "pose": {
         "en": "From the side, align the upper leg’s top edge with the horizontal dashed line and the lower leg with the vertical line. They form a right angle, not a straight standing leg.",
         "zh": "从侧面看，大腿连杆上沿对齐水平虚线，小腿对齐竖直虚线，摆成直角，不是把整条腿拉直。"

@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest"><link rel="stylesheet" href="mobile.css?v=walking-help">
-<link rel="stylesheet" href="mobile-tof.css?v=app-version1">
+<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest?v=cockpit-portrait"><link rel="stylesheet" href="mobile.css?v=cockpit-landscape">
+<link rel="stylesheet" href="mobile-tof.css?v=cockpit-layout">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
+<link rel="stylesheet" href="remote-control-notice.css">
 </head>
-<body>
+<body data-hud="all">
 <main id="cockpit">
-  <img id="feed" alt="小鸭摄像头实时画面" data-i18n-alt="cameraAlt" hidden>
+  <img id="feed" alt="小鸭摄像头实时画面" data-i18n-alt="cameraAlt" draggable="false" hidden>
   <div class="shade"></div>
   <div class="reticle" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
   <header class="hud top">
@@ -21,32 +22,33 @@
     <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 语音交互绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
     <div class="top-actions">
       <button id="language" class="language-button" type="button">EN</button>
-      <button id="fit" class="icon-button" aria-label="填满画面" data-i18n-aria-label="fillView">⤢</button>
       <button id="full" class="fullscreen-button" aria-label="进入全屏" aria-pressed="false"><span aria-hidden="true">⛶</span><span id="fullLabel">全屏</span></button>
       <button id="settings" class="icon-button" aria-label="打开设置" data-i18n-aria-label="openSettings">⚙</button>
     </div>
     <div class="device-controls">
-      <div class="control-group" role="group" aria-label="摄像头" data-i18n-aria-label="camera">
+      <div class="control-group camera-controls" data-state="unavailable" role="group" aria-label="摄像头" data-i18n-aria-label="camera">
         <button id="startCamera" class="camera-on" data-i18n="startCamera" disabled>开启摄像头</button>
         <button id="stopCamera" data-i18n="stopCamera" disabled>关闭摄像头</button>
       </div>
-      <div class="control-group light-controls" role="group" aria-label="补光灯" data-i18n-aria-label="light">
-        <button id="lightOn" data-i18n="lightOn" disabled>打开补光灯</button>
-        <button id="lightOff" data-i18n="lightOff" disabled>关闭补光灯</button>
-        <span id="lightState" class="control-state" role="status">补光灯：正在读取</span>
+      <button id="openDeviceTools" class="compact-only" type="button" aria-haspopup="dialog" aria-controls="deviceToolsDialog" data-i18n="tools" data-i18n-aria-label="deviceTools">工具</button>
+      <div id="deviceOptions">
+        <div class="control-group light-controls" role="group" aria-label="补光灯" data-i18n-aria-label="light">
+          <button id="lightOn" data-i18n="lightOn" disabled>打开补光灯</button>
+          <button id="lightOff" data-i18n="lightOff" disabled>关闭补光灯</button>
+          <span id="lightState" class="control-state" role="status">补光灯：正在读取</span>
+        </div>
+        <div class="control-group view-tools" role="group" aria-label="画面与 USB 工具" data-i18n-aria-label="viewControls">
+          <button id="fit" type="button" aria-pressed="false" data-i18n="fillView">填满画面</button>
+          <button id="snapshot" data-i18n="savePhoto" disabled>保存照片</button>
+          <button id="usbHostQuick" type="button" role="switch" aria-label="USB Host" aria-checked="false" disabled>USB Host</button>
+        </div>
       </div>
-      <div class="control-group view-tools" role="group" aria-label="画面与 USB 工具" data-i18n-aria-label="viewControls">
-        <button id="usbHostQuick" type="button" role="switch" aria-label="USB Host" aria-checked="false" disabled>USB Host</button>
-        <button id="snapshot" data-i18n="savePhoto" data-i18n-aria-label="savePhoto" disabled>保存照片</button>
-        <button id="clean" data-i18n="hideControls" data-i18n-aria-label="hideControls">隐藏控件</button>
-      </div>
+      <button id="clean" type="button" aria-haspopup="dialog" aria-controls="displayDialog" data-i18n="hideControls">隐藏控件</button>
+      <button id="openDepth" class="compact-only tof-shortcut" type="button" aria-haspopup="dialog" aria-controls="depthDialog" data-i18n-aria-label="tofTitle"><span>ToF</span><strong id="tofCompact">—</strong></button>
     </div>
   </header>
   <div id="welcome" class="welcome">
-    <span class="eyebrow" data-i18n="welcomeEyebrow">从小鸭的视角，看见身边。</span>
-    <h1><span data-i18n="welcomeTitle">小鸭的视角，</span><br><span data-i18n="welcomeTitleSecond">由你开启。</span></h1>
-    <p data-i18n="welcomeDescription">点击上方「开启摄像头」，查看实时画面。</p>
-    <span class="welcome-note" data-i18n="welcomeNote">横放手机，配合手柄使用。</span>
+    <p id="cameraPlaceholder" data-i18n="cameraClosed">摄像头已关闭</p>
   </div>
   <aside class="tof-layer" aria-label="ToF 实时测距" data-i18n-aria-label="tofTitle">
     <section id="tofPanel" class="tof-panel" data-state="starting">
@@ -55,7 +57,6 @@
         <span id="tofStatus" class="tof-status" role="status">正在连接</span>
         <button id="tofToggle" type="button" aria-expanded="true" aria-controls="tofBody" data-i18n="tofCollapse">收起</button>
       </div>
-      <div id="tofSummary" class="tof-summary" hidden><span data-i18n="tofCenter">中心距离</span><strong id="tofCompact">—</strong></div>
       <div id="tofBody" class="tof-body">
         <div class="tof-map-wrap"><div id="tofGrid" class="tof-grid" role="img" aria-label="8×8 深度热力图" data-i18n-aria-label="tofGrid"></div><span class="tof-scan" aria-hidden="true"></span><i class="tof-crosshair" aria-hidden="true"></i></div>
         <div class="tof-metrics">
@@ -68,8 +69,9 @@
         <div class="tof-footer"><span id="tofTiming">—</span><span id="tofFrame"># —</span></div>
       </div>
     </section>
+    <div id="tofSummary" class="tof-summary" hidden><span data-i18n="tofCenter">中心距离</span><strong id="tofWideCompact">—</strong></div>
   </aside>
-  <button id="restoreHud" data-i18n="showControls" hidden>显示控件</button>
+  <button id="restoreHud" type="button" data-i18n="showControls" hidden>显示控件</button>
   <div class="hud bottom">
     <div class="motion-sticks">
       <div class="motion-stick">
@@ -100,17 +102,17 @@
         <button id="openWalkingHelp" type="button" aria-haspopup="dialog" aria-controls="walkingHelpDialog" data-i18n="walkingHelp">走不稳？</button>
       </div>
       <div class="cockpit-action-rows">
-        <div class="motion-action-rows" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
-          <div class="cockpit-action-row">
-            <button type="button" class="stand-action" data-motion="stand" data-i18n="actionStand" disabled>站起来</button>
-            <button type="button" data-motion="sit" data-i18n="actionSit" disabled>坐下</button>
+        <button type="button" class="stand-action" data-motion="stand" data-i18n="actionStand" disabled>站起来</button>
+        <button type="button" data-motion="sit" data-i18n="actionSit" disabled>坐下</button>
+        <button type="button" class="compact-only quack-action" data-duck-sound="greet" data-i18n="duckQuack" disabled>鸭叫</button>
+        <div id="additionalActions">
+          <div class="body-actions" role="group" aria-label="动作控制" data-i18n-aria-label="motionActions">
             <button type="button" data-motion="pick" data-i18n="actionPick" disabled>叼东西</button>
             <button type="button" data-motion="roulade" data-i18n="actionRoll" disabled>翻滚</button>
             <button type="button" data-motion="left_kick" data-i18n="actionKickLeft" disabled>左脚踢球</button>
             <button type="button" data-motion="right_kick" data-i18n="actionKickRight" disabled>右脚踢球</button>
-            <button type="button" class="stop-action" data-motion="stop" data-i18n="actionStop" disabled>停止移动</button>
           </div>
-          <div class="cockpit-action-row">
+          <div class="pose-actions" role="group" aria-label="姿态控制" data-i18n-aria-label="poseActions">
             <button type="button" data-motion="default_pose" data-i18n="modeHold" disabled>默认姿态</button>
             <button type="button" data-motion="head_left" data-i18n="actionHeadLeft" disabled>向左转头</button>
             <button type="button" data-motion="head_right" data-i18n="actionHeadRight" disabled>向右转头</button>
@@ -118,38 +120,75 @@
             <button type="button" data-motion="mouth_open" data-i18n="actionMouthOpen" disabled>张嘴</button>
             <button type="button" data-motion="mouth_close" data-i18n="actionMouthClose" disabled>闭嘴</button>
           </div>
+          <h3 class="compact-only" data-i18n="duckSounds">鸭叫</h3>
+          <div id="duckCalls" class="duck-call-row" role="group" aria-label="鸭叫" data-i18n-aria-label="duckSounds" aria-describedby="duckSoundStatus">
+            <button type="button" data-duck-sound="greet" data-i18n="duckGreet" disabled>打招呼</button>
+            <button type="button" data-duck-sound="inquire" data-i18n="duckInquire" disabled>疑问</button>
+            <button type="button" data-duck-sound="alarm" data-i18n="duckAlarm" disabled>警觉</button>
+            <button type="button" data-duck-sound="peck" data-i18n="duckPeck" disabled>啄叫</button>
+            <button type="button" data-duck-sound="chirp" data-i18n="duckChirp" disabled>轻鸣</button>
+            <button type="button" data-duck-sound="coo" data-i18n="duckCoo" disabled>低鸣</button>
+            <button type="button" data-duck-sound="wheee" data-i18n="duckWheee" disabled>兴奋</button>
+          </div>
+          <p id="duckSoundStatus" class="duck-call-status" role="status"></p>
         </div>
-        <div id="duckCalls" class="cockpit-action-row duck-call-row" role="group" aria-label="鸭叫" data-i18n-aria-label="duckSounds" aria-describedby="duckSoundStatus">
-          <button type="button" data-duck-sound="greet" data-i18n="duckGreet" disabled>打招呼</button>
-          <button type="button" data-duck-sound="inquire" data-i18n="duckInquire" disabled>疑问</button>
-          <button type="button" data-duck-sound="alarm" data-i18n="duckAlarm" disabled>警觉</button>
-          <button type="button" data-duck-sound="peck" data-i18n="duckPeck" disabled>啄叫</button>
-          <button type="button" data-duck-sound="chirp" data-i18n="duckChirp" disabled>轻鸣</button>
-          <button type="button" data-duck-sound="coo" data-i18n="duckCoo" disabled>低鸣</button>
-          <button type="button" data-duck-sound="wheee" data-i18n="duckWheee" disabled>兴奋</button>
-        </div>
-        <p id="duckSoundStatus" class="duck-call-status" role="status"></p>
+        <button type="button" class="stop-action" data-motion="stop" data-i18n="actionStop" disabled>停止移动</button>
+        <button id="openActions" class="compact-only" type="button" aria-haspopup="dialog" aria-controls="actionsDialog" data-i18n="moreActions">更多</button>
       </div>
-      <p id="portraitHint" class="portrait-hint" data-i18n="rotatePhone">横过手机后操作小鸭。</p>
     </div>
     <div class="flight-state">
       <span class="eyebrow" data-i18n="robotStatus">机器状态</span><strong id="robotMode">正在连接</strong><span id="telemetry">等待反馈</span>
       <div class="flight-actions">
         <button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button>
+        <button id="rollerMode" class="roller-switch" type="button" role="switch" aria-checked="false" data-i18n-aria-label="rollerMode" disabled>轮滑模式</button>
         <a id="controlPageLink" class="desktop-link" href="/index.html" data-desktop-link data-i18n="controlPage" data-i18n-aria-label="desktopControl" aria-label="打开桌面控制页">控制台</a>
       </div>
     </div>
-    <div class="intercom" role="group" aria-label="实时音频" data-i18n-aria-label="liveAudio">
-      <div class="intercom-actions">
-        <button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><b id="speakerLabel">测试扬声器</b></button>
-        <button id="speakerVolume" class="talk-button secondary" type="button" aria-haspopup="dialog" aria-controls="config" disabled><b data-i18n="volume">音量</b><span id="speakerVolumeValue">—</span></button>
-        <button id="listen" class="talk-button secondary listen-only" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">↓</span><b id="listenLabel">实时监听</b></button>
+    <div class="audio-dock">
+      <div id="intercom" class="intercom" role="group" aria-label="实时音频" data-i18n-aria-label="liveAudio">
+        <div class="intercom-actions">
+          <button id="speakerTest" class="talk-button speaker-test" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">♪</span><b id="speakerLabel">测试扬声器</b></button>
+          <button id="speakerVolume" class="talk-button secondary" type="button" aria-haspopup="dialog" aria-controls="config" disabled><b data-i18n="volume">音量</b><span id="speakerVolumeValue">—</span></button>
+          <button id="listen" class="talk-button secondary" type="button" aria-pressed="false" disabled><span class="button-icon" aria-hidden="true">↓</span><b id="listenLabel">实时监听</b></button>
+        </div>
+        <div class="voice-line"><span id="voiceState" role="status"></span></div>
       </div>
-      <div class="voice-line"><span id="voiceState" role="status"></span></div>
     </div>
   </div>
   <div id="notice" class="toast" role="status" hidden></div>
 </main>
+<dialog id="displayDialog" class="cockpit-dialog" aria-labelledby="displayTitle">
+  <div class="dialog-head">
+    <h2 id="displayTitle" data-i18n="displayMode">控件显示</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="close">×</button></form>
+  </div>
+  <div class="dialog-body display-choices">
+    <button type="button" data-hud-choice="all" aria-pressed="true"><strong data-i18n="showAll">显示全部</strong></button>
+    <button type="button" data-hud-choice="sticks" aria-pressed="false"><strong data-i18n="hideSome">部分隐藏</strong><small data-i18n="hideSomeHint">保留摇杆、停止和卸力</small><small class="compact-only" data-i18n="hideSomeMobileHint">保留遥控和摄像头</small></button>
+    <button type="button" data-hud-choice="video" aria-pressed="false"><strong data-i18n="hideAll">完全隐藏</strong><small data-i18n="hideAllHint">只显示摄像头画面</small></button>
+  </div>
+</dialog>
+<dialog id="deviceToolsDialog" class="cockpit-dialog" aria-labelledby="deviceToolsTitle">
+  <div class="dialog-head">
+    <h2 id="deviceToolsTitle" data-i18n="deviceTools">设备工具</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="close">×</button></form>
+  </div>
+  <div id="compactDeviceTools" class="dialog-body"></div>
+</dialog>
+<dialog id="actionsDialog" class="cockpit-dialog" aria-labelledby="actionsTitle">
+  <div class="dialog-head">
+    <h2 id="actionsTitle" data-i18n="actionsAndSounds">动作和声音</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="close">×</button></form>
+  </div>
+  <div id="compactActions" class="dialog-body"></div>
+</dialog>
+<dialog id="depthDialog" class="cockpit-dialog" aria-labelledby="tofTitle">
+  <div class="dialog-head">
+    <h2 id="tofTitle" data-i18n="tofTitle">ToF 实时测距</h2>
+    <form method="dialog"><button class="icon-button" aria-label="关闭" data-i18n-aria-label="close">×</button></form>
+  </div>
+  <div id="compactDepth" class="dialog-body"></div>
+</dialog>
 <dialog id="walkingHelpDialog" aria-labelledby="walkingHelpTitle">
   <div class="dialog-head">
     <h2 id="walkingHelpTitle" data-i18n="walkingHelpTitle">走不稳或发抖</h2>
@@ -158,8 +197,8 @@
   <div class="walking-help-body">
     <p data-i18n="walkingHelpStop">先停止移动并扶稳小鸭。</p>
     <ol>
-      <li><strong data-i18n="walkingHelpInstall">检查舵机安装</strong><p data-i18n="walkingHelpInstallStep">卸力后按编号图核对每个舵机的 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。</p></li>
-      <li><a href="/calibrate.html" data-desktop-link="/calibrate.html" data-i18n="walkingHelpCalibration">打开标定</a><p data-i18n="walkingHelpCalibrationStep">先标定 IMU，再按参考图重新标定全部 15 个舵机。</p></li>
+      <li><strong data-i18n="walkingHelpInstall">检查舵机安装</strong><p data-i18n="walkingHelpInstallStep">卸力后，在舵机设置的单舵机安装检查中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。</p></li>
+      <li><a href="/calibrate.html" data-desktop-link="/calibrate.html" data-i18n="walkingHelpCalibration">打开标定</a><p data-i18n="walkingHelpCalibrationStep">先按参考图统一标定 15 个舵机，再标定 IMU，最后检查默认姿势。</p></li>
       <li><a href="/servo.html" data-desktop-link="/servo.html" data-i18n="walkingHelpServo">打开舵机设置</a><p data-i18n="walkingHelpServoStep">扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。</p></li>
     </ol>
   </div>
@@ -177,7 +216,6 @@
     <ol class="binding-steps"><li data-i18n="bindingStep1">在所选平台登录，进入「设备」并点击「添加设备」。</li><li data-i18n="bindingStep2">按提示开启蓝牙，选择 XGO-Duck 开头的设备，完成配网和账号绑定。</li><li data-i18n="bindingStep3">在平台选择智能体，再回到这里确认语音已上线。</li></ol>
     <section class="binding-startup" aria-labelledby="startupTitle">
       <h3 id="startupTitle" data-i18n="startupTitle">开机自启与唤醒</h3>
-      <p data-i18n="startupAutostart">首次按 README 完成初始化，并在 App Lab 成功 Run 一次后，后续通电会自动启动网页、聊天和运动服务，无需每次再点 Run。</p>
       <p data-i18n="startupReady">完成配网、账号绑定并接好 USB 音频设备后，启动就绪会依次播放两段鸭叫：</p>
       <div class="startup-sounds">
         <div class="startup-sound"><div><strong data-i18n="startupNetwork">① 联网成功</strong><span data-i18n="startupNetworkHint">第一段鸭叫</span></div><button id="previewStartupNetwork" type="button" aria-pressed="false" data-i18n="startupPreviewListen" data-i18n-aria-label="startupListenNetwork">试听</button></div>
@@ -209,9 +247,9 @@
       </div>
       <p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p>
     </section>
-    <section><h3 data-i18n="handheldView">手持视图</h3><p data-i18n="handheldDescription">横放手机适合配合手柄使用。全屏可隐藏浏览器栏；点击隐藏控件可获得更完整的画面。</p><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
+    <section><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=voice-binding"></script><script src="mobile-fullscreen.js?v=20261030-controls"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=20261030-tof2"></script><script src="mobile-motion.js?v=walking-help"></script><script src="mobile-binding.js?v=camera-region"></script><script src="mobile.js?v=camera-region"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=gamepad-language"></script><script src="mobile-fullscreen.js?v=cockpit-portrait"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=cockpit-layout"></script><script src="remote-control-notice.js"></script><script src="mobile-motion.js?v=rear-cover-notice"></script><script src="mobile-binding.js?v=camera-region"></script><script src="mobile.js?v=gamepad-language"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

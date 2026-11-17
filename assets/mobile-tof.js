@@ -4,6 +4,7 @@
   const panel=$('tofPanel'),grid=$('tofGrid'),cells=[];
   const states={starting:'tofStarting',initializing:'tofStarting',ranging:'tofLive',absent:'tofAbsent',offline:'tofOffline',error:'tofError',unavailable:'tofUnavailable',disconnected:'tofDisconnected',stale:'tofStale',empty:'tofEmpty'};
   let expanded=true,data=null,received=0,timer=null,request=null,stopped=false;
+  let compact=false;
   try{expanded=localStorage.getItem('duck-tof-expanded')!=='false';}catch{}
   for(let i=0;i<64;i++){
     const cell=document.createElement('span');cell.className='tof-cell';
@@ -25,7 +26,8 @@
     if(state==='ranging')state=!fresh?'stale':!count?'empty':'ranging';
     panel.dataset.state=state;panel.classList.toggle('is-live',state==='ranging');
     $('tofStatus').textContent=t(states[state]||'tofUnavailable');
-    $('tofCompact').textContent=measure('tofCenter',fresh?data?.center_mm:null);
+    const center=measure('tofCenter',fresh?data?.center_mm:null);
+    $('tofCompact').textContent=$('tofWideCompact').textContent=center;
     measure('tofNearest',fresh?data?.min_mm:null);
     $('tofValid').textContent=t('tofValid',{count});
     $('tofTiming').textContent=fresh?t('tofTiming',{hz:data.frequency_hz||5,age:Math.round(age)}):'—';
@@ -53,12 +55,25 @@
     });
   }
   function layout(){
-    panel.classList.toggle('is-collapsed',!expanded);$('tofBody').hidden=!expanded;$('tofSummary').hidden=expanded;
-    $('tofToggle').textContent=t(expanded?'tofCollapse':'tofExpand');$('tofToggle').setAttribute('aria-expanded',String(expanded));
+    const showBody=compact||expanded;
+    panel.classList.toggle('is-collapsed',!showBody);$('tofBody').hidden=!showBody;$('tofSummary').hidden=showBody;
+    $('tofToggle').hidden=compact;
+    $('tofToggle').textContent=t(showBody?'tofCollapse':'tofExpand');$('tofToggle').setAttribute('aria-expanded',String(showBody));
     window.dispatchEvent(new CustomEvent('duck-tof-layout'));
   }
-  window.DuckToF={get expanded(){return expanded;}};
-  $('tofToggle').onclick=()=>{expanded=!expanded;try{localStorage.setItem('duck-tof-expanded',String(expanded));}catch{}layout();};
+  window.DuckToF={
+    get expanded(){return !compact&&expanded;},
+    setCompact(next){
+      if(compact===next)return;
+      compact=next;
+      layout();
+    }
+  };
+  $('tofToggle').onclick=()=>{
+    expanded=!expanded;
+    try{localStorage.setItem('duck-tof-expanded',String(expanded));}catch{}
+    layout();
+  };
   function schedule(delay){clearTimeout(timer);if(!document.hidden&&!stopped)timer=setTimeout(poll,delay);}
   async function poll(){
     if(request||document.hidden||stopped)return;

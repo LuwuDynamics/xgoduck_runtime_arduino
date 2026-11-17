@@ -262,7 +262,8 @@ class Art:
     def __init__(self, model):
         self.robot = Robot(model)
         self.cams = {'front': Camera(self.robot, 0, 0), 'right': Camera(self.robot, -90, 0),
-                     'left': Camera(self.robot, 90, 0, mirror=True), 'top': Camera(self.robot, 0, 90, fill=0.66)}
+                     'left': Camera(self.robot, 90, 0, mirror=True), 'left_profile': Camera(self.robot, 90, 0),
+                     'top': Camera(self.robot, 0, 90, fill=0.66)}
 
     def svg(self, title, base, overlay):
         return (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 {VW} {VH}" '
@@ -289,7 +290,6 @@ class Art:
         p, axis = self.robot.joint_frame(LINK[sid])
         return p, axis
 
-
 # camera, hidden links, ghost angle (degrees), arrow radius (mm), arrow start direction (None = towards the moving part),
 # dashed target lines as world segments in mm. Lines lie in the plane that faces the camera.
 POSE = {
@@ -301,8 +301,9 @@ POSE = {
              guides=[((0, -72, -40.5), (0, 72, -40.5)), ((0, 48.5, -48), (0, 48.5, -134))]),
     21: dict(cam='front', hide=(), ghost=-24, radius=64, start=None,
              guides=[((0, -72, -40.5), (0, 72, -40.5)), ((0, -48.5, -48), (0, -48.5, -134))]),
-    12: dict(cam='left', hide=(), ghost=-30, radius=50, start=None,
-             guides=[((-46, 40, -40.5), (40, 40, -40.5)), ((-17.7, 40, -48), (-17.7, 40, -128))]),
+    12: dict(cam='left_profile', hide=(), ghost=-25, radius=46, start=None,
+             # The upper edge of the fitted hip cover is at z=-27 mm.
+             guides=[((-24, 71.5, -27), (26, 71.5, -27)), ((-17.7, 40, -60), (-17.7, 40, -126))]),
     22: dict(cam='right', hide=(), ghost=30, radius=50, start=None,
              guides=[((-46, -40, -40.5), (40, -40, -40.5)), ((-17.7, -40, -48), (-17.7, -40, -128))]),
     13: dict(cam='left', hide=(), ghost=-32, radius=46, start=None, guides=[((-17.7, 40, -50), (-17.7, 40, -130))]),
@@ -330,6 +331,9 @@ def direction_tag(art, cam_name, cam):
                        for link, text in (('left_ankle', '左 L'), ('right_ankle', '右 R')))
     if cam_name == 'top':
         return f'<text class="tagc" x="{VW / 2}" y="22">前 Front ▲</text>'
+    if cam_name == 'left_profile':
+        return (f'<text class="tag" x="16" y="25">左侧 Left side</text>'
+                f'<text class="tag" x="16" y="{VH - 12}">◀ 前 Front</text>')
     return f'<text class="tag" x="{VW - 94}" y="{VH - 12}">前 Front ▶</text>'
 
 

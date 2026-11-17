@@ -9,9 +9,12 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from duck_sound import KINDS
 
 
-DEFAULT_BINDINGS = dict(walk='start', hold='south', off='east', pick=None, roulade=None)
+SOUND_BINDINGS = {f'duck_{kind}': kind for kind in KINDS}
+DEFAULT_BINDINGS = dict(walk='start', hold='south', off='east', pick=None, roulade=None,
+                        sit=None, roller=None, left_kick=None, right_kick=None) | dict.fromkeys(SOUND_BINDINGS)
 BUTTON_NAMES = ('south', 'east', 'north', 'west', 'lb', 'rb', 'back', 'start', 'guide', 'ls', 'rs',
                 'lt', 'rt', 'f1', 'f3', 'up', 'down', 'left', 'right')
 
@@ -24,21 +27,24 @@ def motion_from_input(data, roller=False):
 
 
 class GamepadControl:
-    def __init__(self, controller, client, bindings_path=None):
+    def __init__(self, controller, client, bindings_path=None, *, play_sound=None):
         self.controller, self.client = controller, client
         self.enabled = False
         self.wait_for_neutral = False
         self.identity = None
         self.buttons = {}
         self.error = ''
+        self.play_sound = play_sound
+        self.sound_error = ''
+        self._sound_worker = None
         self.bindings_path = Path(bindings_path) if bindings_path else Path(__file__).resolve().parents[1] / 'data/gamepad-bindings.json'
         self.bindings = dict(DEFAULT_BINDINGS)
         self.learning = None
         self.binding_message = ''
         try:
-            saved = json.loads(self.bindings_path.read_text())
-            self.validate_bindings(saved)
-            self.bindings = saved
+            bindings = DEFAULT_BINDINGS | json.loads(self.bindings_path.read_text())
+            self.validate_bindings(bindings)
+            self.bindings = bindings
         except FileNotFoundError:
             pass
         except (OSError, ValueError, TypeError):
@@ -51,7 +57,8 @@ class GamepadControl:
         with self.controller.lock:
             return dict(enabled=self.enabled, error=self.error, source=self.controller.input_source,
                         bindings=dict(self.bindings), learning=self.learning['action'] if self.learning else None,
-                        binding_message=self.binding_message)
+                        binding_message=self.binding_message, roller_mode=self.controller.roller_mode,
+                        sound_error=self.sound_error)
 
     @staticmethod
     def validate_bindings(bindings):
@@ -180,6 +187,50 @@ class GamepadControl:
             self.identity, self.buttons = data['id'], dict(data['buttons'])
             self.enabled, self.error = True, ''
 
+    def _run_binding(self, action):
+        controller = self.controller
+        match action:
+            case 'walk':
+                if controller.sitstand_phase == 'sit':
+                    controller.set_sitstand('stand')
+                else:
+                    controller.set_mode('policy')
+            case 'hold':
+                controller.set_mode('hold')
+            case 'pick':
+                controller.start_pick()
+            case 'roulade':
+                controller.start_roulade()
+            case 'sit' | 'left_kick' | 'right_kick':
+                if (controller.mode not in ('hold', 'policy') or not controller.feedback
+                        or not controller.feedback.enabled):
+                    raise ValueError('Stand Duck up before using this action.')
+                if action == 'sit':
+                    controller.set_sitstand('sit')
+                else:
+                    controller.start_kick(action.removesuffix('_kick'))
+            case 'roller':
+                controller.set_roller_mode(not controller.roller_mode)
+                self.wait_for_neutral = True
+
+    def _start_sound(self, kind):
+        if self.play_sound is None:
+            self.sound_error = 'Duck sound playback is unavailable.'
+            return
+        if self._sound_worker is not None and self._sound_worker.is_alive():
+            return
+        self.sound_error = ''
+
+        def play():
+            try:
+                self.play_sound(kind)
+            except (OSError, ValueError) as error:
+                with self.controller.lock:
+                    self.sound_error = str(error)
+
+        self._sound_worker = threading.Thread(target=play, name='gamepad-sound', daemon=True)
+        self._sound_worker.start()
+
     def consume(self, data):
         with self.controller.lock:
             if self.learning:
@@ -200,16 +251,16 @@ class GamepadControl:
                 if buttons.get(self.bindings['off']):
                     self.controller.set_mode('off')
                     self.controller.input_source = 'gamepad'
+                    self.error = ''
                 else:
-                    for action in ('walk', 'hold', 'pick', 'roulade'):
-                        if self.bindings[action] not in pressed:
+                    for action, button in self.bindings.items():
+                        if button not in pressed:
                             continue
-                        if action in ('walk', 'hold'):
-                            self.controller.set_mode('policy' if action == 'walk' else 'hold')
-                        elif action == 'pick':
-                            self.controller.start_pick()
-                        else:
-                            self.controller.start_roulade()
+                        if action in SOUND_BINDINGS:
+                            self._start_sound(SOUND_BINDINGS[action])
+                            break
+                        self._run_binding(action)
+                        self.error = ''
                         if self.controller.input_source != 'gamepad':
                             self.controller.twist = [0.] * 3
                             self.controller.generation += 1
@@ -223,7 +274,6 @@ class GamepadControl:
                 if self.controller.input_source == 'web' and any(twist):
                     self.controller.input_source = 'gamepad'
                 self.controller.command(twist=twist, source='gamepad')
-                self.error = ''
             except ValueError as e:
                 self.error = str(e)
 
@@ -248,11 +298,11 @@ class GamepadControl:
         self.client.close()
 
 
-def register_gamepad(ui, controller):
+def register_gamepad(ui, controller, *, play_sound=None):
     path = os.environ.get('DUCK_GAMEPAD_SOCKET', str(Path(__file__).resolve().parents[1] / 'data/gamepad.sock'))
     client = httpx.Client(transport=httpx.HTTPTransport(uds=path), base_url='http://gamepad',
                           timeout=httpx.Timeout(.5, connect=.3), trust_env=False)
-    control = GamepadControl(controller, client)
+    control = GamepadControl(controller, client, play_sound=play_sound)
     original = ui.app.router.lifespan_context
 
     @asynccontextmanager

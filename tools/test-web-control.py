@@ -50,12 +50,17 @@ class WebControlTest(unittest.TestCase):
         # AI-layer compatibility attributes.
         c.input_source = 'web'
         c.fault_hold = False
+        c.bridge_recovery = c._bridge_confirmation_seq = None
+        c._command_tx_at = c._command_tx_since = None
+        c._motion_needs_neutral = set()
         c._arm_ack_seq, c._arm_ack_deadline = None, 0.0
         c.web_time = time.monotonic() - 3600
         c.rx_time = time.monotonic()
         c.feedback = SimpleNamespace(imu_ok=True, sample_us=123, angles=[0.] * 15, enabled=True,
                                      flags=3, mask=wire.ALL_MASK, command_seq=0,
-                                     command_age_us=10000, imu_us=0, work_us=0)
+                                     command_age_us=10000, imu_us=0, work_us=0,
+                                     calibrating=False, servo_debugging=False, targets=[0.] * 15)
+        c._servo_feedback_history = collections.deque(maxlen=controller.SERVO_FEEDBACK_GRACE_FRAMES + 1)
         c.filtered = dict(imu_fusion_ready=True, imu_fusion_updated=True, grav=[0, 0, -1],
                           gyro_rad=[0.] * 3, angles_deg=[0.] * 15, vels_deg=[0.] * 15)
         c.filter = Mock(command_acc_x_bias_ms2=0.)

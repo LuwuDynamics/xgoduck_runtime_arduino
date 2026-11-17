@@ -41,7 +41,7 @@ python3 tools/configure-ai.py --aec-output-headroom-db 12
 
 - 稳定包的 8 个网页文件原样复制。`policy.py`、`proc.py`、`rl_core.py`、`recovery.py`、五个运动模型、`wire.py` 和配套 MCU 头文件也与来源逐字节一致。Controller 仅补入已有 AI/手柄控制权字段和命令来源门控，30 个其余方法与稳定包 AST 一致。`sketch.ino` 仅保留独立 ToF 的 include/start 两行，其余与稳定包逐字节一致。来源见 `provenance/motion.json`。
 - 需要成套更新 App 并通过 Run 编译/上传配套 STM32；只替换网页或 Python 会造成协议不匹配。部署后强制刷新浏览器，确保新网页与后端匹配。普通 Walk 默认开启对应模型；Roller 默认关闭，仅用于对应的轮滑硬件。
-- 现在中点保存在各舵机中，编码器中心固定为 2047；Calibration 页面进入后全部卸力，逐关节手动摆机械中点，再点 **Set center & hold**，最后退出。支持 Reset Mid、读取 KP/KD、全总线保护开关和独立保护电流设置。
+- 现在中点保存在各舵机中，编码器中心固定为 2047；当前版本请使用 [9527 统一标定流程](calibration-guide.md) 设定舵机中位。支持 Reset Mid、读取 KP/KD、全总线保护开关和独立保护电流设置。
 - `data/zero_pos.json` 保留备份但不再加载。如果旧软件零位不是全部 2047（或文件损坏），App 会拒绝 Hold / Policy / 语音起身，提示先完成新版 15 关节校准。仅对收到成功 MCU 回执的关节记入 `data/hardware-centers.json`；全部完成且记录落盘后解除迁移限制。旧文件不会被重写，失败/部分校准、旧回执、记录写入失败均不能误报完成。
 - 已按硬件中点校准且旧文件全为 2047 的机器保持兼容；不含旧文件的新安装遵循稳定包原有首次校准流程。不要为了跳过迁移把旧零位强行改成 2047，也不要运行下方历史版本的软件零位迁移命令。
 - Roller 开关会取消旧语音/手机待执行动作并转交网页控制，避免旧动作在换模型后继续执行。有效语音动作保留 10 秒原截止时间与输入心跳续期；聊天和媒体接口保留，新增网页按稳定包布局，不添加聊天标签。
@@ -153,13 +153,36 @@ arduino-app-cli app start "$PWD"
 
 也可准备后在 App Lab 通过 Network 连接点击 **Run**。上一步的安装脚本已调用 `tools/prepare-ai-sketch.py`：解析 `sketch/sketch.yaml` 的固定依赖、修补 Bridge/RPClite 缓存、仅编译并检查 ELF，无需先 Run 失败一次再 Stop 修缓存。若只需重建 MCU 缓存，以 `arduino` 用户运行 `python3 tools/prepare-ai-sketch.py`。首次准备期间保持扭矩关闭，App 保持停止。库缓存清空后需重新准备；已有正确环境不必每次重启 router。
 
-**Run 会构建并启动整个 App。** 0.3.5 的单舵机安装检查需要更新 STM32 sketch，请在舵机卸力后运行。换用其他 Bridge 速率的 App 前，按技术参考调整全局的 2 Mbps Router 设置。 [技术参考](technical_reference.md#running)
+**Run 会启动 App 并上传 STM32 程序。** 源码 ZIP 在这个流程里会编译 sketch。0.3.5 的单舵机安装检查需要更新 STM32 程序，请在舵机卸力后运行。换用其他 Bridge 速率的 App 前，按技术参考调整全局的 2 Mbps Router 设置。 [技术参考](technical_reference.md#running)
 
 USB 探测在 **App 容器创建之前** 完成。开机先开 Host，最多等待 5 秒识别 USB 摄像头或音频接口。检测到音视频设备就保留 Host，否则切回 Device，包括只接了空 Hub 的情况。切换角色前，开机服务暂停 USB 串口监视器、代理及 Arduino router。确定角色后恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART，重启 router 又会更换容器绑定的 socket、重置 MCU。App 入口只检查当前 USB 角色。驾驶舱手动切换后，单独重启 App 会沿用所选模式，下次整机开机重新探测。
 
 切回 Device 后恢复原本启用或运行的 ADB 和 USB 串口监视器，不改变其 enable/mask 设置。只写 USB mode 而保留 ADB 运行，会让 ADB 在 Host 模式下反复重启。不要同时运行旧的 Host 启动脚本，也不要在运动中切换 USB 模式；本次修补隔离 App 启动时的切换，不替换系统内核。安装支持只补装缺少的依赖，不主动升级已经安装的系统包。
 
 第一次保持联网，等待依赖安装和两个业务进程进入运行状态。安装了默认 App 后，后续开机不需要再在电脑点击 Run。先验证一次正常重启；再验证 Wi-Fi 不可用时仍能被手机发现。系统重刷、删除依赖缓存或删除 App 后，需要重新完成相应准备。
+
+<a name="precompiled-uno-q-release"></a>
+
+### UNO Q 预编译版
+
+以 `arduino` 用户在 UNO Q 的源码目录或解压后的 App ZIP 目录执行以下命令。已验证支持 `app build` 和 `app install` 的 Arduino App CLI 0.14 系列。
+
+```sh
+python3 tools/package-ai-app.py --release
+```
+
+`dist/` 会生成 `.ard` 和配套 `.ard.sha256`。打包器沿用 ZIP 的源码选择规则，准备固定版本的 Zephyr 和 Bridge 依赖并校验 STM32 ELF。发布包包含固件和 Python 环境，排除标定、绑定等板端 `data/`。
+
+将两份文件传到目标 UNO Q。先用 `sha256sum -c <文件.ard.sha256>` 核对，再执行 `arduino-app-cli app install --yes <文件.ard>`。进入安装输出的 App 目录，按上面的步骤运行 `bash tools/install-ai-support.sh` 和 `sudo bash tools/router-2m.sh`，最后运行 `arduino-app-cli app start "$PWD"`。更新时先停止旧 App，再按上文迁移同一只鸭子的配置。安装脚本会把硬件服务和开机默认 App 指向新目录。
+
+开机时会核对 `sketch.fw` 和源码。固件缺失、损坏或源码有变化时，会从安装目录内的 sketch 重新构建。若重建需要下载依赖，恢复联网后，在已安装的预编译版目录执行以下命令即可手动重试。
+
+```sh
+python3 tools/ai-support/release_firmware.py "$PWD"
+arduino-app-cli app start "$PWD"
+```
+
+需要直接改源码，或板上的 App CLI 较旧时，可以走上面的 App Lab ZIP 安装流程。
 
 ### 工具链与含工具链安装包
 
@@ -193,6 +216,8 @@ bash tools/install-ai-support.sh
 安装支持时会在当前 App 根目录生成本机 `uv.toml`：`cn` 默认使用清华 PyPI 镜像，`global` 默认使用官方 PyPI。只影响 Python 包下载，不改变聊天服务器、账号绑定或区域。已有手写配置和显式指定的镜像会保留；该文件不进入分发 ZIP。
 
 如果 Run 日志先出现 `Failed to fetch .../simple/...` 或下载超时，随后才提示 `No module named onnxruntime`，应先修复依赖下载。在板端 App 目录执行 `python3 tools/configure-ai-python.py` 后重新 Run。也可用 `--index-url https://<可访问的镜像>/simple/` 显式指定 HTTPS 镜像。首次成功运行仍需要下载容器和其他依赖；含工具链 ZIP 不包含 Python 虚拟环境。
+
+板端仍下载缓慢时，可先在电脑准备依赖再传过去。先核对板端实际容器镜像和 Python 版本，在电脑启动匹配的 **Linux ARM64** 容器，按本版本 `python/requirements.txt` 下载或构建全部 wheel 及其依赖。Mac 原生 wheel 不能用于 UNO Q。为传输文件生成并核对 SHA-256，用 SCP 送到板子，在 App 的 Python 环境中使用本地 wheel 目录离线安装。核对 App 锁定版本并运行 SDK 导入检查，成功后再完成 App 的准备和启动；不要提前写入“依赖已安装”的缓存标记。预编译 `.ard` 和全量包已包含 Python 环境，正常安装不需要这一步。
 
 ## 6. 手机发现、配网、绑定
 

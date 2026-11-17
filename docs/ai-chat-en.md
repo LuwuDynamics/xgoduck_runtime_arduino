@@ -41,9 +41,9 @@ The 0.2.33 section below records the previous archive integration. `provenance/m
 
 - All eight stable web files are copied unchanged. Policy/filter math, all five models, `wire.py` and MCU headers also match. Controller retains AI/gamepad source ownership; its other 30 methods have matching AST fingerprints. Only ToF's include/start lines overlay the stable sketch. Sources are recorded in `provenance/motion.json`.
 - Update the App and compile/upload its matching MCU sketch together using Run, then hard-refresh the browser. Updating pages or Python alone is incompatible. Ordinary Walk is selected by default; Roller starts off and requires the corresponding roller-equipped hardware.
-- Hardware centers live in the servos, with encoder center 2047. Enter Calibration to unload all joints, manually place each at its mechanical center and click **Set center & hold**, then exit. Servo setup includes Reset Mid, KP/KD readback and separate protection-switch/current broadcasts.
+- Hardware centers live in the servos, with encoder center 2047. Use the current [unified calibration workflow](calibration-guide.md#english) to set the servo centers. Servo setup includes Reset Mid, KP/KD readback and separate protection-switch/current broadcasts.
 - Preserve old `data/zero_pos.json` as a backup; it is no longer applied. Nondefault or damaged software-zero files block Hold / Policy / voice arming until the 15 hardware centers are acknowledged. Only successful MCU replies are recorded in private `data/hardware-centers.json`; partial/failed acknowledgements, stale replies and failed writes cannot complete migration. The old file is never overwritten.
-- Already hardware-centered robots whose old zeros are all 2047 retain compatibility. New installs without legacy files follow the archive's original calibration workflow. Do not replace legacy zeros with 2047 to skip migration or run the historical software-zero conversion commands below.
+- Already hardware-centered robots whose old zeros are all 2047 retain compatibility. New installs without legacy files follow the current calibration workflow. Do not replace legacy zeros with 2047 to skip migration or run the historical software-zero conversion commands below.
 - A web Roller switch retires queued voice/phone actions and returns ownership to the page. Existing voice action deadlines/input renewal, chat and media services are retained; no chat tab is added to the supplied layout.
 
 Version 0.2.33 has been compiled on UNO Q, uploaded to the matching STM32 and started. All eight web files passed HTTP hash verification. Mechanical centering and physical standing/walking remain unverified. USB Hub re-enumeration and a stalled command channel occurred during deployment; successful startup does not establish that either issue is fixed. See the validation record.
@@ -125,13 +125,36 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
 
    You can also click Run over App Lab Network after preparing Bridge. The installer already ran `tools/prepare-ai-sketch.py`, which resolves libraries, patches Bridge/RPClite and performs a compile-only ELF check. There is no need to Run, fail, Stop and repair the cache manually. To rebuild only the MCU cache, run `python3 tools/prepare-ai-sketch.py` as `arduino`. Keep the App stopped and torque off during setup. Router speed is a system-wide setting; see the [technical reference](technical_reference.md#running) before using an App with another Bridge baud rate.
 
-Keep the board online until its first build and both processes are running. **Run builds and starts the whole App.** The single-servo installation check in 0.3.5 requires the updated STM32 sketch. Release servo torque before running the update. The default App starts automatically on subsequent boots. Verify a normal reboot, then a cold boot without Wi-Fi. Reflashing the OS, deleting caches or removing the App requires the corresponding preparation again.
+Keep the board online until both processes are running. **Run starts the App and uploads the STM32 sketch.** The source ZIP builds the sketch as part of this path. The single-servo installation check in 0.3.5 requires the updated sketch. Release servo torque before running the update. The default App starts automatically on subsequent boots. Verify a normal reboot, then a cold boot without Wi-Fi.
 
 Finish assembly, unique servo IDs and calibration according to the [hardware guide](https://github.com/LuwuDynamics/xgoduck_hardware) and main README before enabling motion.
 
 USB detection completes **before the App container is created**. Duck tries Host and waits up to 5 seconds for USB audio or video interfaces to enumerate. It keeps Host if it detects one and switches to Device otherwise, including when only an empty hub is attached. The boot service pauses the USB serial path watcher, proxy and Arduino router before switching roles and restores a previously running router after selecting the role. USB/FunctionFS transitions can disturb UART reception, and restarting the router replaces Docker's mounted socket and resets the MCU. The App entry verifies the current USB role. An App restart keeps a manual selection made in the cockpit. A full board reboot runs USB detection again.
 
 Switching back to Device restores previously active or enabled ADB and serial-monitor units without changing their enable/mask settings. Writing only the USB mode while leaving ADB running can cause repeated ADB restarts in Host mode. Keep the old Host boot scripts disabled and do not switch USB modes during motion. This startup workaround does not replace the system kernel. Support setup installs missing dependencies without proactively upgrading packages that are already installed.
+
+<a name="precompiled-uno-q-release"></a>
+
+### Precompiled UNO Q release
+
+Build the `.ard` on a UNO Q as `arduino`, from a source checkout or the unpacked App ZIP. Arduino App CLI needs `app build` and `app install` support, available on the tested 0.14 series.
+
+```sh
+python3 tools/package-ai-app.py --release
+```
+
+The command generates the `.ard` and `.ard.sha256` in `dist/`. It builds from the same source selection as the ZIP, prepares the pinned Zephyr and Bridge dependencies, and checks the STM32 ELF. The release carries the firmware and Python environment. It excludes per-device `data/`, including calibration and binding state.
+
+Transfer both files to the target UNO Q. Verify the checksum with `sha256sum -c <file.ard.sha256>`, then use `arduino-app-cli app install --yes <file.ard>`. From the installed path, run `bash tools/install-ai-support.sh` and `sudo bash tools/router-2m.sh`, then start with `arduino-app-cli app start "$PWD"`. On an update, stop the old App and migrate this Duck’s data as described above. The installer points the hardware service and default App at the installed release.
+
+At boot, the pre-start check verifies `sketch.fw` against the bundled sketch inputs. If it is missing, damaged or out of date, it rebuilds the firmware from the installed sketch. If the build needs missing dependencies, restore network access and run the following from the installed release before manually starting it.
+
+```sh
+python3 tools/ai-support/release_firmware.py "$PWD"
+arduino-app-cli app start "$PWD"
+```
+
+For a clean source installation or an older App CLI, use the App Lab ZIP procedure above.
 
 ### Toolchain and bundled App ZIP
 
@@ -165,6 +188,8 @@ Preparation does not upload firmware or start the App. A later `/bin/arm-zephyr-
 Host setup creates a local `uv.toml` in this App: `cn` defaults to the Tsinghua PyPI mirror and `global` to official PyPI. This only selects the Python package index; it does not change the chat endpoint, region or binding. Existing manual settings and explicit mirror overrides are retained. The file is excluded from distributed ZIPs.
 
 If Run first reports `Failed to fetch .../simple/...` or a download timeout and then `No module named onnxruntime`, repair the package download first. Run `python3 tools/configure-ai-python.py` in the board's App directory, then Run again. An explicit HTTPS mirror can be selected with `--index-url https://<reachable-mirror>/simple/`. The first successful Run still needs the container and other dependencies; the toolchain ZIP does not include a Python virtual environment.
+
+If downloads on the board remain slow, prepare dependencies on your computer and transfer them. Check the board's actual container image and Python version, run a matching **Linux ARM64** container on your computer, and download or build every wheel and dependency from this version's `python/requirements.txt`. Native macOS wheels cannot run on UNO Q. Generate and verify SHA-256 checksums, transfer the files with SCP, and install offline from the local wheel directory into the App's Python environment. Verify the App's pinned versions and SDK imports before completing preparation and startup; do not write a dependency-success cache marker before validation. The precompiled `.ard` and full package already carry the Python environment and do not need this step for a normal installation.
 
 ## Phone discovery, Wi-Fi and binding
 

@@ -74,12 +74,24 @@ class Bridge:
     saved_gains = {}
     protection_flags, protection_current = wire.PROTECTION_ENABLED, 231
     held_mask = 0
+    calibrating = False
     servo_debug = False
     servo_mask = wire.ALL_MASK
     servo_test = None
     servo_test_limit = 0
     servo_test_feedback_lost = False
     servo_test_idle_expired = False
+
+    def __init__(self, address):
+        self.address = address
+        self.connected = False
+
+    def connect(self, timeout):
+        self.connected = True
+        return True
+
+    def disconnect(self):
+        self.connected = False
 
     @classmethod
     def provide(cls, name, callback):
@@ -91,12 +103,20 @@ class Bridge:
         if name == 'duck_command':
             cls.commands.append(wire.COMMAND.unpack(payload)[4])
         elif name == 'duck_cal':
-            magic, seq, op, index = wire.CAL.unpack(payload)
+            magic, seq, op, index = wire.CAL.unpack_from(payload)
             assert magic == b'DQL2'
             if op == wire.CAL_CENTER_ONE:
                 cls.held_mask |= 1 << index
                 cls.callbacks['duck_cal_reply'](wire.CAL_REPLY.pack(b'DQA1', seq, index, 1))
+            elif op in (wire.CAL_CENTER_ALL, wire.CAL_SET_POSITIONS):
+                assert cls.calibrating and not cls.held_mask
+                assert index == wire.CAL_ALL_JOINTS
+                if op == wire.CAL_SET_POSITIONS:
+                    positions = wire.CAL_POSITIONS.unpack(payload)[4:]
+                    assert positions[MOTOR_IDS.index(30)] == 1367
+                cls.callbacks['duck_cal_reply'](wire.CAL_REPLY.pack(b'DQA1', seq, index, 1))
             else:
+                cls.calibrating = op == wire.CAL_ENTER
                 cls.held_mask = 0
         elif name == 'duck_servo':
             magic, op, sid, new, kp, kd, flags, current = wire.SERVO.unpack(payload)
@@ -122,8 +142,10 @@ class Bridge:
                     elif cls.servo_test_idle_expired:
                         ok, idle_timeout = 0, 10
                         cls.servo_test = None
-                elif cls.servo_test == (sid, current):
-                    cls.servo_test = None
+                else:
+                    if cls.servo_test == (sid, current):
+                        cls.servo_test = None
+                    limit = 1  # STOP acknowledges the torque register readback in this byte.
                 cls.callbacks['duck_servo_reply'](wire.SERVO_REPLY.pack(
                     b'DQS3', op, sid, ok, limit, 2047, current, angle_limit, idle_timeout))
                 return
@@ -175,7 +197,7 @@ def main():
         seq = 0
         while not stop_feedback.wait(.01):
             seq += 1
-            flags = 1 | (16 if Bridge.servo_debug else 0)
+            flags = 1 | (8 if Bridge.calibrating else 0) | (16 if Bridge.servo_debug else 0)
             raw = wire.STATE.pack(b'DQS1', 1, flags, Bridge.servo_mask,
                 seq, seq * 10000, seq * 10000, 0, 0, 10000, 500, 0, 0, 0,
                 0, 0, -16384, 0, 0, 0, *([0.] * 45))
@@ -233,8 +255,9 @@ def main():
                         change = request(motion_port, token, '/action', {
                             'session': session, 'kind': 'walking_mode', 'walking_mode': 'walk'})
                         assert change['status'] == 'completed'
+                        sample_us = state['controller'].feedback.sample_us
                         Bridge.callbacks['duck_voltage'](wire.VOLTAGE.pack(
-                            b'DQV1', 1, 0, wire.ALL_MASK, *([82] * 15)))
+                            b'DQV1', 1, sample_us, wire.ALL_MASK, *([82] * 15)))
                         motion = client.get('/api/status').json()
                         assert motion['voltage_v'] == 8.2 and len(motion['servo_voltage_v']) == 15
                         assert client.post('/api/heading-hold', json={'enabled': False}).json()['enabled'] is False
@@ -272,16 +295,23 @@ def main():
                     assert client.post('/api/roller', json={'enabled': False}).status_code == 200
                     assert client.post('/api/cal/enter', json={}).status_code == 200
                     assert client.post('/api/cal/heartbeat', json={}).status_code == 200
+                    wait_for(lambda: client.get('/api/status').json().get('mcu_calibrating'))
+                    unified = client.post('/api/cal/sitting', json={})
+                    assert unified.status_code == 200 and len(unified.json()['positions']) == 15
                     center = client.post('/api/cal/center', json={'index': 0})
                     assert center.status_code == 200 and center.json()['hold_pos'] == 2048
                     assert client.post('/api/cal/center', json={'index': True}).status_code == 400
                     assert client.post('/api/cal/exit', json={}).status_code == 200
+                    wait_for(lambda: not client.get('/api/status').json().get('mcu_calibrating'))
                     Bridge.saved_gains[22] = (7, 9)
                     assert client.get('/api/servo/gain-check').json() == {
                         'state': 'checked', 'mismatches': [{'id': 22, 'kp': 7, 'kd': 9}],
                     }
                     Bridge.servo_mask = (1 << MOTOR_IDS.index(10)) | (1 << MOTOR_IDS.index(31))
                     wait_for(lambda: client.get('/api/status').json()['servo_ids'] == [10, 31])
+                    pose = client.post('/api/cal/default-pose', json={})
+                    assert pose.status_code == 400 and 'All 15 servos' in pose.json()['detail']
+                    assert client.post('/api/cal/heartbeat', json={'default_pose': True}).status_code == 400
                     previous_ops = len(Bridge.servo_ops)
                     assert client.get('/api/servo/overcurrent-check').json() == {
                         'state': 'checked', 'checked_ids': [10, 31],
@@ -322,7 +352,8 @@ def main():
                             Bridge.servo_test_feedback_lost = False
                         else:
                             assert moved.status_code == 400 and moved.json()['detail'] == 'No servo replied at ID 22.'
-                        assert client.post(servo_test, json={**args, 'action': 'stop'}).status_code == 200
+                        released = client.post(servo_test, json={**args, 'action': 'stop'})
+                        assert released.status_code == 200 and released.json()['torque_off'] is True
                         assert Bridge.servo_test is None
                         Bridge.servo_mask = wire.ALL_MASK
                         wait_for(lambda: 22 in client.get('/api/status').json()['servo_ids'])
@@ -392,8 +423,11 @@ def main():
                 stop_feedback.set()
                 feed.join(2)
 
-    modules = {name: ModuleType(name) for name in ('arduino', 'arduino.app_utils', 'arduino.app_bricks', 'arduino.app_bricks.web_ui')}
-    modules['arduino.app_utils'].App, modules['arduino.app_utils'].Bridge = App, Bridge
+    modules = {name: ModuleType(name) for name in (
+        'arduino', 'arduino.app_utils', 'arduino.app_bricks', 'arduino.app_bricks.web_ui', 'arduino.router_bridge')}
+    modules['arduino.app_utils'].App = App
+    modules['arduino.router_bridge'].Bridge = Bridge
+    modules['arduino.router_bridge'].DEFAULT_ADDRESS = 'unix:///unused-motion-bridge.sock'
     modules['arduino.app_bricks.web_ui'].WebUI = WebUI
     sys.modules.update(modules)
     # Exercise the real ToF monitor/decoder/guard with a simulated private RPC
@@ -414,6 +448,8 @@ def main():
     try:
         result = runpy.run_path(str(ROOT / 'python/main.py'), run_name='__main__')
         assert not result['worker'].is_alive()
+        assert not result['bridge_recovery'].thread.is_alive()
+        assert not result['bridge'].connected
         assert not result['access'].thread.is_alive()
         assert not result['voice'].thread.is_alive()
         assert result['avoidance'].thread is None or not result['avoidance'].thread.is_alive()

@@ -22,7 +22,7 @@ class GamepadAPITest(unittest.IsolatedAsyncioTestCase):
         self.worker=Mock()
         self.worker.get.return_value.json.return_value={'bluetooth':{'available':True,'devices':[]},'input':{'connected':False}}
         self.worker.post.return_value.status_code=200
-        self.controller=Mock(lock=threading.RLock(),input_source='web')
+        self.controller=Mock(lock=threading.RLock(),input_source='web',roller_mode=False)
         self.ui=UI()
         with patch('gamepad.httpx.Client',return_value=self.worker):
             self.control=register_gamepad(self.ui,self.controller)
@@ -70,6 +70,7 @@ class GamepadAPITest(unittest.IsolatedAsyncioTestCase):
         r=await self.client.get('/api/gamepad/status')
         self.assertEqual(r.status_code,200)
         self.assertFalse(r.json()['control']['enabled'])
+        self.assertFalse(r.json()['control']['roller_mode'])
         self.controller.set_mode.assert_not_called()
 
     async def test_bindings_validation_and_persistence(self):
@@ -83,6 +84,8 @@ class GamepadAPITest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(r.status_code,400)
         r=await self.client.post('/api/gamepad/bindings',json={'operation':'reset'},headers=headers)
         self.assertEqual(r.json()['control']['bindings']['walk'],'start')
+        for action in ('sit', 'roller', 'left_kick', 'right_kick'):
+            self.assertIsNone(r.json()['control']['bindings'][action])
         self.worker.post.assert_not_called()
         self.controller.set_mode.assert_not_called()
 

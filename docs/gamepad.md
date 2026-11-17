@@ -1,6 +1,6 @@
 # Bluetooth gamepad control
 
-Open `http://<duck-host>:9527/gamepad.html`. All navigation and setup text is English.
+Open **Settings → Gamepad** in Duck Cockpit. The panel follows the cockpit language. The standalone page at `http://<duck-host>:9527/gamepad.html` starts in Chinese for Chinese browser locales and in English otherwise, with a language button in the header.
 
 1. Put an Xbox Bluetooth controller or Switch Pro controller into pairing mode.
 2. Select **Scan for controllers**. The scan stops after 30 seconds.
@@ -13,9 +13,14 @@ While gamepad control is enabled, periodic browser movement messages are ignored
 
 ## Button binding
 
-Disable gamepad control, choose **Bind** beside Walk / get up, Default pose, Torque off, Pick, or Roulade, then press a single controller button within 15 seconds. Release any held buttons first. Learning consumes input without executing robot actions. A disconnect, timeout, multiple presses, or duplicate assignment leaves existing bindings unchanged. Pick and Roulade are initially unassigned and require walking upright when used. Use **Clear**, **Cancel binding**, or **Restore defaults** as needed; Torque off cannot be cleared. Names use Xbox labels / physical positions, including shoulder buttons, View/Menu, Home, and stick clicks.
+Disable gamepad control, choose **Bind** beside an action, release any held buttons, then press one controller button within 15 seconds. Learning consumes input without executing robot actions. A disconnect, timeout, multiple presses, or duplicate assignment leaves existing bindings unchanged. Use **Clear**, **Cancel binding**, or **Restore defaults** as needed. Keep a button assigned to **Torque off**.
 
-Mappings are saved atomically in `data/gamepad-bindings.json` and survive app/board restarts. Learning runs on the board; press counters from evdev retain short presses between web polls. Disconnect/stale input protection is unchanged.
+- **Walk / get up** also stands Duck up from its seated posture.
+- **Sit**, **Roller mode**, **Left kick**, and **Right kick** start unassigned. Existing custom bindings carry forward.
+- **Roller mode** switches between normal walking and roller skating. Centre the sticks after switching to resume movement.
+- **Duck calls** offers all seven sounds from the cockpit, each unassigned by default. Press its bound button once to play a call through Duck's speaker.
+
+Mappings are saved atomically in `data/gamepad-bindings.json` and survive app and board restarts. Learning runs on the board. Press counters from evdev retain short presses between web polls.
 
 ## Architecture and installation
 

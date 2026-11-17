@@ -7,7 +7,8 @@ const MOTORS = [10,11,12,13,14,20,21,22,23,24,30,31,32,33,34];
 const ASSETS = path.resolve(__dirname, '../assets');
 
 async function createMock(port=0) {
-  const state = {mode:'shadow', held:Array(15).fill(false), mask:32767, imu:false,
+  const state = {mode:'shadow', held:Array(15).fill(false), mask:32767, imu:false, enabled:false, poseBeats:0,
+    mcuCalibrating:true, failBatch:null, delayBatch:false, releaseBatch:null, sittingCalibration:null,
     calls:[], saved:new Set(), failCenter:null, statusDown:false, beats:0,
     delayStatus:false, releaseStatus:null, delayCenter:false, releaseCenter:null,
     guideFailure:null, imuOk:true, imuStartError:null, imuSampleError:null,
@@ -27,10 +28,12 @@ async function createMock(port=0) {
     try {
       if (req.method === 'GET' && url.pathname === '/api/status') {
         if (state.statusDown) return json(503, {detail:'offline'});
-        const snapshot = {mode:state.mode, cal_done:[...state.held], raw_mask:state.mask,
+        const snapshot = {mode:state.mode, motors:MOTORS, cal_done:[...state.held], raw_mask:state.mask,
           raw_pos:MOTORS.map((_,i)=>state.held[i]?2048:2200+i),
-          enabled:false, imu_ok:state.imuOk, feedback_age_ms:10,
-          imu_calibration:imuSnapshot(), last_error:''};
+          enabled:state.enabled, imu_ok:state.imuOk, feedback_age_ms:10,
+          mcu_calibrating:state.mode==='calibrate'&&state.mcuCalibrating,
+          full_robot_ready:state.mask===32767&&state.imuOk,
+          imu_calibration:imuSnapshot(), sitting_calibration:state.sittingCalibration, last_error:''};
         if (state.delayStatus) {
           state.delayStatus = false;
           await new Promise(resolve=>{state.releaseStatus=resolve;});
@@ -46,7 +49,7 @@ async function createMock(port=0) {
         switch (url.pathname) {
           case '/api/cal/enter':
             if (state.imu) return json(400, {detail:'IMU calibration is active'});
-            state.mode = 'calibrate'; state.held.fill(false);
+            state.mode = 'calibrate'; state.enabled = false; state.held.fill(false);
             return json(200, {ok:true});
           case '/api/cal/exit':
             if (state.imu && state.mode === 'calibrate') {
@@ -55,12 +58,39 @@ async function createMock(port=0) {
               state.imu = false;
               state.imuResult.state = 'cancelled';
             }
-            state.mode = 'shadow'; state.held.fill(false);
+            state.mode = 'shadow'; state.enabled = false; state.held.fill(false);
             return json(200, {ok:true});
           case '/api/cal/heartbeat':
+            if (body.default_pose === true) {
+              if (state.mode !== 'hold') return json(400, {detail:'Default pose test has ended.'});
+              state.poseBeats++;
+              return json(200, {ok:true});
+            }
             if (state.mode !== 'calibrate') return json(400, {detail:'not in calibrate mode'});
             state.beats++;
             return json(200, {ok:true});
+          case '/api/cal/default-pose':
+            if (state.imu || state.mode === 'hold') return json(400, {detail:'Calibration is busy.'});
+            if (state.mask !== 32767 || !state.imuOk) {
+              return json(400, {detail:'All 15 servos and the IMU need fresh feedback for the default pose test.'});
+            }
+            state.mode = 'hold'; state.held.fill(false);
+            return json(200, {mode:'hold'});
+          case '/api/cal/sitting':
+            if (state.mode!=='calibrate'||!state.mcuCalibrating||state.imu) {
+              return json(400, {detail:'not in calibrate mode'});
+            }
+            if (state.mask!==32767) return json(400, {detail:'All 15 servos must be online for sitting calibration.'});
+            if (state.enabled||state.held.some(Boolean)) return json(400, {detail:'Unload all joints before sitting calibration.'});
+            if (state.delayBatch) {
+              state.delayBatch=false;
+              await new Promise(resolve=>{state.releaseBatch=resolve;});
+              state.releaseBatch=null;
+            }
+            if (state.mode!=='calibrate') return json(400, {detail:'calibration session changed'});
+            if (state.failBatch) return json(400, {detail:state.failBatch});
+            MOTORS.forEach((_,index)=>state.saved.add(index));
+            return json(200, {ok:true, positions:MOTORS.map(()=>2048)});
           case '/api/cal/center': {
             const i = body.index;
             if (!Number.isInteger(i) || i<0 || i>=15) return json(400, {detail:'joint index out of range'});
@@ -111,7 +141,8 @@ async function createMock(port=0) {
       const file=path.resolve(ASSETS, '.'+(url.pathname==='/'?'/calibrate.html':decodeURIComponent(url.pathname)));
       if (!file.startsWith(ASSETS+path.sep)) return json(403, {detail:'outside assets'});
       const mime={'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
-        '.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml','.webp':'image/webp','.png':'image/png'};
+        '.css':'text/css; charset=utf-8','.json':'application/json','.svg':'image/svg+xml',
+        '.webp':'image/webp','.png':'image/png','.jpg':'image/jpeg'};
       const data=await fs.readFile(file);
       res.writeHead(200, {'Content-Type':mime[path.extname(file)]||'application/octet-stream','Cache-Control':'no-store'});
       res.end(data);

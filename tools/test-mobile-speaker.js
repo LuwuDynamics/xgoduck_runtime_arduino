@@ -3,11 +3,14 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('n
 const assets=path.join(__dirname,'../assets'),tick=()=>new Promise(resolve=>setImmediate(resolve));
 class Element extends EventTarget {
   constructor(){super();this.attributes={};this.dataset={};this.style={setProperty(){}};this.value='100';this.offsetHeight=64;const names=new Set();this.classList={contains:n=>names.has(n),add:n=>names.add(n),remove:n=>names.delete(n),toggle:(n,on)=>{if(on??!names.has(n))names.add(n);else names.delete(n);return names.has(n);}};}
-  setAttribute(k,v){this.attributes[k]=v;} removeAttribute(k){delete this.attributes[k];} append(){}
+  setAttribute(k,v){this.attributes[k]=v;} removeAttribute(k){delete this.attributes[k];}
+  append(){} before(){} close(){} querySelectorAll(){return [];}
 }
 function setup(){
   const ids=[...fs.readFileSync(path.join(assets,'mobile.html'),'utf8').matchAll(/id="([^"]+)"/g)].map(m=>m[1]);
   const el=Object.fromEntries(ids.map(id=>[id,new Element()])),window=new EventTarget(),polls=[],requests=[];
+  window.matchMedia=()=>Object.assign(new EventTarget(),{matches:false});
+  window.DuckMotion={revision:0,update(){},release(){}};
   const document=Object.assign(new EventTarget(),{hidden:false,documentElement:{},body:new Element(),getElementById:id=>el[id],querySelectorAll:()=>[],querySelector:()=>new Element(),createElement:()=>new Element(),createTextNode:t=>t});
   const state={camera:{available:true,running:false,ready:false,light:{supported:true,enabled:false}},audio:{available:true,volume:75,state:'idle',error:''}};
   let postOverride=null,readOverride=null;

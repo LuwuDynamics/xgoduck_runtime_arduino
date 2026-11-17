@@ -40,9 +40,8 @@ VERSION_INI = Path(LUWU_ROOT) / "version.txt"
 DING_WAV = str(Path(LUWU_ROOT) / "assets/music/ding.wav")  # 唤醒反馈 / 回答完成
 SEND_WAV = str(Path(LUWU_ROOT) / "assets/music/send.wav")  # 进入思考 (LLM 已收到)
 
-# Duck uses 60 ms Opus frames. Keep 360 ms before wake and enough space
-# for the existing MQTT reconnect and hello retry windows.
-WAKE_PREROLL_FRAMES = 6
+# Duck uses 60 ms Opus frames. Allow for MQTT reconnect and hello retries
+# while buffering speech recorded after the wake cue.
 WAKE_BUFFER_FRAMES = 270
 
 # 复用 apps/ai 的唤醒词检测
@@ -96,9 +95,10 @@ class Application:
         self._closing = False
         self._tasks = set()
         self._tts_generation = 0
-        self._shared_wake_capture = bool(config.get("wakeword", {}).get("shared_capture"))
+        wake_cfg = config.get("wakeword", {})
+        self._shared_wake_capture = bool(wake_cfg.get("shared_capture"))
+        self._wake_interrupt_enabled = self._shared_wake_capture and bool(wake_cfg.get("interrupt_playback"))
         self._wake_audio_lock = threading.Lock()
-        self._wake_history = deque(maxlen=WAKE_PREROLL_FRAMES)
         self._wake_buffer = None
         self._wake_buffer_full = False
         self._chat_start_lock = asyncio.Lock()
@@ -267,6 +267,7 @@ class Application:
             print("[app] 唤醒词功能未启用")
             return
         ww_cfg = self.config.get("wakeword", {})
+        playback_threshold = ww_cfg.get("playback_threshold")
         model_path = ww_cfg.get("model_path") or None
         if model_path is None and self._lang() == "en":
             # 英文系统用 Hi Luka 模型 (同 apps/ai 的语言分流)
@@ -275,6 +276,10 @@ class Application:
                 model_path = EN_MODEL_PATH
             except Exception as e:
                 print(f"[app] 英文唤醒词模型获取失败: {e}")
+
+        def threshold_for_context(context, default):
+            return playback_threshold if context[0] == DeviceState.SPEAKING else default
+
         self.wakeword = WakeWordManager(
             on_wakeup=self._on_wakeword_detected,
             model_path=model_path,
@@ -288,6 +293,8 @@ class Application:
             input_channels=ww_cfg.get('input_channels', 1),
             input_latency=ww_cfg.get('input_latency', .32),
             shared_input=self._shared_wake_capture,
+            detection_context=self._wake_detection_context if self._wake_interrupt_enabled else None,
+            threshold_for_context=threshold_for_context if playback_threshold is not None else None,
         )
         if self.wakeword.is_available():
             self._resume_wakeword()
@@ -376,21 +383,31 @@ class Application:
         """唤醒词文案按语言分流: cn=小陆同学, en=Hi Luka (对应不同 ONNX 模型)"""
         return "Hi Luka" if self._lang() == "en" else "小陆同学"
 
-    def _on_wakeword_detected(self, *args):
+    def _wake_detection_context(self):
+        if self._closing:
+            return None
+        state = self.state
+        if state == DeviceState.IDLE or (state == DeviceState.SPEAKING and not self.aborted):
+            return state, self._tts_generation
+        return None
+
+    def _on_wakeword_detected(self, context=None):
         """唤醒词回调 (来自检测线程)"""
         print("[app] 检测到唤醒词")
         if self.loop is None or self._closing:
             return
-        self.loop.call_soon_threadsafe(lambda: self._spawn(self._handle_wakeword()))
+        self.loop.call_soon_threadsafe(lambda: self._spawn(self._handle_wakeword(context)))
 
     def _play_wake_sound(self):
         """Local wake acknowledgement; products can supply a fixed cue."""
         self.audio.play_wav(DING_WAV)
 
-    async def _handle_wakeword(self):
+    async def _handle_wakeword(self, context=None):
+        if self._closing or (context is not None and context != self._wake_detection_context()):
+            return
         if self.state == DeviceState.SPEAKING:
             await self.abort_speaking(AbortReason.WAKE_WORD_DETECTED)
-            if self.audio is not None:
+            if not self._wake_interrupt_enabled and self.audio is not None:
                 self._play_wake_sound()
         elif self.state == DeviceState.IDLE:
             await self.start_chat(wake_word=self._wake_word())
@@ -443,28 +460,27 @@ class Application:
     async def _connect_chat(self, wake_word):
         frames = None
         if wake_word and self._shared_wake_capture and self.wakeword is not None:
-            with self._wake_audio_lock:
-                preroll = len(self._wake_history)
-                frames = self._wake_buffer = deque(self._wake_history)
-                self._wake_history.clear()
-            # Keep any PCM already queued behind the last scored wake window.
-            self.audio.set_capture_enabled(True, keep_pending=True)
+            frames = self._prepare_wake_buffer()
         self._set_state(DeviceState.CONNECTING)
-        if self.wakeword:
+        if self.wakeword and not self._wake_interrupt_enabled:
             self.wakeword.stop()
 
         if wake_word and self.audio is not None:
-            self._play_wake_sound()
             if frames is None:
+                self._play_wake_sound()
                 await asyncio.to_thread(self.audio.wait_playback_done, 2.0)
                 if self._closing or self.state != DeviceState.CONNECTING:
                     return
+            else:
+                cue_ready = self._start_wake_cue(frames)
 
         protocol = self.protocol
         if not protocol.is_audio_channel_opened() and not await protocol.open_audio_channel():
             return
         if self._closing or self.state != DeviceState.CONNECTING:
             await protocol.close_audio_channel()
+            return
+        if frames is not None and (not await cue_ready or self._wake_buffer is not frames):
             return
 
         if wake_word and self.config.get("send_wake_word_data", False):
@@ -486,9 +502,34 @@ class Application:
             return
         self._set_state(DeviceState.LISTENING)
         if frames is not None:
-            await self._send_wake_audio(protocol, frames, preroll)
+            await self._send_wake_audio(protocol, frames)
 
-    async def _send_wake_audio(self, protocol, frames, preroll):
+    def _prepare_wake_buffer(self):
+        self.audio.set_capture_enabled(False)
+        with self._wake_audio_lock:
+            self._wake_buffer = deque()
+            self._wake_buffer_full = False
+            return self._wake_buffer
+
+    def _start_wake_cue(self, frames):
+        started = time.monotonic()
+        self._play_wake_sound()
+        return self._spawn(self._capture_after_wake_cue(frames, started))
+
+    async def _capture_after_wake_cue(self, frames, started):
+        played = await asyncio.to_thread(self.audio.wait_playback_done, 2.0)
+        if self._closing or self._wake_buffer is not frames:
+            return False
+        if not played:
+            self.audio.clear_play_queue()
+            started = time.monotonic()
+        with self._wake_audio_lock:
+            frames.clear()
+            self._wake_buffer_full = False
+            self.audio.set_capture_enabled(True, after_playback=started)
+        return True
+
+    async def _send_wake_audio(self, protocol, frames):
         sent = 0
         while not self._closing and self.state == DeviceState.LISTENING:
             with self._wake_audio_lock:
@@ -509,11 +550,10 @@ class Application:
             # Catch up at three times real time without a burst of UDP packets.
             await asyncio.sleep(.02)
         if sent:
-            print(f"[app] 唤醒收音已补传 {sent} 帧，含预录 {preroll} 帧", flush=True)
+            print(f"[app] 唤醒提示音后音频已补传 {sent} 帧", flush=True)
 
     def _discard_wake_audio(self):
         with self._wake_audio_lock:
-            self._wake_history.clear()
             self._wake_buffer = None
             self._wake_buffer_full = False
 
@@ -551,21 +591,68 @@ class Application:
         self._notify_status(DeviceState.IDLE, "待命")
 
     async def abort_speaking(self, reason, relisten=False):
-        if self.aborted:
+        if self.aborted or self._closing:
             return
         self.aborted = True
         self._tts_generation += 1
+        if (reason == AbortReason.WAKE_WORD_DETECTED and self._wake_interrupt_enabled
+                and self.protocol is not None and self.protocol.is_audio_channel_opened()):
+            await self._relisten_after_wake(self.protocol)
+            return
         self.audio.clear_play_queue()
         if self.protocol:
             await self.protocol.send_abort_speaking(reason)
         # 打断后立即转倾听: 唤醒词打断默认转; 手动打断由 relisten 指定 (同 Omni 打断后继续对话)
-        if (relisten or reason == AbortReason.WAKE_WORD_DETECTED) and \
+        if self.protocol and (relisten or reason == AbortReason.WAKE_WORD_DETECTED) and \
                 self.protocol.is_audio_channel_opened():
             await asyncio.sleep(0.1)
             await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
             self._set_state(DeviceState.LISTENING)
         else:
             self._back_to_idle()
+
+    async def _relisten_after_wake(self, protocol):
+        generation, session_id = self._tts_generation, protocol.session_id
+        # The cleared answer still rings in the DAC/acoustic path. Keep AEC
+        # for the first uploaded sentence even when the switch is off.
+        self.audio.wake_echo_cancel = True
+        frames = self._prepare_wake_buffer()
+
+        def same_session():
+            return (self.protocol is protocol and protocol.session_id == session_id
+                    and protocol.is_audio_channel_opened())
+
+        try:
+            # Drop the queued and device-buffered answer immediately. Delayed
+            # mic samples still contain its echo, so keep the render reference.
+            self.audio.clear_play_queue(reset_aec=False)
+            print("[app] 唤醒词打断播放", flush=True)
+            cue_ready = self._start_wake_cue(frames)
+            if not await protocol.send_abort_speaking(AbortReason.WAKE_WORD_DETECTED):
+                return
+            if not await cue_ready:
+                return
+            if self._closing or self._wake_buffer is not frames or not same_session():
+                return
+            if not await protocol.send_start_listening(ListeningMode.AUTO_STOP, wait_published=True):
+                return
+            await asyncio.sleep(.06)
+            if self._closing or self._wake_buffer is not frames or not same_session():
+                return
+            self.keep_listening = True
+            self._set_state(DeviceState.LISTENING)
+            await self._send_wake_audio(protocol, frames)
+        finally:
+            if not self._closing:
+                if self.state == DeviceState.LISTENING and self._tts_generation == generation:
+                    self.audio.wake_echo_cancel = False
+                if self._wake_buffer is frames:
+                    try:
+                        if same_session():
+                            await protocol.close_audio_channel()
+                    finally:
+                        if self._wake_buffer is frames:
+                            self._back_to_idle()
 
     def _set_state(self, state):
         if self._closing:
@@ -574,6 +661,14 @@ class Application:
             return
         previous_state = self.state
         self.state = state
+        playback_wake = self._wake_interrupt_enabled and self.wakeword is not None
+        keep_wake_echo = (playback_wake and previous_state == DeviceState.SPEAKING
+                          and state == DeviceState.LISTENING and self._wake_buffer is not None)
+        if playback_wake:
+            self.audio.on_chat_wake_audio = self.wakeword.feed_pcm if state != DeviceState.IDLE else None
+            # TTS-time AEC follows the mini-program switch; wake itself listens
+            # to the raw near-end, so playback no longer forces AEC on.
+            self.audio.wake_echo_cancel = keep_wake_echo
         if state != DeviceState.IDLE:
             self._pause_ambient()
             if self._shared_wake_capture:
@@ -586,7 +681,7 @@ class Application:
             # across a normal reply boundary. An actual interruption or a
             # playback timeout still uses the normal reset/flush path.
             preserve_reference = (previous_state == DeviceState.SPEAKING
-                                  and self.audio.aec_enabled
+                                  and (self.audio.aec_enabled or keep_wake_echo)
                                   and self.audio.is_playback_idle())
             if previous_state == DeviceState.CONNECTING and self._wake_buffer is not None:
                 self.audio.clear_play_queue(clear_pcm=False, reset_aec=False)
@@ -599,12 +694,11 @@ class Application:
             self._listen_timeout_task = self._spawn(self._listen_timeout())
         elif state == DeviceState.SPEAKING:
             self._discard_wake_audio()
-            if self.audio.aec_enabled:
-                # 端侧 AEC: 播放期保持采集上送, 支持语音实时打断
+            if self.audio.aec_enabled or playback_wake:
                 self.audio.open_input()
                 self.audio.set_capture_enabled(True)
             else:
-                self.audio.set_capture_enabled(False)  # 防自听回声(无AEC)
+                self.audio.set_capture_enabled(False)
         elif state == DeviceState.CONNECTING:
             self._emit_emotion("thinking")
         elif state == DeviceState.IDLE:
@@ -662,9 +756,6 @@ class Application:
                     else:
                         self._wake_buffer_full = True
                     return
-                if self.state == DeviceState.IDLE:
-                    self._wake_history.append(opus_bytes)
-                    return
         protocol = self.protocol
         if self._capture_can_send() and protocol and protocol.is_audio_channel_opened():
             asyncio.run_coroutine_threadsafe(
@@ -672,10 +763,11 @@ class Application:
 
     def _capture_can_send(self):
         return not self._closing and (self.state == DeviceState.LISTENING or
-                                     (self.state == DeviceState.SPEAKING and self.audio.aec_enabled))
+                                     (self.state == DeviceState.SPEAKING and not self.aborted
+                                      and self.audio.aec_enabled))
 
     async def _send_live_audio(self, protocol, session_id, opus_bytes):
-        if (self._capture_can_send() and self.protocol is protocol
+        if (self._wake_buffer is None and self._capture_can_send() and self.protocol is protocol
                 and protocol.session_id == session_id and protocol.is_audio_channel_opened()):
             await protocol.send_audio(opus_bytes, 0)
 
@@ -707,7 +799,7 @@ class Application:
         self._notify_status(DeviceState.IDLE, f"网络错误: {message}")
 
     def _on_incoming_audio(self, payload, timestamp):
-        if not self._closing and self.state == DeviceState.SPEAKING:
+        if not self._closing and self.state == DeviceState.SPEAKING and not self.aborted:
             self.audio.write_opus(payload)
 
     def _on_incoming_json(self, data):
@@ -723,7 +815,7 @@ class Application:
                 self._notify_status(self.state, text)
                 # 播报中收到 STT = 服务端 VAD 已确认打断, 立即清掉残余 TTS 音频
                 # (打断发生到服务端停发 TTS 有 RTT 窗口, 队列里会残留几百毫秒)
-                if self.state == DeviceState.SPEAKING:
+                if self.state == DeviceState.SPEAKING and not self.aborted:
                     self.audio.clear_play_queue()
                 # 同 Omni: 收到 STT 识别结果, 聆听中切思考表情
                 if self.state == DeviceState.LISTENING:
@@ -803,6 +895,8 @@ class Application:
               f"本地处理={(time.monotonic()-started)*1000:.1f}ms")
 
     def _handle_tts(self, data):
+        if self.state == DeviceState.SPEAKING and self.aborted:
+            return
         state = data.get("state", "")
         if state == "start":
             self._tts_generation += 1
@@ -845,6 +939,9 @@ class Application:
             return
         if self.keep_listening and self.protocol.is_audio_channel_opened():
             await self.protocol.send_start_listening(ListeningMode.AUTO_STOP)
+            if (self.state != DeviceState.SPEAKING or self.aborted
+                    or generation != self._tts_generation):
+                return
             self._set_state(DeviceState.LISTENING)
         else:
             self._back_to_idle()
@@ -896,10 +993,10 @@ class Application:
         self.aec_enabled = want
         if self.audio is not None:
             self.audio.aec_enabled = want
-            if self.state == DeviceState.SPEAKING:
-                # 播报中切换: 开→继续采集; 关→停止采集防自听回声
-                self.audio.set_capture_enabled(want)
-                if want:
+            if self.state == DeviceState.SPEAKING and not self.aborted:
+                playback_wake = self._wake_interrupt_enabled and self.wakeword is not None
+                self.audio.set_capture_enabled(want or playback_wake)
+                if want or playback_wake:
                     self.audio.open_input()
         self._save_aec_state(want)
         print(f"[app] 自动打断已{'开启' if want else '关闭'}")

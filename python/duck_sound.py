@@ -179,8 +179,8 @@ class DuckSoundPlayer:
             self._release(replay=completed)
             if not app._closing:
                 # Replay can already have switched the app to SPEAKING. Do not
-                # reopen capture over a non-AEC answer or restart its wake listener.
+                # reopen capture over an answer whose capture mode changed.
                 if app.state == play_state:
                     audio.set_capture_enabled(capture)
-                if wake_running and app.state == 'idle':
+                if wake_running and (app.state == 'idle' or getattr(app, '_wake_interrupt_enabled', False)):
                     wake.start()

@@ -8,6 +8,7 @@
 #include "qmi8658.h"
 #include "uart_fifo.h"
 #include "tof_sensor.h"
+#include "ip_matrix.h"
 
 Motor motors[NUM_MOTORS];
 struct k_mutex motorsMu;
@@ -36,7 +37,7 @@ static bool pending = false;
 static uint32_t invalidCommands = 0, reportDrops = 0;
 
 static HostBusMode hostMode = HOST_NORMAL;
-static CalPacket pendingCal = {};
+static CalPositionsPacket pendingCal = {};
 static bool calPending = false;
 static CalReplyPacket calReply = {};
 static bool calReplyReady = false;
@@ -46,6 +47,10 @@ static uint32_t calNextUs = 0, calSeq = 0;
 static constexpr uint8_t CAL_MID_REPEATS = 5;
 static constexpr uint32_t CAL_MID_INTERVAL_US = 10000;
 static constexpr uint32_t CAL_MID_SETTLE_US = 100000;
+static constexpr uint32_t CAL_BATCH_INTERVAL_US = 100000;
+static CalPositionsPacket calBatch = {};
+static uint8_t calBatchIndex = 0;
+static uint32_t calBatchNextUs = 0;
 static ServoPacket pendingServo = {};
 static bool servoPending = false;
 static ServoReplyPacket servoReply = {};
@@ -129,16 +134,25 @@ static void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {
 }
 
 static void receiveCal(MsgPack::bin_t<uint8_t> bytes) {
-  CalPacket pkt;
-  bool valid = bytes.size() == sizeof(pkt);
+  CalPositionsPacket request = {};
+  const bool parameterized = bytes.size() == sizeof(request);
+  bool valid = parameterized || bytes.size() == sizeof(CalPacket);
   if (valid) {
-    memcpy(&pkt, bytes.data(), sizeof(pkt));
-    valid = memcmp(pkt.magic, "DQL2", 4) == 0 && pkt.op <= CAL_CENTER_ONE;
+    memcpy(&request, bytes.data(), bytes.size());
+    const CalPacket &pkt = request.command;
+    valid = memcmp(pkt.magic, "DQL2", 4) == 0 &&
+            (parameterized ? pkt.op == CAL_SET_POSITIONS : pkt.op <= CAL_CENTER_ALL);
     if (pkt.op == CAL_CENTER_ONE) valid = valid && pkt.index < NUM_MOTORS;
+    if (pkt.op == CAL_CENTER_ALL || pkt.op == CAL_SET_POSITIONS)
+      valid = valid && pkt.index == CAL_ALL_JOINTS;
+    if (parameterized) {
+      for (unsigned i = 0; i < NUM_MOTORS; ++i)
+        valid = valid && request.positions[i] >= POS_MIN && request.positions[i] <= POS_MAX;
+    }
     if (!atomic_get(&bridgeReady) && pkt.op != CAL_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingCal = pkt; calPending = true; atomic_set(&lastHostRxUs, micros()); }
+  if (valid) { pendingCal = request; calPending = true; atomic_set(&lastHostRxUs, micros()); }
   else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
@@ -177,8 +191,13 @@ static void receiveServo(MsgPack::bin_t<uint8_t> bytes) {
     if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;
   }
   k_mutex_lock(&hostMu, K_FOREVER);
-  if (valid) { pendingServo = pkt; servoPending = true; atomic_set(&lastHostRxUs, micros()); }
-  else {
+  if (valid) {
+    if (!servoPending || pendingServo.op != SERVO_TEST_STOP || pkt.op != SERVO_TEST_MOVE) {
+      pendingServo = pkt;
+      servoPending = true;
+    }
+    atomic_set(&lastHostRxUs, micros());
+  } else {
     k_mutex_lock(&commandMu, K_FOREVER); ++invalidCommands; k_mutex_unlock(&commandMu);
   }
   k_mutex_unlock(&hostMu);
@@ -205,12 +224,14 @@ static void publishCalReply(uint32_t seq, uint8_t index, bool ok) {
   k_mutex_unlock(&hostMu);
 }
 
-static void applyCalOp(const CalPacket &pkt) {
+static void applyCalOp(const CalPositionsPacket &request) {
+  const CalPacket &pkt = request.command;
   switch (pkt.op) {
     case CAL_ENTER:
       hostMode = HOST_CAL;
       rawNotifyEveryTick = true;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
@@ -221,13 +242,14 @@ static void applyCalOp(const CalPacket &pkt) {
       hostMode = HOST_NORMAL;
       rawNotifyEveryTick = false;
       calIndex = 0xFF;
+      calBatch = {};
       k_mutex_lock(&motorsMu, K_FOREVER);
       calHeldMask = 0;
       k_mutex_unlock(&motorsMu);
       setTorqueEnable(false);
       break;
     case CAL_CENTER_ONE:
-      if (hostMode != HOST_CAL || calIndex != 0xFF ||
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op ||
           (calHeldMask & (1u << pkt.index)) || !(servoRxMask & (1u << pkt.index))) {
         publishCalReply(pkt.seq, pkt.index, false);
         break;
@@ -242,10 +264,48 @@ static void applyCalOp(const CalPacket &pkt) {
       calMidCount = 0;
       calNextUs = micros();
       break;
+    case CAL_CENTER_ALL:
+    case CAL_SET_POSITIONS:
+      if (hostMode != HOST_CAL || calIndex != 0xFF || calBatch.command.op || calHeldMask ||
+          servoRxMask != (1u << NUM_MOTORS) - 1u) {
+        publishCalReply(pkt.seq, CAL_ALL_JOINTS, false);
+        break;
+      }
+      setTorqueEnable(false);
+      calBatch = request;
+      calBatchIndex = 0;
+      calBatchNextUs = micros() + CAL_BATCH_INTERVAL_US;
+      break;
   }
 }
 
+static void advanceBatchCalibration() {
+  if (!calBatch.command.op) return;
+  const uint32_t hostRxUs = (uint32_t)atomic_get(&lastHostRxUs);
+  const uint32_t now = micros();
+  if (hostMode != HOST_CAL || !atomic_get(&bridgeReady) ||
+      (uint32_t)(now - hostRxUs) > HOST_HEARTBEAT_US) {
+    calBatch = {};
+    return;
+  }
+  if ((int32_t)(now - calBatchNextUs) < 0) return;
+  if (calBatchIndex == NUM_MOTORS) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, true);
+    calBatch = {};
+    return;
+  }
+  if (!servoCalibrateChecked(MOTOR_IDS[calBatchIndex], calBatch.command.op == CAL_SET_POSITIONS,
+                             calBatch.positions[calBatchIndex])) {
+    publishCalReply(calBatch.command.seq, CAL_ALL_JOINTS, false);
+    calBatch = {};
+    return;
+  }
+  ++calBatchIndex;
+  calBatchNextUs = micros() + CAL_BATCH_INTERVAL_US;
+}
+
 static void advanceCalibration() {
+  advanceBatchCalibration();
   if (hostMode != HOST_CAL || calIndex == 0xFF ||
       (int32_t)(micros() - calNextUs) < 0) return;
   const uint8_t id = MOTOR_IDS[calIndex];
@@ -313,12 +373,23 @@ struct StoppedServoTest {
 };
 static StoppedServoTest stoppedServoTest;
 
-static void stopServoTest(ServoTestStop reason = ServoTestStop::None) {
-  if (!servoTest.session) return;
-  scsWriteByte(servoTest.id, ADDR_TORQUE, 0);
-  Serial1.flush();
-  stoppedServoTest = {servoTest.session, servoTest.id, reason};
+static bool unloadTestServo(uint8_t id) {
+  for (unsigned attempt = 0; attempt < 3; ++attempt) {
+    scsWriteByte(id, ADDR_TORQUE, 0);
+    Serial1.flush();
+    k_msleep(1); // Allow a write status packet to finish before reading the register.
+    uint8_t torque = 0;
+    if (readServoTorque(id, torque) && torque == 0) return true;
+  }
+  return false;
+}
+
+static bool stopServoTest(ServoTestStop reason = ServoTestStop::None) {
+  if (!servoTest.session) return false;
+  const uint8_t id = servoTest.id;
+  stoppedServoTest = {servoTest.session, id, reason};
   servoTest = {};
+  return unloadTestServo(id);
 }
 
 static void checkServoTestFeedback(uint16_t mask) {
@@ -355,12 +426,18 @@ static void advanceServoTest() {
 }
 
 static bool applyServoTest(const ServoPacket &pkt, ServoReplyPacket &reply) {
+  if (pkt.op == SERVO_TEST_STOP) {
+    if (hostMode != HOST_SERVO_DEBUG || servoMidId != 0xFF) return false;
+    if (servoTest.session == pkt.testSession && servoTest.id == pkt.targetId) {
+      reply.testTorqueOff = stopServoTest();
+    } else if (!servoTest.session && stoppedServoTest.session == pkt.testSession &&
+               stoppedServoTest.id == pkt.targetId) {
+      reply.testTorqueOff = unloadTestServo(pkt.targetId);
+    }
+    return reply.testTorqueOff;
+  }
   expireServoTest();
   const bool same = servoTest.session == pkt.testSession && servoTest.id == pkt.targetId;
-  if (pkt.op == SERVO_TEST_STOP) {
-    if (same) stopServoTest();
-    return true;
-  }
   if (hostMode != HOST_SERVO_DEBUG || servoMidId != 0xFF || !atomic_get(&bridgeReady)) return false;
   bool renewAngleDeadline = true;
   if (pkt.op == SERVO_TEST_START) {
@@ -516,6 +593,15 @@ static void applyServoOp(const ServoPacket &pkt, bool torqueEnabled) {
   publishServoReply(reply);
 }
 
+static void serviceServoOperation(const ServoPacket *packet, bool torqueEnabled) {
+  if (packet && packet->op == SERVO_TEST_STOP) {
+    applyServoOp(*packet, torqueEnabled);
+    return;
+  }
+  advanceServoTest();
+  if (packet) applyServoOp(*packet, torqueEnabled);
+}
+
 static void controlTask(void*, void*, void*) {
   Serial1.begin(SERVO_BAUD);
   enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(DT_PHANDLE_BY_IDX(DT_PATH(zephyr_user), serials, 0))));
@@ -536,7 +622,7 @@ static void controlTask(void*, void*, void*) {
     const bool imuFresh = sampledImu.sample.ok && sampledImu.seq &&
                          (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;
 
-    CalPacket calPkt;
+    CalPositionsPacket calPkt;
     ServoPacket servoPkt;
     bool gotCal = false, gotServo = false;
     k_mutex_lock(&hostMu, K_FOREVER);
@@ -544,8 +630,7 @@ static void controlTask(void*, void*, void*) {
     if (servoPending) { servoPkt = pendingServo; servoPending = false; gotServo = true; }
     k_mutex_unlock(&hostMu);
     if (gotCal) applyCalOp(calPkt);
-    advanceServoTest();
-    if (gotServo) applyServoOp(servoPkt, enabled);
+    serviceServoOperation(gotServo ? &servoPkt : nullptr, enabled);
     advanceCalibration();
     advanceServoMid();
 
@@ -787,7 +872,8 @@ static void bridgeTask(void*, void*, void*) {
       ready = Bridge.provide("duck_command", receiveCommand) &&
               Bridge.provide("duck_cal", receiveCal) &&
               Bridge.provide("duck_servo", receiveServo) &&
-              Bridge.provide("duck_tof", readTof);
+              Bridge.provide("duck_tof", readTof) &&
+              Bridge.provide("duck_show_ip", receiveStartupIp);
     }
     if (!ready) {
       atomic_inc(&bridgeFailures);
@@ -802,13 +888,14 @@ static void bridgeTask(void*, void*, void*) {
     atomic_set(&bridgeReady, 1);
     backoffMs = 250;
     for (;;) {
-      k_msleep(2000);
+      k_msleep(1000);
       MsgPack::str_t version;
       if (!Bridge.getRouterVersion(version)) break;
       // A serial reconnect drops Router registrations while version still works.
       // Re-assert every route: "already registered" counts, local handlers stay bound.
       if (!(routeRegistered("duck_command") && routeRegistered("duck_cal") &&
-            routeRegistered("duck_servo") && routeRegistered("duck_tof"))) break;
+            routeRegistered("duck_servo") && routeRegistered("duck_tof") &&
+            routeRegistered("duck_show_ip"))) break;
     }
     atomic_clear(&bridgeReady);
     atomic_inc(&bridgeFailures);
@@ -855,4 +942,7 @@ void setup() {
   // Thumb JUMP24 range; the Uno Q extension loader rejects it with ENOEXEC.
   asm volatile("nop" ::: "memory");
 }
-void loop() { delay(100); }
+void loop() {
+  serviceStartupIpDisplay();
+  delay(100);
+}

@@ -16,9 +16,13 @@ static uint8_t servoRxDataLen = 0;
 // ID 0 is a valid servo address, just like IDs 1..253.
 static uint8_t servoPingId = 0xFF;
 static bool servoPingSeen = false;
+static uint8_t servoCalAckId = 0xFF;
+static bool servoCalAckSeen = false, servoCalAckOk = false;
 static uint8_t servoReadId = 0xFF;
 static bool servoReadSeen = false;
 static uint16_t servoReadPos = 0;
+static uint8_t servoTorqueId = 0xFF, servoTorqueValue = 0;
+static bool servoTorqueSeen = false;
 static uint8_t servoParamsId = 0xFF;
 static bool servoParamsSeen = false;
 static uint8_t servoParamKp = 0, servoParamKd = 0;
@@ -285,6 +289,7 @@ static void parseServoRx() {
       case 3:
         servoRxBuffer[3] = res;
         if (res == 0x02 || res == 0x04 || res == 0x08 || res == 0x09 || res == 0x0B ||
+            (res == 3 && servoTorqueId <= 253) ||
             (res == SERVO_PROTECTION_REG_LEN + 2 && servoProtectionId <= 253)) {
           servoParserFlag = 4;
           servoRxLen = 0;
@@ -312,9 +317,21 @@ static void parseServoRx() {
           }
           uint8_t sid = servoRxBuffer[2];
           uint8_t dataLen = servoRxDataLen;
+          if (dataLen == 2 && servoCalAckId <= 253 && sid == servoCalAckId) {
+            servoCalAckSeen = true;
+            servoCalAckOk = servoRxBuffer[4] == 0;
+            break;
+          }
           if (dataLen == 2 && servoPingId <= 253 && sid == servoPingId) {
             // Even a device error is evidence that this address responded.
             servoPingSeen = true;
+            break;
+          }
+          if (dataLen == 3) {
+            if (sid == servoTorqueId && servoRxBuffer[4] == 0) {
+              servoTorqueValue = servoRxBuffer[5];
+              servoTorqueSeen = true;
+            }
             break;
           }
           if (dataLen == SERVO_PROTECTION_REG_LEN + 2) {
@@ -367,6 +384,28 @@ static void waitServoReply() {
   parseServoRx();
 }
 
+static bool servoCalibrateChecked(uint8_t id, bool parameterized, uint16_t position) {
+  drainServoRx();
+  servoCalAckId = id;
+  servoCalAckSeen = servoCalAckOk = false;
+  if (parameterized) {
+    uint8_t data[2];
+    packWordLE(data, position);
+    scsWriteBuf(id, 0x0B, data, sizeof(data));
+    Serial1.flush();
+  } else {
+    servoMid(id);
+  }
+  const uint32_t started = micros();
+  while (!servoCalAckSeen && (uint32_t)(micros() - started) < SERVO_REPLY_US) {
+    parseServoRx();
+    if (!servoCalAckSeen) k_sleep(K_USEC(100));
+  }
+  parseServoRx();
+  servoCalAckId = 0xFF;
+  return servoCalAckSeen && servoCalAckOk;
+}
+
 static bool pingServo(uint8_t id) {
   drainServoRx();
   servoPingId = id;
@@ -389,6 +428,20 @@ static bool readServoPresent(uint8_t id, uint16_t &pos) {
   pos = servoReadPos;
   servoReadId = 0xFF;
   return servoReadSeen;
+}
+
+static bool readServoTorque(uint8_t id, uint8_t &torque) {
+  drainServoRx();
+  servoTorqueId = id;
+  servoTorqueSeen = false;
+  const uint8_t data[2] = {ADDR_TORQUE, 1};
+  scsWriteBuf(id, 0x02, data, 2);
+  Serial1.flush();
+  waitServoReply();
+  servoTorqueId = 0xFF;
+  if (!servoTorqueSeen) return false;
+  torque = servoTorqueValue;
+  return true;
 }
 
 static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd,

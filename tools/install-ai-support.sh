@@ -37,10 +37,14 @@ region = VoiceConfig(root / 'data/voice_config.json').region_status()
 if not region['configured']:
     print('Choose China/International in the cockpit AI binding panel after the first Run.')
 PY
-runuser -u arduino -- python3 "$app_root/tools/configure-ai-python.py"
-# Resolve and verify the exact MCU build dependencies before changing services.
-# This is compile-only: App Lab Run remains the explicit upload/start step.
-runuser -u arduino -- python3 "$app_root/tools/prepare-ai-sketch.py"
+if [ -f "$app_root/release.yaml" ]; then
+    # App CLI installed the frozen Python environment and STM32 firmware.
+    runuser -u arduino -- python3 "$app_root/tools/ai-support/release_firmware.py" "$app_root"
+else
+    runuser -u arduino -- python3 "$app_root/tools/configure-ai-python.py"
+    # Resolve pinned dependencies and check the compiled ELF before changing services.
+    runuser -u arduino -- python3 "$app_root/tools/prepare-ai-sketch.py"
+fi
 apt-get update
 apt-get install -y --no-upgrade python3-dbus python3-dbus-next python3-gi python3-evdev bluez network-manager ethtool alsa-utils v4l-utils libopus0 libportaudio2
 install -d -m 0755 -o arduino -g arduino "$app_root/data"
@@ -54,7 +58,7 @@ install -m 0644 "$app_root/python/vendor/luwu_os/LICENSE" "$support_dir/LICENSE-
 for file in server.py input_reader.py unitree_remote.py usb_role.py; do
     install -m 0644 "$app_root/tools/gamepad/$file" "$support_dir/$file"
 done
-for file in ai_server.py audio_caps.py blufi.py provisioning.py usb_prepare.py sketch_cache.py; do
+for file in ai_server.py audio_caps.py blufi.py provisioning.py usb_prepare.py sketch_cache.py release_firmware.py; do
     install -m 0644 "$app_root/tools/ai-support/$file" "$support_dir/$file"
 done
 python3 - "$app_root" <<'PY'
@@ -110,8 +114,6 @@ done
 systemctl enable xgoduck-ai-usb-startup.service xgoduck-ai-hardware.service
 systemctl restart xgoduck-ai-usb-startup.service
 systemctl restart xgoduck-ai-hardware.service
-# Compatible with App CLI 0.10 as well as current versions. In newer releases
-# `app build` creates a frozen release, so it is not a portable cache-prep step.
 runuser -u arduino -- arduino-app-cli properties set default "$app_root"
 systemctl enable arduino-app-cli.service
 # The old media service must not reclaim port 9528 after a reboot.
@@ -123,5 +125,9 @@ bash "$app_root/tools/install-mobile-web.sh"
 echo 'Support and default App installed. On next boot XGO Duck AI starts automatically.'
 echo 'Mobile cockpit is available at http://<board-ip>/ on port 80.'
 echo 'USB startup detection keeps Host for a camera or audio device. Use the cockpit over Wi-Fi to switch manually.'
-echo 'MCU compile and ELF checks passed. First Run still needs internet for container/Python dependencies.'
+if [ -f "$app_root/release.yaml" ]; then
+    echo 'STM32 release firmware is ready. App CLI uploads it directly at startup.'
+else
+    echo 'MCU compile and ELF checks passed. First Run still needs internet for container/Python dependencies.'
+fi
 echo 'After the first successful Run, verify an offline cold boot.'

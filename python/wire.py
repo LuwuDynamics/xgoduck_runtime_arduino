@@ -9,6 +9,7 @@ DIAGNOSTIC_V2 = struct.Struct('<4s17I')
 VOLTAGE = struct.Struct('<4sIIH15B')
 COMMAND = struct.Struct('<4sIIIBBH15f')
 CAL = struct.Struct('<4sIBB')
+CAL_POSITIONS = struct.Struct('<4sIBB15H')
 CAL_REPLY = struct.Struct('<4sIBB')
 SERVO = struct.Struct('<4sBBBBBBH')
 RAW = struct.Struct('<4sHH15H')
@@ -17,7 +18,8 @@ ALL_MASK = 0x7fff  # hardware order: 10..14,20..24,30..34
 IMU_STALE_S = 0.5  # Mirrored by protocol.h IMU_STALE_US.
 DISARM, ARM, POLICY, HOLD = range(4)
 
-CAL_ENTER, CAL_EXIT, CAL_CENTER_ONE = range(3)
+CAL_ENTER, CAL_EXIT, CAL_CENTER_ONE, CAL_CENTER_ALL, CAL_SET_POSITIONS = range(5)
+CAL_ALL_JOINTS = 0xff
 SERVO_CENTER_POS = 2047
 CAL_HOLD_POS = 2048
 SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID = range(4)
@@ -46,6 +48,7 @@ assert DIAGNOSTIC.size == 68
 assert VOLTAGE.size == 29
 assert COMMAND.size == 80
 assert CAL.size == 10
+assert CAL_POSITIONS.size == 40
 assert CAL_REPLY.size == 10
 assert SERVO.size == 12
 assert RAW.size == 38
@@ -136,17 +139,25 @@ def encode_command(seq, sample_us, mode, targets, ttl_us=0):
                         ttl_us, mode, 0, 0, *targets)
 
 def encode_cal(op, index=0, seq=0):
-    if op not in range(3):
+    if op not in (CAL_ENTER, CAL_EXIT, CAL_CENTER_ONE, CAL_CENTER_ALL):
         raise ValueError('invalid cal op')
+    if op == CAL_CENTER_ALL:
+        return CAL.pack(b'DQL2', seq & 0xffffffff, op, CAL_ALL_JOINTS)
     if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < 15:
         raise ValueError('joint index out of range')
     return CAL.pack(b'DQL2', seq & 0xffffffff, op, index)
+
+def encode_cal_positions(positions, seq):
+    if (len(positions) != 15 or
+            any(type(value) is not int or not 0 <= value <= 4095 for value in positions)):
+        raise ValueError('Calibration requires 15 integer encoder positions in 0–4095')
+    return CAL_POSITIONS.pack(b'DQL2', seq & 0xffffffff, CAL_SET_POSITIONS, CAL_ALL_JOINTS, *positions)
 
 def decode_cal_reply(data):
     if not isinstance(data, (bytes, bytearray)) or len(data) != CAL_REPLY.size:
         raise ValueError('expected 10-byte calibration reply')
     magic, seq, index, ok = CAL_REPLY.unpack(data)
-    if magic != b'DQA1' or not 0 <= index < 15 or ok not in (0, 1):
+    if magic != b'DQA1' or (index >= 15 and index != CAL_ALL_JOINTS) or ok not in (0, 1):
         raise ValueError('invalid calibration reply ABI')
     return {'seq': seq, 'index': index, 'ok': bool(ok)}
 
@@ -242,6 +253,8 @@ def decode_servo_reply(data):
                 'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
     if x[1] in SERVO_TEST_OPS:
         reply = {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]), 'raw_pos': x[5], 'session': x[6]}
+        if x[1] == SERVO_TEST_STOP:
+            reply['torque_off'] = bool(x[3] and x[4] == 1)
         # A guarded start advertises the limits. A rejected move reports the one that ended the test.
         if (x[1] == SERVO_TEST_START and x[3]) or (x[1] == SERVO_TEST_MOVE and not x[3]):
             if x[4]:

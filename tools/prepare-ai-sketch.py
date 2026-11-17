@@ -85,16 +85,14 @@ def prepare_cache(base, info, archive=None):
     print('Staged verified bundled toolchain for Arduino CLI.', flush=True)
 
 
-def compile_sketch(cli, base, info):
-    sketch = ROOT / 'sketch'
-    build = ROOT / '.cache/sketch'
-    compile_command = [cli, 'compile', '--profile', 'default', '--jobs', '2']
+def prepare_dependencies(compile_command):
     # Resolves libraries and tools without uploading or compiling unpatched RPC.
     subprocess.run([*compile_command, '--only-compilation-database',
-                    '--build-path', str(ROOT / '.cache/ai-sketch-deps'), str(sketch)], check=True)
+                    '--build-path', str(ROOT / '.cache/ai-sketch-deps'), str(ROOT / 'sketch')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tools/prepare-bridge.py')], check=True)
-    subprocess.run([*compile_command, '--clean',
-                    '--build-path', str(build), str(sketch)], check=True)
+
+
+def verify_build(base, info, build):
     for directory in tool_paths(base, info):
         readelf = directory / 'bin/arm-zephyr-eabi-readelf'
         if readelf.is_file():
@@ -105,9 +103,21 @@ def compile_sketch(cli, base, info):
         raise ValueError('Pinned toolchain readelf is missing; firmware has not been verified.')
 
 
+def compile_sketch(cli, base, info):
+    build = ROOT / '.cache/sketch'
+    compile_command = [cli, 'compile', '--profile', 'default', '--jobs', '2']
+    prepare_dependencies(compile_command)
+    subprocess.run([*compile_command, '--clean',
+                    '--build-path', str(build), str(ROOT / 'sketch')], check=True)
+    verify_build(base, info, build)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--toolchain-archive', type=Path, help='Official Linux ARM64 toolchain archive; checksum is verified')
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument('--dependencies-only', action='store_true', help='Resolve pinned dependencies and patch Bridge for App CLI release builds')
+    mode.add_argument('--verify-build', type=Path, help='Verify the ELF in an existing sketch build directory')
     args = parser.parse_args()
     if platform.system() != 'Linux' or platform.machine() != 'aarch64' or os.getuid() != 1000:
         parser.error('Run as the arduino user (UID 1000) on the UNO Q Linux ARM64 host.')
@@ -121,7 +131,13 @@ def main():
         archive = bundled
     base = Path.home() / '.arduino15'
     try:
+        if args.verify_build is not None:
+            verify_build(base, info, args.verify_build)
+            return 0
         prepare_cache(base, info, archive)
+        if args.dependencies_only:
+            prepare_dependencies([cli, 'compile', '--profile', 'default', '--jobs', '2'])
+            return 0
         compile_sketch(cli, base, info)
     except (OSError, ValueError, subprocess.CalledProcessError) as error:
         print(f'\nMCU build preparation failed: {error}\nNo firmware was uploaded by this script. '

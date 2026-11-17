@@ -337,7 +337,7 @@ class AudioCodec:
         self.input_stream = None
         self.output_stream = None
         self._running = False
-        self._capture_enabled = False  # 是否真正编码上送 (由状态机控制)
+        self._capture_enabled = False  # 是否编码 (上送由会话状态机控制)
         self._capture_thread = None
         self._play_thread = None
         # 输出回调的解码 PCM 缓冲 (播放线程填充, 回调消费)
@@ -362,6 +362,7 @@ class AudioCodec:
         self._near_q = deque(maxlen=30)
         self._near_q_lock = threading.Lock()
         self._capture_generation = 0
+        self._capture_after = None
         self._capture_sync = None
         self._capture_last_seq = None
         self._capture_queue_drops = 0
@@ -505,19 +506,39 @@ class AudioCodec:
         self._dump_files = {}
 
     # ---------- 采集 ----------
-    def set_capture_enabled(self, enabled: bool, *, keep_pending=False):
+    def set_capture_enabled(self, enabled: bool, *, after_playback=None):
+        """Optionally accept only samples recorded after the current playback."""
+        if after_playback is not None:
+            with self._play_pcm_lock:
+                after_playback = max(after_playback, self._audible_until)
         with self._near_q_lock:
             was = self._capture_enabled
             self._capture_enabled = enabled
-            if enabled != was and not keep_pending:
+            if enabled != was or after_playback is not None:
                 self._capture_generation += 1
             if not enabled:
+                self._capture_after = None
                 self._near_q.clear()  # 停捕即丢弃已攒近端 (过时数据)
+            elif after_playback is not None:
+                self._capture_after = after_playback
         # The worker recalibrates after draining this generation's far watermark.
         # Calibrating here would race queued reference work from the old turn.
 
     on_audio_frame = None  # 回调: (opus_bytes) 由 Application 设置
     on_idle_audio = None   # Optional wake detector feed on the same input stream.
+    on_chat_wake_audio = None  # Wake feed taps the near-end before AEC.
+    wake_echo_cancel = False  # Post-interrupt listening keeps AEC for the echo tail.
+
+    def _input_sample_start(self, time_info, callback_time):
+        # A freshly delivered block can contain samples from before the cue's DAC tail.
+        adc_time = getattr(time_info, 'inputBufferAdcTime', 0.)
+        delay = getattr(time_info, 'currentTime', 0.) - adc_time
+        if adc_time > 0 and math.isfinite(delay) and delay >= 0:
+            return callback_time - delay
+        latency = getattr(self.input_stream, 'latency', None)
+        if not isinstance(latency, (int, float)) or not math.isfinite(latency) or latency <= 0:
+            latency = self.input_latency or self.frame_ms / 1000
+        return callback_time - latency
 
     def _input_callback(self, indata, frames, t, status):
         """Copy one block and its far watermark; no AEC, resampling or file I/O."""
@@ -531,7 +552,12 @@ class AudioCodec:
         self._input_callbacks += 1
         with self._near_q_lock:
             generation, far_seq = self._capture_generation, self._far_seq
-            pcm = bytes(indata) if self._capture_enabled or self.on_idle_audio is not None else None
+            accept = self._capture_enabled or self.on_idle_audio is not None
+            if accept and self._capture_after is not None:
+                accept = self._input_sample_start(t, started) >= self._capture_after
+                if accept:
+                    self._capture_after = None
+            pcm = bytes(indata) if accept else None
             if len(self._near_q) == self._near_q.maxlen:
                 self._capture_queue_drops += 1
             self._near_q.append((generation, pcm, far_seq, started,
@@ -549,6 +575,8 @@ class AudioCodec:
                 block = self._near_q.popleft() if self._near_q else None
                 capturing = self._capture_enabled
                 idle_sink = self.on_idle_audio if not capturing else None
+                wake_sink = self.on_chat_wake_audio if capturing else None
+                cancel_echo = self.aec_enabled or self.wake_echo_cancel
             if block is None:
                 time.sleep(0.005)
                 continue
@@ -572,24 +600,32 @@ class AudioCodec:
                         raise ValueError('mono selector returned an invalid frame')
                 if capturing:
                     self._dump("near", pcm)
+                    if wake_sink is not None:
+                        # Wake listens to the raw near-end: AEC double-talk
+                        # suppression can erase the user's wake word with the echo.
+                        wake_pcm = self.input_transform(pcm)
                     sync = (generation, overflows)
                     skipped = previous is not None and sequence != previous + 1
                     if self.aec.available and (sync != self._capture_sync or skipped):
                         # Re-anchor after the far history for this block has arrived.
                         self.aec.calibrate()
                         self._capture_sync = sync
-                    if self.aec.available and self.aec_enabled:
+                    if self.aec.available and cancel_echo:
                         n_sub = self.input_frame_size // self.aec.sub_frame_size
                         far = self.aec.pop_reference(max(1, n_sub))
                         pcm = self.aec.process(pcm, far)
                         self._aec_frames += 1
                         self._dump("aec_out", pcm)
-                # Product capture gain runs once in this worker, after AEC,
-                # without changing its near/far levels or the real-time callback.
+                # Product capture gain runs once per path in this worker,
+                # without changing AEC near/far levels or the real-time callback.
                 pcm = self.input_transform(pcm)
+                if generation != self._capture_generation:
+                    continue
                 if idle_sink is not None:
                     idle_sink(pcm, captured_at, overflows, sequence)
-                # Use the same encoder for the short wake history and live frames.
+                    continue  # The local detector consumes PCM; idle audio never needs Opus.
+                if wake_sink is not None:
+                    wake_sink(wake_pcm, captured_at, overflows, sequence)
                 opus = self.opus_encoder.encode(pcm, self.input_frame_size)
                 if (self._running and self.input_stream is not None
                         and generation == self._capture_generation

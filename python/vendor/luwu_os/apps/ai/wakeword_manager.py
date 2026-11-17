@@ -38,6 +38,7 @@ CLIP_SAMPLES = int(SAMPLE_RATE * CLIP_DURATION)
 STRIDE_SAMPLES = int(SAMPLE_RATE * STRIDE_DURATION)
 THRESHOLD = 0.1
 COOLDOWN_SEC = 1.5
+MAX_SCORING_AGE = .5
 
 
 class WakeWordManager:
@@ -45,7 +46,8 @@ class WakeWordManager:
 
     def __init__(self, on_wakeup=None, on_ready=None, model_path=None, threshold=None, device=None,
                  on_audio=None, input_transform=None, input_scale=None, stride_duration=None,
-                 cooldown_sec=None, input_channels=1, input_latency=.32, shared_input=False):
+                 cooldown_sec=None, input_channels=1, input_latency=.32, shared_input=False,
+                 detection_context=None, *, threshold_for_context=None):
         """
         Args:
             on_wakeup: 检测到唤醒词后的回调
@@ -59,6 +61,9 @@ class WakeWordManager:
             stride_duration: 推理间隔秒数，默认 0.5；新模型可指定 0.08
             cooldown_sec: 触发间隔秒数，默认 1.5
             shared_input: 由聊天采集流通过 feed_pcm 提供单声道 PCM16
+            detection_context: 可选。返回当前检测上下文，None 时只更新窗口。
+                启用时命中后继续监听，并把检测上下文传给回调。
+            threshold_for_context: 可选。根据检测上下文和默认阈值返回本次阈值。
         """
         self._on_wakeup = on_wakeup
         self._on_ready = on_ready
@@ -72,8 +77,11 @@ class WakeWordManager:
             raise ValueError('wake input_latency must be 0.16–0.6 seconds')
         self._input_channels, self._input_latency = input_channels, input_latency
         self._capture_stats = dict(callbacks=0, input_overflows=0, queue_drops=0,
-                                   stale_blocks=0, discontinuities=0, input_latency_ms=None)
+                                   stale_blocks=0, catchup_blocks=0, discontinuities=0,
+                                   input_latency_ms=None)
         self._shared_input = shared_input
+        self._detection_context = detection_context
+        self._threshold_for_context = threshold_for_context
         self._feed_queue = None
         self._on_audio = on_audio
         self._input_transform = input_transform or (lambda samples: samples[:, 0] if samples.ndim == 2 else samples)
@@ -266,7 +274,7 @@ class WakeWordManager:
         audio_queue = deque(maxlen=max(4, math.ceil(CLIP_DURATION / queue_stride) + 2))
         stats = self._capture_stats
         sequence = 0
-        last_trigger = 0.0
+        last_trigger = -math.inf
         peak_score = 0.0
         chunk_count = 0
         last_diag = time.time()
@@ -320,11 +328,11 @@ class WakeWordManager:
                 ring = np.zeros(CLIP_SAMPLES, dtype=np.float32)
                 filled_samples = 0  # 已写入 ring 的真实音频样本数（warmup 防止零数据误触发）
 
-                for new_audio, reset in self._capture_chunks(audio_queue):
+                for new_audio, reset, fresh in self._capture_chunks(audio_queue):
                     if reset:
                         ring.fill(0)
                         filled_samples = 0
-                    if self._on_audio is not None:
+                    if fresh and self._on_audio is not None:
                         try:
                             self._on_audio(new_audio)
                         except Exception:
@@ -348,6 +356,14 @@ class WakeWordManager:
                             )
                         continue
 
+                    if not fresh:
+                        continue
+                    context = self._detection_context() if self._detection_context else None
+                    if self._detection_context is not None and context is None:
+                        continue
+                    threshold = self._threshold
+                    if context is not None and self._threshold_for_context is not None:
+                        threshold = self._threshold_for_context(context, threshold)
                     inference_start = time.perf_counter()
                     score = self._predict(ring)
                     inference_ms = (time.perf_counter() - inference_start) * 1000
@@ -364,22 +380,28 @@ class WakeWordManager:
                             f"score={score:.4f} peak={peak_score:.4f} audio_level={audio_level:.0f} "
                             f"inference_ms={inference_ms:.1f} "
                             f"overflows={stats['input_overflows']} queue_drops={stats['queue_drops']} "
-                            f"stale_blocks={stats['stale_blocks']} latency_ms={stats['input_latency_ms']}",
+                            f"stale_blocks={stats['stale_blocks']} catchup_blocks={stats['catchup_blocks']} "
+                            f"latency_ms={stats['input_latency_ms']}",
                             flush=True,
                         )
                         peak_score = 0.0
                         last_diag = now
 
-                    if score >= self._threshold and now - last_trigger >= self._cooldown_sec:
-                        last_trigger = now
+                    triggered_at = time.monotonic()
+                    if score >= threshold and triggered_at - last_trigger >= self._cooldown_sec:
+                        if self._detection_context is not None and self._detection_context() != context:
+                            continue
+                        last_trigger = triggered_at
                         print(
                             f"[WakeWord] 检测到唤醒词! "
                             f"置信度={score:.4f} "
-                            f"时间={time.strftime('%H:%M:%S')}",
+                            f"时间={time.strftime('%H:%M:%S')} threshold={threshold:.2f}",
                             flush=True,
                         )
-                        woke = True
-                        break
+                        if self._detection_context is None:
+                            woke = True
+                            break
+                        self._notify_wakeup(context)
 
         except Exception as e:
             print(f"[WakeWord] 监听异常: {e}", flush=True)
@@ -387,9 +409,13 @@ class WakeWordManager:
             self._feed_queue = None
             self._running = False
             print("[WakeWord] 监听线程退出", flush=True)
-        if woke and self._on_wakeup:
+        if woke:
+            self._notify_wakeup()
+
+    def _notify_wakeup(self, *args):
+        if self._on_wakeup:
             try:
-                self._on_wakeup()
+                self._on_wakeup(*args)
             except Exception as e:
                 print(f"[WakeWord] 唤醒回调失败: {e}", flush=True)
 
@@ -417,9 +443,16 @@ class WakeWordManager:
                 time.sleep(.02)
                 continue
             sequence, captured_at, overflows, samples = audio_queue.popleft()
-            if time.monotonic() - captured_at > .5:
-                stats['stale_blocks'] += 1
-                continue
+            age = time.monotonic() - captured_at
+            fresh = age <= MAX_SCORING_AGE
+            if not fresh:
+                if not self._shared_input or age > CLIP_DURATION:
+                    stats['stale_blocks'] += 1
+                    continue
+                # The shared codec delivers 60 ms frames after AEC. A slow
+                # inference can briefly put sequential frames behind; keep
+                # them as context so a transient delay doesn't force warmup.
+                stats['catchup_blocks'] += 1
             if ((previous_sequence is not None and sequence != previous_sequence + 1)
                     or overflows != previous_overflows):
                 pending = b""
@@ -430,8 +463,8 @@ class WakeWordManager:
                 pending += samples
                 while self._running and len(pending) >= stride_bytes:
                     chunk, pending = pending[:stride_bytes], pending[stride_bytes:]
-                    yield np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768, reset
+                    yield np.frombuffer(chunk, dtype="<i2").astype(np.float32) / 32768, reset, fresh
                     reset = False
             else:
-                yield self._input_transform(samples.astype(np.float32)), reset
+                yield self._input_transform(samples.astype(np.float32)), reset, fresh
                 reset = False

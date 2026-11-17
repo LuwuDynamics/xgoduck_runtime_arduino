@@ -6,6 +6,7 @@ Passwords are neither logged nor returned through the local status socket.
 import asyncio
 import binascii
 import hashlib
+from ipaddress import IPv4Interface
 import os
 from pathlib import Path
 import re
@@ -15,6 +16,7 @@ CTRL, DATA = 0, 1
 ACK, CONNECT, STATUS, SCAN = 0, 3, 5, 9
 SSID, PASSWORD, WIFI_STATE, WIFI_LIST, ERROR, CUSTOM = 2, 3, 15, 17, 18, 19
 ENCRYPTED, CHECKSUM, DIRECTION, REQUIRE_ACK, FRAGMENT = 1, 2, 4, 8, 16
+NMCLI_SSID_LOCALE = 'C.UTF-8'  # nmcli replaces non-ASCII SSID characters in the C locale.
 
 
 def read_board_serial_number(path=Path('/sys/devices/soc0/serial_number')):
@@ -93,7 +95,7 @@ def wifi_device_status(interface='wlan0'):
             ['nmcli', '-t', '-e', 'yes', '-f', 'IN-USE,SSID,SIGNAL', 'device', 'wifi',
              'list', 'ifname', interface, '--rescan', 'no'],
             capture_output=True, encoding='utf-8', errors='replace', check=True,
-            timeout=1, env=dict(os.environ, LC_ALL='C'))
+            timeout=1, env=dict(os.environ, LC_ALL=NMCLI_SSID_LOCALE, LANG=NMCLI_SSID_LOCALE))
     except (OSError, subprocess.SubprocessError):
         return status
     for line in result.stdout.splitlines():
@@ -110,11 +112,11 @@ def wifi_device_status(interface='wlan0'):
     return status
 
 
-async def run_command(args, timeout=10):
+async def run_command(args, timeout=10, *, locale='C'):
     proc = None
     try:
         proc = await asyncio.create_subprocess_exec(*args, stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL, env=dict(os.environ, LC_ALL='C', LANG='C'))
+            stderr=asyncio.subprocess.DEVNULL, env=dict(os.environ, LC_ALL=locale, LANG=locale))
         output, _ = await asyncio.wait_for(proc.communicate(), timeout)
         return proc.returncode, output.decode('utf-8', errors='replace')
     except (OSError, asyncio.TimeoutError):
@@ -134,26 +136,38 @@ class Wifi:
         self.lock = asyncio.Lock()
 
     async def status(self):
-        rc, out = await self.run(['nmcli', '-t', '-f', 'GENERAL.STATE,GENERAL.CONNECTION',
+        rc, out = await self.run(['nmcli', '-t', '-f', 'GENERAL.STATE,IP4.ADDRESS',
                                   'device', 'show', self.interface], timeout=3)
         values = {parts[0]: parts[1] for line in out.splitlines()
                   if len(parts := split_nmcli(line)) >= 2}
         state = values.get('GENERAL.STATE', '').split(' ', 1)[0]
-        connected, uuid = rc == 0 and state == '100', ''
+        connected, ipv4, uuid = rc == 0 and state == '100', None, ''
         if connected:
+            for name, value in values.items():
+                if not name.startswith('IP4.ADDRESS['):
+                    continue
+                try:
+                    address = IPv4Interface(value).ip
+                except ValueError:
+                    continue
+                if not (address.is_unspecified or address.is_loopback or address.is_link_local
+                        or address.is_multicast or address.is_reserved):
+                    ipv4 = str(address)
+                    break
             active_rc, active = await self.run(['nmcli', '-t', '-f', 'UUID,DEVICE',
                                                 'connection', 'show', '--active'], timeout=2)
             if active_rc == 0:
                 uuid = next((parts[0] for line in active.splitlines()
                              if len(parts := split_nmcli(line)) == 2 and parts[1] == self.interface), '')
-        return dict(available=rc == 0, connected=connected, connection_uuid=uuid)
+        return dict(available=rc == 0, connected=connected, ipv4=ipv4, connection_uuid=uuid)
 
     async def scan(self):
         async with self.lock:
             await self.run(['nmcli', 'radio', 'wifi', 'on'], timeout=2)
             await self.run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', self.interface], timeout=8)
             rc, out = await self.run(['nmcli', '-t', '-f', 'SSID,SIGNAL', 'device', 'wifi',
-                                      'list', 'ifname', self.interface, '--rescan', 'no'], timeout=3)
+                                      'list', 'ifname', self.interface, '--rescan', 'no'],
+                                     timeout=3, locale=NMCLI_SSID_LOCALE)
         if rc:
             raise RuntimeError('Wi-Fi scan unavailable.')
         strongest = {}
