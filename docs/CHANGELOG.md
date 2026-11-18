@@ -1,5 +1,23 @@
 # XGO Duck AI 更新记录 / Changelog
 
+## 0.3.6
+
+### 简体中文
+
+- 标定页可一次标定全部 15 个舵机的硬件中位，包括 30 号舵机。完成后标定 IMU，再检查默认姿势。
+- 提供三种安装包，每个包都附有 SHA-256 校验文件。新板首装可用全量 ZIP，环境已准备好的板子可用预编译 `.ard`，在 App Lab 中编辑源码可用源码 ZIP。
+- 安装验收增加了整机重启检查，用于确认默认 App 能自动启动。首次安装时可以先验证运动控制，稍后再绑定语音账号或连接 USB 音频设备。
+- `master` 的普通步行基准角保持为左膝 −2°、左踝 +20°、右膝 +2°、右踝 −20°。已发布的 `v0.3.6` 安装包在这四个关节上依次使用 0°、+22°、0°、−22°。
+- 仓库的中英文 README 新增了 XGO Duck 官方 Wiki 入口，可查阅装配、标定和故障排查指南。
+
+### English
+
+- The calibration page sets the hardware centers for all 15 servos in one operation, including servo 30. Follow this with IMU calibration and a check of the default pose.
+- Three packages are available, each with a SHA-256 checksum. Use the full ZIP for a new board, the precompiled `.ard` for a board with its runtime installed, or the source ZIP to edit the app in App Lab.
+- Installation checks now include rebooting the board to confirm that the default app starts automatically. On a first install, you can verify motion control before binding a voice account or connecting USB audio.
+- The ordinary walking pose on `master` keeps the left knee at −2°, left ankle at +20°, right knee at +2° and right ankle at −20°. The published `v0.3.6` packages use 0°, +22°, 0° and −22° at those joints, respectively.
+- Both repository READMEs now link to the official XGO Duck Wiki for assembly, calibration and troubleshooting guides.
+
 ## 0.3.5
 
 ### 简体中文
