@@ -637,12 +637,69 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
         self.assertEqual(self.c.sitstand_phase, 'sit')
         self.access.web_sitstand('stand')
-        self.finish_preparation()
-        self.now += 1.01
+        policy = self.c.sitstand_policy
+        with patch.object(policy, 'infer', wraps=policy.infer) as infer, \
+                patch.object(policy, 'action_to_deg', wraps=policy.action_to_deg) as target, \
+                patch.object(policy, 'reset_action_filter', wraps=policy.reset_action_filter) as reset:
+            self.finish_preparation()
+            self.assertEqual(infer.call_args.kwargs, {'action_alphas': (0.2, 0.2)})
+            self.assertEqual(target.call_args.kwargs, {'action_scale': 1.1})
+            reset.assert_not_called()
+        deadline = self.c.sitstand_until
+        self.assertAlmostEqual(deadline - self.now, 1.2)
+        self.now = deadline - .01
+        self.feedback()
+        self.c.step()
+        self.assertEqual(self.c.sitstand_phase, 'stand')
+        self.now = deadline + .01
         self.feedback()
         self.c.step()
         self.assertEqual(self.c.sitstand_phase, 'idle')
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+
+    def test_fall_debounce_uses_separate_pitch_and_roll_thresholds(self):
+        upright = [0.0, 0.0, -1.0]
+        for axis, threshold in ((0, 55.0), (1, 35.0)):
+            for sign in (-1, 1):
+                with self.subTest(axis=axis, sign=sign):
+                    recovery = controller.Recovery()
+                    gravity = upright.copy()
+                    gravity[axis] = sign * math.tan(math.radians(threshold - 1))
+                    for frame in range(8):
+                        self.assertFalse(recovery.update(gravity, frame * .02))
+                    gravity[axis] = sign * math.tan(math.radians(threshold + 1))
+                    for frame in range(7):
+                        self.assertFalse(recovery.update(gravity, frame * .02))
+                    self.assertFalse(recovery.update(gravity, .14, valid=False))
+                    for frame in range(7):
+                        self.assertFalse(recovery.update(gravity, .16 + frame * .02))
+                    self.assertTrue(recovery.update(gravity, .30))
+                    self.assertEqual(recovery.phase, 'getup')
+                    for frame in range(49):
+                        self.assertFalse(recovery.update(upright, .32 + frame * .02))
+                    self.assertTrue(recovery.update(upright, 1.30))
+                    self.assertEqual(recovery.phase, 'walk')
+
+    def test_sitstand_fall_runs_getup_model_on_detection_frame(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.step()
+        self.access.web_sitstand('sit')
+        self.finish_preparation()
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        policy = self.c.getup_policy
+        with patch.object(policy, 'infer', wraps=policy.infer) as infer:
+            for frame in range(8):
+                self.now += .02
+                self.feedback()
+                self.c.filtered['grav'] = [0.0, -math.sin(math.radians(36)), -math.cos(math.radians(36))]
+                self.c.step()
+                if frame < 7:
+                    infer.assert_not_called()
+            infer.assert_called_once()
+        self.assertEqual(self.c.sitstand_phase, 'idle')
+        self.assertEqual(self.c.recovery.phase, 'getup')
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_getup.onnx')
 
     def test_heading_hold_reaches_both_walking_policies(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -677,6 +734,9 @@ class BaselineTest(unittest.TestCase):
             self.assertEqual(self.c.twist, [0., 0., 0.])
             self.c.step()
             self.assertEqual(self.c.status()['active_model'], f'xgoduck_ballkick_{side}.onnx')
+            kick = self.c.status()[side + '_kick']
+            self.assertEqual((kick['action_alpha'], kick['action_alpha_head'], kick['action_scale']),
+                             (0.2, 0.2, 1.0))
             self.now += .41
             self.feedback()
             self.c.step()

@@ -115,7 +115,7 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 | Default pose | Holds the home pose. Requires a fresh MCU and IMU sample. |
 | Walk / get up | Enables position control and the recovery state machine. |
 | Pick | While upright in walk, runs `xgoduck_pick.onnx` for 4 s, then returns to walk. |
-| Sit / Stand | Holds sit; Stand runs for 1 s, then returns to the selected walking policy. |
+| Sit / Stand | Holds sit; Stand runs for 1.2 s, then returns to the selected walking policy. |
 | left_kick / right_kick | Runs the selected kick for 0.4 s, then returns to the selected walking policy. |
 | Torque off | Disables position control. |
 
@@ -142,13 +142,13 @@ Observation layout: gyro (rad/s), gravity, 14 joint positions relative to home, 
 
 Recovery, evaluated on the 50 Hz clock:
 
-- Tilt above 55° for 0.15 s → get-up model, action forced to 0 for 1 s, then the get-up action. Twist and head are zero.
+- Absolute pitch above 55° or absolute roll above 35° for the 0.15 s detection window → get-up model on the detection frame. Twist and head are zero.
 - Tilt below 15° for 1 s → walk, and the web twist/head/mouth commands apply again.
-- Sit/stand uses scale 1.1, with command `[1, 0, 0]` for sit and `[0, 0, 0]` for stand. Stand lasts 1 s.
-- Left/right kick uses scale 0.8 and α = 0 for 0.4 s; velocity/head/body commands stay zero. A fall cancels sit/stand or kick and enters recovery.
+- Sit/stand uses command `[1, 0, 0]` for sit and `[0, 0, 0]` for stand. Stand lasts 1.2 s with scale 1.1 and leg/head α = 0.2/0.2. The transition preserves the previous action and filter history from sitting.
+- Left/right kick uses scale 1.0 and leg/head α = 0.2/0.2 for 0.4 s. Velocity/head/body commands stay zero. A fall cancels sit/stand or kick and enters recovery.
 - Pick, only from upright walk: command `[cos(2πφ), sin(2πφ), 0]` plus ten zeros, `φ` advances by `dt/4` (a 4 s cycle). The mouth opens to 30° and closes when φ ≥ 0.4.
 
-Ordinary action smoothing uses leg α = 0.35 on `[0:5]` and `[9:14]`, and head α = 0.45 on `[5:9]`. Roller uses leg/head α = 0.4/0.5; kicks use 0/0. `prev_action` stores the raw network output and is cleared on a policy switch. The 1 s fallen hold sends the home pose directly. IMU fusion uses source timestamps from the independent MCU IMU task. Gyro smoothing α = 0.5, joint-velocity α = 0.4, and gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%; there is no gyro bias subtraction. QMI axes are mapped once in firmware and the host undoes the reference device mapping before fusion.
+Ordinary action smoothing uses leg α = 0.35 on `[0:5]` and `[9:14]`, and head α = 0.45 on `[5:9]`. Roller uses leg/head α = 0.4/0.5. `prev_action` stores the raw network output and is cleared on a policy switch. IMU fusion uses source timestamps from the independent MCU IMU task. Gyro smoothing α = 0.5, joint-velocity α = 0.4, and gravity complementary-filter τ = 0.3 s. Accelerometer correction falls off when the norm leaves 1 g by more than about 20%; there is no gyro bias subtraction. QMI axes are mapped once in firmware and the host undoes the reference device mapping before fusion.
 
 The matching master protocol includes MCU-timestamped IMU data and separate loop/Bridge diagnostics. The packet ABI retains the disabled normal command TTL field. Following a feedback pause, Linux returns to inference-only if the MCU reports torque off or invalid IMU feedback. Explicit Stand, Policy or Hold with fresh feedback can arm again. The protocol uses DISARM/ARM/POLICY/HOLD. Calibration and servo setup use the independent heartbeat guards described above.
 

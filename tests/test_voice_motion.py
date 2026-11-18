@@ -170,7 +170,7 @@ class VoiceMotionTest(unittest.TestCase):
 
             # Keep real controller feedback fresh through model transition and
             # the subsequent one-second confirmation of upright balance.
-            end = self.now + 2
+            end = self.c.sitstand_until + 1.15
             while self.now < end:
                 self.now = round(self.now + .05, 6)
                 self.c.rx_time = self.now
@@ -258,7 +258,9 @@ class VoiceMotionTest(unittest.TestCase):
         self.assertEqual(self.c.mode, 'calibrate')
         self.assertEqual(self.c.input_source, 'web')
         self.c.mode, self.c.feedback.enabled = 'shadow', False
-        reply = mcp.handle_message({'id': 3, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
+        self.c.rx_time = self.now
+        with patch.dict(fixture.ns, time=SimpleNamespace(monotonic=lambda: self.now)):
+            reply = mcp.handle_message({'id': 3, 'method': 'tools/call', 'params': {'name': 'Duck.Stand'}})['result']
         self.assertFalse(reply['isError'])
         self.assertNotIn('error', reply)
         self.assertEqual(self.access.action['kind'], 'stand')
@@ -1466,7 +1468,7 @@ class VoiceMotionTest(unittest.TestCase):
                 self.now += .02
                 self.c.rx_time = self.now
                 self.c.step()
-            self.assertEqual(self.c.recovery.phase, 'default_pose')
+            self.assertEqual(self.c.recovery.phase, 'getup')
 
     def test_queued_roulade_waits_for_standing_after_move(self):
         self.move(duration=2)
@@ -1595,7 +1597,7 @@ class VoiceMotionTest(unittest.TestCase):
             self.assertFalse(result['isError'], result)
             self.assertEqual(self.c.sitstand_phase, 'stand')
             self.assertEqual(self.move()['status'], 'queued')
-            end = self.now + 2.5
+            end = self.c.sitstand_until + 1.15
             while self.now < end:
                 self.now += .05
                 self.c.rx_time = self.now
@@ -1628,7 +1630,8 @@ class VoiceMotionTest(unittest.TestCase):
             self.assertEqual(self.move(**lease, sequence=1)['status'], 'paused')
             self.assertEqual(self.c.sitstand_phase, 'stand')
             self.assertEqual(self.c.twist, [0, 0, 0])
-            for _ in range(48):
+            end = self.c.sitstand_until + 1.15
+            while self.now < end:
                 self.now += .05
                 self.c.rx_time = self.now
                 self.c.feedback.sample_us += 50000
@@ -1674,7 +1677,7 @@ class VoiceMotionTest(unittest.TestCase):
             self.assertEqual(kick['status'], 'queued')
             self.assertEqual(self.c.sitstand_phase, 'stand')
             self.assertEqual(self.access.action['prepares_action'], kick['action_id'])
-            self.advance(1.)
+            self.advance(fixture.ns['SITSTAND_STAND_S'])
             self.assertIsNone(self.c.kick_side)
             self.c.rx_time = self.now
             self.c.step()

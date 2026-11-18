@@ -60,7 +60,7 @@
     "assets/servo.js": "8b6d4b34852efbfff9f9fbf48245e39b236b26ebb52463838772f4f987d8f422",
     "assets/style.css": "0a12d244d08622ebed3ee3a1dcd410bf7068c6c15f9d409e128e798ecac37f26",
     "python/bridge_recovery.py": "b4761fcb0cf9438727c035a8e95bfa1db684073f8566fb287c2f63871146008d",
-    "python/controller.py": "1d0120047977189ab8d86aaed7656b80876bf599bc5360d3d3bccb18234991e3",
+    "python/controller.py": "71af0b749cdeb39b573617cb286ee97a8666c3d9373aecca2e720f9b871c5ce7",
     "python/duck_thing.py": "0bb7e95da09c603b5e9a652e8d3c168932a8e07b75567e31c95b1be16dff67eb",
     "python/forward_avoidance.py": "585e44926c1d023f048d0b4f8dbf3a883882cdfb3406409c5085207a51feff3c",
     "python/gamepad.py": "defce4fc29d7eb564136797c2ddfcade9169540391591df352406093548f256c",
@@ -68,9 +68,9 @@
     "python/main.py": "afa896c0416fcbce4261699d4c7ce49eb8b150cfacdd7bfeb10b3856db7744cb",
     "python/motion_access.py": "b221a4756374ad653e50b6a7e564bff4cbad3fe6b8d37df42fdf5d8b0a769f06",
     "python/motion_calibration.py": "4dbb8b0cba6958e3594f024eac463c4c49cb571e1a3725301018f86a607f31d0",
-    "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
+    "python/policy.py": "abf17f3ff60098d8d651ab73b64c885876990ba03317c0c50949d16f7a937b7f",
     "python/proc.py": "b4d038bb5c9844284fbc6ad500ad907e619e39488ec3714f6c2cddfba7fdf488",
-    "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
+    "python/recovery.py": "acdd1201616d42c57073d69a1186df948994e98c0c7cd9e4998a5fb6184b8d7c",
     "python/rl_core.py": "11aac0dfba063e9c7d4041e240d0de82ef0b67c2894ca23d3fb35d11416e6270",
     "python/runtime_gains.py": "9dbaf0550e8e515bf99a3dc94d086350d8a2c9c759b160723aea1da627a3c7a7",
     "python/speech_mouth.py": "e6be97d6e42b059eaca551ea9530fcafc96dd6f15c81bed83a3386bbebc25259",
@@ -83,7 +83,7 @@
     "python/xgoduck_pick.onnx": "f34e990dda785e9a8c53890bdcd0f7f1d457592691fd3703f3776b48fb2d14b8",
     "python/xgoduck_roller.onnx": "6eed2d1514296294e2183125267801e59ee2d7fa62480780f9d3fd9999873884",
     "python/xgoduck_roulade.onnx": "4244090442d4025817d3c041174206ab4f91bc07294ef5fbc4e5643ffdb76e1a",
-    "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
+    "python/xgoduck_sitstand.onnx": "d0d98b675841be8d6eb0bf3b3155c61687390adb7f234f7f0bae063c771b5d59",
     "python/xgoduck_walk.onnx": "1fc079512fe3fe23e274e7a9d8c9ad007e88439f0385ecf20c9596e57886249f",
     "sketch/duck_config.h": "d533b5033f286848dfd5ce99b551ef2d0f53c38b956331729c7e6c7027756f4f",
     "sketch/protocol.h": "890de77104f9cf43c0d074e6b34161eb428c2afc6e10b67fdeef6368aaa06be5",
@@ -107,16 +107,13 @@
   "stable_exact_files": [
     "assets/imu-calibration-pose.png",
     "python/heading.py",
-    "python/policy.py",
     "python/proc.py",
-    "python/recovery.py",
     "python/xgoduck_ballkick_left.onnx",
     "python/xgoduck_ballkick_right.onnx",
     "python/xgoduck_getup.onnx",
     "python/xgoduck_pick.onnx",
     "python/xgoduck_roller.onnx",
     "python/xgoduck_roulade.onnx",
-    "python/xgoduck_sitstand.onnx",
     "python/xgoduck_walk.onnx",
     "sketch/qmi8658.h",
     "sketch/sketch.yaml",
@@ -141,7 +138,6 @@
     "_stop_roulade_locked": "071ef4892ee2100058eeea72645f11eedeb1731401f5907a4d1651a9259188a6",
     "_roulade_on": "95cfe5ed5abbab669c8861cf0c4a6b56321c1ddc550683800cb8fb44ca720915",
     "_stop_sitstand_locked": "053faff0c09a30ae15c3dcd27e5f956065599b16d07cbf4e95f193f6554b0e3b",
-    "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c",
     "_stop_kick_locked": "e2874ccc8b54071a3750c27d28705b5a3746f2d6e2b80a47a666c5856fea5b2f",
     "_kick_status_locked": "07e434e3527a25a79e0088b29fa665223c6914263823f3b4a95265dbb698be5a",
     "cal_heartbeat": "a1acb51cf8cf2f833c9b22d90813b79e0b79648735b9824a8705e3d924f604fc",
@@ -178,7 +174,8 @@
     "cal_center": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
     "step": "Keep battery warnings and hold last targets during a feedback pause. Cancel interrupted actions and preserve seated posture. Confirm a retained-target or disarm command after a Bridge recovery before resuming, and never arm automatically after MCU torque release.",
     "_sample_imu_calibration": "Clear the AI arming interlock after a successful calibration.",
-    "reset_imu_calibration": "Clear the AI arming interlock when a saved calibration is explicitly disabled."
+    "reset_imu_calibration": "Clear the AI arming interlock when a saved calibration is explicitly disabled.",
+    "_sitstand_status_locked": "Report the stand-only action alphas and scale alongside the sit/stand model and timing."
   },
   "preserved_sha256": {
     "assets/app-version.css": "cad7571420502b29b7f05706b493633b2c96d2ee89ec678cec8d659cda6e9a84",
@@ -720,6 +717,19 @@
           "upstream": "    0.0, -5.0, -22.0, 0.0, 22.0,\n    0.0, 5.0, 22.0, 0.0, -22.0,"
         }
       ]
+    }
+  },
+  "motion_optimization_overlay": {
+    "base_commit": "3f9db11c376030d234c5b1299862211e87b590f1",
+    "scope": "Update the sit/stand model and standing settings, kick action smoothing and scale, and directional fall thresholds with immediate get-up.",
+    "previous_sha256": {
+      "python/controller.py": "1d0120047977189ab8d86aaed7656b80876bf599bc5360d3d3bccb18234991e3",
+      "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
+      "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
+      "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d"
+    },
+    "previous_controller_method_sha256": {
+      "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c"
     }
   }
 }

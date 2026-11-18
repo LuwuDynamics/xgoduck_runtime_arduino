@@ -22,7 +22,9 @@ PICK_MOUTH_CLOSE_PHI = 0.4
 ROULADE_S = 1.7
 ROULADE_ALPHA = 0.05
 ROULADE_START_TIMEOUT_S = 0.5
-SITSTAND_STAND_S = 1.0
+SITSTAND_STAND_S = 1.2
+SITSTAND_STAND_ALPHAS = (0.2, 0.2)
+SITSTAND_STAND_ACTION_SCALE = 1.1
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
 SITTING_CALIBRATION_RETRIES = 3
@@ -105,8 +107,8 @@ class Controller:
         self.model_message += '; ' + message
         self.kick_policies = {'left': self.left_kick_policy, 'right': self.right_kick_policy}
         for model in self.kick_policies.values():
-            model.action_scale = 0.8
-            model.set_action_alphas(leg=0.0, head=0.0)
+            model.action_scale = 1.0
+            model.set_action_alphas(leg=0.2, head=0.2)
         self.recovery = Recovery(period_s=CONTROL_PERIOD)
         self.heading = HeadingHold()
         self.policy_needs_reset = True
@@ -804,6 +806,9 @@ class Controller:
         return dict(phase=self.sitstand_phase, active=self.sitstand_phase != 'idle',
                     remaining_s=max(0.0, self.sitstand_until-now) if self.sitstand_phase == 'stand' else 0.0,
                     stand_seconds=SITSTAND_STAND_S, model=self.sitstand_policy.file,
+                    stand_action_alpha=SITSTAND_STAND_ALPHAS[0],
+                    stand_action_alpha_head=SITSTAND_STAND_ALPHAS[1],
+                    stand_action_scale=SITSTAND_STAND_ACTION_SCALE,
                     action_scale=self.sitstand_policy.action_scale)
 
     def _stop_kick_locked(self):
@@ -1404,6 +1409,7 @@ class Controller:
                 selected = self.policy if phase == 'walk' else self.getup_policy
                 if selected is self.roller_policy:
                     head = [0.0]*4
+            standing = selected is self.sitstand_policy and self.sitstand_phase == 'stand'
             twist[2] = self.heading.command(valid and self._heading_motion_locked(now), twist)
             reset_policy = self.policy_needs_reset
             inferring = mode in ('shadow','policy') and valid
@@ -1416,12 +1422,7 @@ class Controller:
                     self._disarm_now()  # Keep the MCU-side exclusive-mode watchdog alive.
             return
         target = self.policy.default_deg
-        if inferring and phase == 'default_pose':
-            # Switch to getup immediately, but force action/history to zero for 1 s.
-            with self.policy_lock:
-                selected.reset_action_filter()
-                target = selected.action_to_deg([0.0]*14)
-        elif inferring:
+        if inferring:
             if phase == 'getup':
                 twist, head = [0.0]*3, [0.0]*4
             begin = time.monotonic()
@@ -1429,8 +1430,13 @@ class Controller:
                 acquired = time.monotonic()
                 if reset_policy:
                     selected.reset_action_filter()
-                action = selected.infer(filt['grav'], filt['gyro_rad'], filt['angles_deg'], filt['vels_deg'], twist, head)
-                target = selected.action_to_deg(action)
+                observations = (filt['grav'], filt['gyro_rad'], filt['angles_deg'], filt['vels_deg'], twist, head)
+                if standing:
+                    action = selected.infer(*observations, action_alphas=SITSTAND_STAND_ALPHAS)
+                    target = selected.action_to_deg(action, action_scale=SITSTAND_STAND_ACTION_SCALE)
+                else:
+                    action = selected.infer(*observations)
+                    target = selected.action_to_deg(action)
             finish = time.monotonic()
             with self.lock:
                 self.inferred += 1; self.infer_times.append(finish)
