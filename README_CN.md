@@ -12,11 +12,9 @@
 
 用 USB 数据线把 UNO Q 连到电脑，在 Arduino App Lab 完成首次设置。选择键盘布局、设置设备名、连接 Wi-Fi 并设置板端 Linux 登录密码。等待检查和更新完成，断开 USB 后按指南接好扩展板，再重开 App Lab 并连接开发板。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/index.html)
 
-## 2. 测试 LED，记录板子 IP
+## 2. 查看板子的 IP 地址
 
-1. 在 App Lab 打开 **Inspirations → Color your LEDs**，点 **Run**。
-2. 从底部状态栏打开示例网页，切换 LED 的开关和颜色，观察板上的对应 LED 是否响应。
-3. 测试结束后点 **Stop**。打开右下角 Wi-Fi 图标里的 **Network Info**，记录自己的板子 IP。后续电脑与板子使用同一网络。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/02-led-ip.html)
+在 Arduino App Lab 右下角点击 Wi-Fi 图标，打开 **Network Info**，记下板子的 IP 地址。后续安装时，电脑和板子需要连接到同一局域网。
 
 拿到 IP 后，可把下面这段交给有终端权限的 AI，检查后续安装需要的 SSH 连接。
 

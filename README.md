@@ -12,11 +12,9 @@ The first seven steps follow the official developer guide, with this repository�
 
 Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)
 
-## 2. Test the LEDs and record the board IP
+## 2. Find the board’s IP address
 
-1. Open **Inspirations → Color your LEDs** in App Lab and click **Run**.
-2. Open its control page from the bottom status bar. Toggle the LEDs and change their colors to check that the matching lights respond on the board.
-3. Click **Stop**. Open **Network Info** from the Wi-Fi icon at the bottom right and record your board’s IP. Use the same network for your computer and the board. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/02-led-ip.html)
+In Arduino App Lab, click the Wi-Fi icon in the lower-right corner, open **Network Info**, and note the board’s IP address. Connect your computer and the board to the same local network for installation.
 
 Once you know the IP, you can give this prompt to an AI assistant with terminal access to check SSH.
 
