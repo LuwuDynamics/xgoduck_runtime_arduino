@@ -4,19 +4,57 @@
 
 ### 简体中文
 
-- 标定页可一次标定全部 15 个舵机的硬件中位，包括 30 号舵机。完成后标定 IMU，再检查默认姿势。
-- 提供三种安装包，每个包都附有 SHA-256 校验文件。新板首装可用全量 ZIP，环境已准备好的板子可用预编译 `.ard`，在 App Lab 中编辑源码可用源码 ZIP。
-- 安装验收增加了整机重启检查，用于确认默认 App 能自动启动。首次安装时可以先验证运动控制，稍后再绑定语音账号或连接 USB 音频设备。
-- `master` 的普通步行基准角保持为左膝 −2°、左踝 +20°、右膝 +2°、右踝 −20°。已发布的 `v0.3.6` 安装包在这四个关节上依次使用 0°、+22°、0°、−22°。
-- 仓库的中英文 README 新增了 XGO Duck 官方 Wiki 入口，可查阅装配、标定和故障排查指南。
+#### 遥控与手柄
+
+- 手机驾驶舱的横屏和竖屏布局都保留双摇杆。左杆控制前后和侧移，右杆转向。旋转手机会释放当前摇杆输入。驾驶页新增轮滑开关，小鸭在保持姿势模式下站稳时也能直接点「坐下」。
+- 「视图」可选显示全部控件、只保留常用遥控或只看摄像头。小屏可单独打开 ToF 深度图和设备工具。支持补光的摄像头出图后，可在工具里开关补光灯并查看实际状态。
+- 蓝牙手柄可单独绑定坐下、切换轮滑、左脚踢、右脚踢，以及七种鸭叫。「行走 / 起身」也能让坐着的小鸭站起来。已有按键映射会保留，手柄设置页随驾驶舱切换中英文。[手柄设置](gamepad.md)
+- 驾驶舱和 9527 控制页在第一次发出遥控动作前提醒安装后部保护壳。确认后需要重新发出动作指令，两页在同一板子地址下共用确认记录。
+
+#### 语音、联网与绑定
+
+- 小鸭正在回答时，可以再次说「小鸭小鸭」或 “Hey Ducky” 打断。小鸭先停止本地播放并发出回应音，再收下一句话。唤醒与对话共用麦克风，首句缓存从回应音结束后开始，避免把唤醒词尾音或提示音传给语音服务。
+- 连上 Wi-Fi 后，UNO Q 板载 LED 点阵显示 IP 地址的最后一段约一分钟。需要绑定时，小鸭可用中文或英文逐位播报完整地址三遍。配网页面也能正确显示中文 Wi-Fi 名称。
+
+#### 标定与运动控制
+
+- 标定页改为三个步骤。先按四张参考图摆位，在全部舵机在线、卸力后统一标定 15 个舵机（含 30 号颈部舵机），再标定 IMU，最后点「默认姿势」对照实拍检查。批量写入等待 STM32 确认，失败时只重试当前阶段。[标定图解](calibration-guide.md)
+- 默认姿势检查在离开页面或切到后台时卸力，心跳中断后最多保持两秒。单舵机安装检查的「停止」可以打断仍在等待回复的角度调整，读回舵机扭矩已关闭后才显示停止成功。
+- 运动控制允许单个舵机短暂漏回反馈，容差上限为 15 帧、150 毫秒。Bridge 可分别识别状态反馈中断和指令回执停滞。通信恢复时先确认 MCU 保留的目标，已经卸力的小鸭会保持卸力，移动需要重新发令。
+- 驾驶舱分别显示实时电压和低电压运动保护状态。供电恢复后，电压读数恢复正常颜色，仍生效的运动锁定继续显示。
+
+#### 安装与更新
+
+- 发布包提供三种安装方式，均附 SHA-256 校验文件。全量 ZIP 为新板备齐运行镜像、系统依赖和上传工具。预编译 `.ard` 自带 STM32 固件和 Python 环境。App Lab 源码 ZIP 适合编辑源码并在板上编译。
+- 预编译版启动前会校验 STM32 固件及其构建输入。固件缺失、损坏或输入有变更时，会尝试在板上重新构建。安装脚本也修复了原生音频库目录权限，普通 App 用户可以加载 `libopus`。
+- 安装指南补充了已有安装的识别、同一台机器的标定与绑定数据迁移，以及整机重启后的自启动验收。首装时可先验收运动控制，语音待绑定或接上 USB 音频设备后再验收。中英文 README 都提供了官方 Wiki 入口。[部署指南](deployment.md)
 
 ### English
 
-- The calibration page sets the hardware centers for all 15 servos in one operation, including servo 30. Follow this with IMU calibration and a check of the default pose.
-- Three packages are available, each with a SHA-256 checksum. Use the full ZIP for a new board, the precompiled `.ard` for a board with its runtime installed, or the source ZIP to edit the app in App Lab.
-- Installation checks now include rebooting the board to confirm that the default app starts automatically. On a first install, you can verify motion control before binding a voice account or connecting USB audio.
-- The ordinary walking pose on `master` keeps the left knee at −2°, left ankle at +20°, right knee at +2° and right ankle at −20°. The published `v0.3.6` packages use 0°, +22°, 0° and −22° at those joints, respectively.
-- Both repository READMEs now link to the official XGO Duck Wiki for assembly, calibration and troubleshooting guides.
+#### Remote control and gamepads
+
+- Both portrait and landscape phone layouts keep the two joysticks on screen. The left stick drives and strafes, and the right stick turns. Rotating the phone releases the current input. The cockpit adds a Roller switch and lets Duck sit directly from Hold when upright.
+- The View menu offers all controls, driving controls only, or a camera-only view. Small screens can open the ToF depth grid and device tools separately. Once a supported camera is streaming, the tools let you switch its light on or off and see the state reported by the camera.
+- Gamepad buttons can now be assigned to Sit, Roller mode, left kick, right kick, and each of the seven duck calls. Walk / get up also stands Duck up from sitting. Existing bindings carry over, and the setup panel follows the cockpit language. [Gamepad setup](gamepad.md)
+- The cockpit and port 9527 controls show a rear-cover reminder before the first driving action. After acknowledging it, issue the command again. Both pages share the acknowledgement when opened at the same board address.
+
+#### Voice, Wi-Fi and binding
+
+- Say “Hey Ducky” or “小鸭小鸭” again to interrupt a spoken reply. Duck stops local playback, plays its acknowledgement cue and listens for the next sentence. Wake detection and chat share one microphone. Buffering starts after the cue to keep the wake-word tail and cue out of the audio sent to the voice service.
+- After Wi-Fi connects, the UNO Q LED matrix displays the last part of its IP address for about one minute. When binding is required, Duck can read the full address digit by digit three times in English or Chinese. Wi-Fi setup also displays Chinese network names correctly.
+
+#### Calibration and motion control
+
+- The calibration page guides you through three steps. Position Duck using four reference photos, calibrate all 15 unloaded servos together (including neck servo 30), then calibrate the IMU and check Default pose against a photo. Each servo write stage waits for STM32 confirmation. A failed stage is retried on its own. [Calibration guide](calibration-guide.md)
+- The default-pose check releases torque when you leave or hide the page, or within two seconds if the heartbeat stops. In the single-servo installation check, Stop interrupts a pending angle request and reports success only after the servo confirms torque is off.
+- Motion control tolerates brief gaps in one servo’s feedback, up to 15 frames and 150 ms. Bridge recovery distinguishes missing state feedback from stalled command acknowledgements. On reconnection it checks the MCU’s retained target. Duck stays unloaded if torque was released, and travel requires a fresh command.
+- The cockpit reports live voltage separately from the low-voltage motion lock. When the supply recovers, the voltage readout returns to its normal color while any active motion lock stays visible.
+
+#### Installation and updates
+
+- All three packages have a matching SHA-256 checksum file. The full ZIP bundles the runtime image, system dependencies and upload tools for a new board. The precompiled `.ard` includes STM32 firmware and the Python environment. Use the App Lab source ZIP to edit the source and build on the board.
+- The precompiled release checks its STM32 firmware and build inputs at startup. If the firmware is missing, damaged or out of date, it attempts a rebuild on the board. The installer also fixes native audio library directory permissions so the app user can load `libopus`.
+- The installation guide covers identifying an existing installation, migrating calibration and binding data for the same Duck, and verifying autostart after a board reboot. On a first install, you can check motion control before binding a voice account or connecting USB audio. Both READMEs link to the official Wiki. [Deployment guide](deployment.md)
 
 ## 0.3.5
 
