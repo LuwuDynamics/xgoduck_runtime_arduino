@@ -1,6 +1,6 @@
 # XGO Duck AI
 
-English · [简体中文](README_CN.md) · [Changelog](docs/CHANGELOG.md)
+English · [简体中文](README_CN.md) · [XGO Duck Wiki](https://wiki.xgorobot.com/kb/the-xgo-series-robot/models/duck) · [Changelog](docs/CHANGELOG.md)
 
 Voice chat, motion control, USB audio/video and ToF ranging for XGO Duck on Arduino UNO Q. Use a browser for everyday operation; Duck does not need a display.
 

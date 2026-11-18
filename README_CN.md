@@ -1,6 +1,6 @@
 # XGO Duck AI
 
-[English](README.md) · 简体中文 · [更新记录](docs/CHANGELOG.md)
+[English](README.md) · 简体中文 · [XGO Duck 官方 Wiki](https://wiki.xgorobot.com/kb/the-xgo-series-robot/models/duck) · [更新记录](docs/CHANGELOG.md)
 
 在 Arduino UNO Q 上运行小鸭的语音聊天、运动控制、USB 音视频和 ToF 测距。日常操作使用浏览器，不需要给小鸭连接屏幕。
 
