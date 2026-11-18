@@ -74,6 +74,16 @@ class _LegacyToFClient:
             self._socket = None
 
 
+def probe_stm32(address):
+    """Read the MCU's snapshot over a separate socket, even without a ToF sensor."""
+    client = _LegacyToFClient(address)
+    try:
+        client.connect(timeout=.25)
+        _decoder()(client.call('duck_tof', timeout=.25))
+    finally:
+        client.disconnect()
+
+
 def _empty(state='starting', message=''):
     return dict(state=state, error_message=message, fresh=False, seq=0,
                 resolution=[8, 8], frequency_hz=5, age_ms=None, valid_zones=0,

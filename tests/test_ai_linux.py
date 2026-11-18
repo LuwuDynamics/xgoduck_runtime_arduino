@@ -3,6 +3,7 @@ import importlib.util
 import os
 from pathlib import Path
 import platform
+import stat
 import subprocess
 import sys
 import tempfile
@@ -194,8 +195,14 @@ asyncio.run(check())
         spec.loader.exec_module(native)
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            native.prepare(folder)
+            previous_umask = os.umask(0o077)
+            try:
+                native.prepare(folder)
+            finally:
+                os.umask(previous_umask)
             bundle = folder / 'data/native'
+            for path in (bundle, bundle / 'bin', bundle / 'lib'):
+                self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755, str(path))
             env = dict(os.environ, DUCK_NATIVE_LIB_DIR=str(bundle / 'lib'), LD_LIBRARY_PATH=str(bundle / 'lib'),
                        PATH=str(bundle / 'bin') + os.pathsep + os.environ['PATH'])
             for name in ('arecord', 'aplay', 'amixer', 'v4l2-ctl'):

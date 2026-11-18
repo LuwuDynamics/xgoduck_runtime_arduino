@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'python'))
-from local_ipc import JsonServer
+from local_ipc import JsonServer, request
 from onboarding import ota_url
 from voice_config import VoiceConfig
 from voice_process import Runtime
@@ -133,6 +133,26 @@ class VoiceRuntimeTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(self.runtime.gate.busy())
         self.assertEqual(len(self.instances), 7)
         self.assertIn(None, self.beats)
+
+    async def test_gamepad_duck_call_reuses_chat_audio_and_supports_speaker_only(self):
+        app = self.runtime.app
+        app.duck_sounds = SimpleNamespace(call=Mock(return_value={'status': 'success'}))
+        port = int(os.environ['DUCK_VOICE_PORT'])
+        async def call(kind):
+            return await asyncio.to_thread(request, port, 'lifecycle-test', '/duck-call', {'kind': kind}, 3)
+
+        self.assertEqual(await call('greet'), {'status': 'success'})
+        app.duck_sounds.call.assert_called_once_with('greet')
+        self.assertIs(self.runtime.app, app)
+        with patch.object(self.runtime.gate, 'busy', return_value=True):
+            with self.assertRaisesRegex(ValueError, 'Audio is busy'):
+                await call('chirp')
+        with patch.object(self.runtime, 'audio_ready', False), patch.object(self.runtime.bench, 'audio_start') as play:
+            self.assertEqual(await call('coo'), {'ok': True})
+            play.assert_called_once_with('playing', source='duck-coo')
+            with self.assertRaisesRegex(ValueError, 'kind must be'):
+                await call('music')
+            self.assertEqual(play.call_count, 1)
 
     async def test_connection_sounds_require_live_mqtt_not_cached_binding_and_preserve_heartbeats(self):
         self.runtime.connection_sounds.play = AsyncMock(return_value=True)

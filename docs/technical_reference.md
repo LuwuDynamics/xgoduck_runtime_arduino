@@ -45,7 +45,7 @@ IDs follow Microduck. The bus always addresses all 15, in this order:
 | 30–33 | Neck and head. Policy order inside the 14-D action is 10–14, 30–33, 20–24. |
 | 34 | Mouth. It is not part of the policy action. The web UI commands it from 0° to 30°. |
 
-The ordinary walking home pose in `python/rl_core.py` is hip/ankle ±22°, knee 0°, hip roll ±5°, neck and head pitch 20°, mouth 0°. Its `action_scale` is 1. Roller reads its own home from ONNX metadata and uses scale 0.7; it is off at startup and selectable using the stable page's Roller switch. Use it only with the corresponding roller-equipped robot. MCU angles use each servo's hardware center at encoder position 2047.
+The ordinary walking home pose in `python/rl_core.py` is left/right hip pitch −22°/+22°, knee −2°/+2°, ankle +20°/−20°, hip roll −5°/+5°, neck and head pitch 20°, mouth 0°. Its `action_scale` is 1. Roller applies its fixed leg angles over the ONNX home and uses scale 0.8; it is off at startup and selectable using the stable page's Roller switch. Use it only with the corresponding roller-equipped robot. MCU angles use each servo's hardware center at encoder position 2047.
 
 Hardware centers are stored in the servos. Legacy `data/zero_pos.json` files are preserved as backups and no longer applied. Nondefault legacy software zeros require the hardware-centering workflow before arming; `data/hardware-centers.json` records acknowledged progress for this robot.
 
@@ -72,9 +72,9 @@ Startup, arming and calibration preserve the leg/head servos’ existing KP/KD. 
 
 Do this after wiring and confirming every servo ID answers.
 
-1. Open **Calibration** and select a method to unload the servos.
-2. **Unified calibration** writes the center and calibrated encoder position for each servo while unloaded. Calibrate ID 30 separately afterward. **Calibrate individually** sets one servo center at a time and holds that joint at 2048.
-3. Unload all servos, calibrate the IMU at the bottom of the page, and exit. Check Default pose with the robot supported before Walk / get up.
+1. Open **Calibration** (`/calibrate.html`). All servos unload.
+2. Match the four reference photos and click **Calibrate all 15 servos**. The STM32 confirms both the reset and the reference write for every joint while torque stays off.
+3. Calibrate the IMU, then use **Default pose** at the bottom of the page with Duck supported before trying Walk / get up.
 
 Legacy software-center migration is described above and in the AI guide. Do not replace old zeros with 2047 to skip calibration. The page also offers Roller walking, independent model amplitude/action filters, IMU filtering, and separate all-servo protection-switch/current broadcasts; protection settings are changed only when explicitly requested from the page.
 

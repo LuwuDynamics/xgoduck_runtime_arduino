@@ -1,8 +1,8 @@
 # 站姿 IMU 标定 / Standing IMU calibration
 
-打开 `http://<板子IP>:9527/calibrate.html`，在页面顶部找到 **IMU 标定**。如果已经设过舵机中位，先点 **Unload all / 全部卸力**。按图支撑小鸭，让板子的电池接口朝正上方，下边缘贴住水平桌面。点 **标定 IMU**，保持静止约 1.5 秒，等页面显示已保存。
+打开 `http://<板子IP>:9527/calibrate.html`，在统一标定流程中找到 **IMU 标定**。如果舵机仍在上力，先点 **全部卸力**。按图支撑小鸭，让板子的电池接口朝正上方，下边缘贴住水平桌面。点 **标定 IMU**，保持静止约 1.5 秒，等页面显示已保存。
 
-Open `http://<board-ip>:9527/calibrate.html` and find **IMU calibration** at the top. Click **Unload all** if you have already set any servo centers. Support Duck with the battery connector pointing up and the bottom edge of the board against a level tabletop. Click **Calibrate IMU** and keep the board still for about 1.5 seconds until the page reports that it saved the result.
+Open `http://<board-ip>:9527/calibrate.html` and find **IMU calibration** after the servo-center step. Click **Unload all** if any servo is still holding. Support Duck with the battery connector pointing up and the bottom edge of the board against a level tabletop. Click **Calibrate IMU** and keep the board still for about 1.5 seconds until the page reports that it saved the result.
 
 <img src="../assets/imu-calibration-pose.png" alt="IMU calibration posture with the battery connector pointing up" width="420">
 

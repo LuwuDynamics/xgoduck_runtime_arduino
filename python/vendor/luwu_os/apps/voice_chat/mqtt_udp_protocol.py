@@ -544,7 +544,7 @@ class MqttUdpProtocol:
         message = {"session_id": self.session_id, "type": "abort"}
         if reason == AbortReason.WAKE_WORD_DETECTED:
             message["reason"] = "wake_word_detected"
-        await self.send_text(json.dumps(message))
+        return await self.send_text(json.dumps(message))
 
     async def send_wake_word_detected(self, wake_word: str):
         await self.send_text(json.dumps({

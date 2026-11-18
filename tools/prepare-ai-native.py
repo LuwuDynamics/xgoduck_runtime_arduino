@@ -66,6 +66,9 @@ def prepare(root):
             copy(match[2], 'lib/' + match[1])
             pending.append(Path(match[2]))
     (temporary / 'manifest.json').write_text(json.dumps(dict(architecture='aarch64', distribution='Debian 13', files=files), indent=2) + '\n')
+    # The unprivileged App must be able to traverse this root-owned bundle.
+    for directory in (temporary, temporary / 'bin', temporary / 'lib'):
+        directory.chmod(0o755)
     # Native files are generated on this board. They are never included in an
     # App export, and a future rerun replaces only this generated directory.
     shutil.rmtree(destination, ignore_errors=True)

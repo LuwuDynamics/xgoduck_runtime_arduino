@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calibration · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=20261019"><link rel="stylesheet" href="calibrate.css?v=method-2">
+<title>Calibration · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=20261019">
+<link rel="stylesheet" href="calibrate.css?v=20261117-imu-photo">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 <main class="page-calibrate">
 <header>
@@ -11,79 +12,69 @@
     <button class="stop" id="exit">Exit</button>
   </div>
 </header>
-<div class="cal-choice" id="cal-choice" aria-labelledby="cal-choice-title">
-  <h2 id="cal-choice-title" data-label="methodTitle">Choose a calibration method</h2>
-  <p data-label="methodInstructions">Choose one method. Unified calibration is simpler and recommended, but more sensitive to assembly tolerances.</p>
-  <div class="cal-modes">
-    <button class="cal-method" type="button" data-calibration-mode="unified" aria-labelledby="unified-method-name" aria-describedby="unified-method-copy" aria-controls="unified-calibration">
-      <span class="cal-method-head"><span class="cal-method-icon" aria-hidden="true">◎</span><span class="cal-recommended" data-label="recommended">Recommended</span></span>
-      <strong id="unified-method-name" data-label="unifiedCalibration">Unified calibration</strong>
-      <span class="cal-method-copy" id="unified-method-copy" data-label="unifiedMethodCopy">Use four reference photos to calibrate the joints together, then calibrate ID 30 and the IMU separately.</span>
-      <span class="cal-method-link" aria-hidden="true"><span data-label="openUnified">Start unified calibration</span> →</span>
-    </button>
-    <button class="cal-method" type="button" data-calibration-mode="individual" aria-labelledby="individual-method-name" aria-describedby="individual-method-copy" aria-controls="individual-calibration">
-      <span class="cal-method-head"><span class="cal-method-icon" aria-hidden="true">▤</span></span>
-      <strong id="individual-method-name" data-label="individualCalibration">Calibrate individually</strong>
-      <span class="cal-method-copy" id="individual-method-copy" data-label="individualMethodCopy">Use the original guides to set each of the 15 servo centers, then calibrate the IMU.</span>
-      <span class="cal-method-link" aria-hidden="true"><span data-label="openIndividual">Start individual calibration</span> →</span>
-    </button>
+<div class="cal-overview">
+  <h2 data-label="unifiedTitle">Unified calibration</h2>
+  <p data-label="unifiedSequence">Servo centers → IMU → Default pose check</p>
+</div>
+<p id="message" role="status">Entering calibration and unloading all servos…</p>
+<section class="cal-unified-panel" aria-labelledby="main-joints-title">
+  <div class="cal-panel-heading">
+    <span class="cal-step" aria-hidden="true">01</span>
+    <h2 id="main-joints-title" data-label="unifiedPose">Set the servo centers</h2>
   </div>
-</div>
-<div class="cal-selected" id="cal-selected" tabindex="-1" hidden>
-  <div id="unified-heading" hidden>
-    <h2 data-label="unifiedCalibration">Unified calibration</h2>
-    <p data-label="unifiedSequence">Main joints → ID 30 → IMU</p>
+  <div id="unified-photos" class="cal-reference-photos"></div>
+  <ol id="unified-steps" class="cal-steps"></ol>
+  <p class="warn" data-label="unifiedPoseWarning">Unload the servos before moving the joints by hand. Keep the wires clear of the gaps between the legs and body.</p>
+  <div class="cal-action-line">
+    <button id="complete-calibration" class="cal-primary" type="button" data-label="completeCalibration" disabled>Calibrate all 15 servos</button>
+    <button id="unified-unload" type="button" data-action="unload" data-label="unloadAll" hidden>Unload all</button>
+    <p id="unified-status" role="status" hidden></p>
   </div>
-  <button type="button" id="calibration-back"><span aria-hidden="true">← </span><span data-label="switchMethod">Switch calibration method</span></button>
-</div>
-<p id="message" role="status" hidden></p>
-<div id="individual-calibration" hidden>
-  <section id="intro" class="cal-intro"></section>
-  <div id="zonebar" class="cal-bar"></div>
-  <div id="zones"></div>
-  <section id="finish" class="cal-finish"></section>
-</div>
-<div id="unified-calibration" hidden>
-  <section class="cal-unified-panel">
-    <div class="cal-panel-heading">
-      <span class="cal-step" aria-hidden="true">01</span>
-      <div>
-        <h2 data-label="unifiedPose">Calibrate the main joints</h2>
-        <p data-label="unifiedPoseHelp">Position Duck as shown in the four photos. Calibrate the neck and IMU separately in the next steps.</p>
-      </div>
-    </div>
-    <div id="unified-photos" class="cal-reference-photos"></div>
-    <ol id="unified-steps" class="cal-steps"></ol>
-    <p class="warn" data-label="unifiedPoseWarning">Unload the servos before moving the joints by hand. Keep the wires clear of the gaps between the legs and body.</p>
-    <div class="cal-action-line">
-      <button id="complete-calibration" type="button" data-label="completeCalibration" disabled>Complete calibration</button>
-      <button id="unified-unload" type="button" data-action="unload" data-label="unloadAll" hidden>Unload all</button>
-      <p id="unified-status" role="status" hidden></p>
-    </div>
-  </section>
-  <section class="cal-unified-panel" id="unified-neck-panel">
+</section>
+<section class="cal-unified-panel cal-imu" id="imu-panel" aria-labelledby="imu-title">
+  <div>
     <div class="cal-panel-heading">
       <span class="cal-step" aria-hidden="true">02</span>
-      <h2 data-label="neckCalibration">Calibrate ID 30 separately</h2>
-    </div>
-    <div id="unified-neck"></div>
-  </section>
-</div>
-<section class="cal-imu" id="imu-panel" aria-labelledby="imu-title" hidden>
-  <div>
-    <div class="cal-imu-heading">
-      <span class="cal-step" id="imu-step" aria-hidden="true" hidden>03</span>
       <h2 id="imu-title" data-label="imuTitle">IMU calibration</h2>
     </div>
-    <p data-label="imuInstructions">Support Duck with the board upright and its battery connector facing up. Rest the board’s bottom edge on a level table, then calibrate and hold still for about 1.5 seconds.</p>
-    <button id="imu-start" type="button" data-label="imuStart" disabled>Calibrate IMU</button>
-    <button id="imu-unload" type="button" data-action="unload" data-label="unloadAll" hidden>Unload all</button>
-    <progress id="imu-progress" max="1" value="0" aria-labelledby="imu-title" hidden></progress>
+    <p data-label="imuInstructions">Unload the servos and support Duck with the board upright, the battery connector pointing up and the board’s bottom edge against a level table. Start calibration and hold still for about 1.5 seconds.</p>
+  </div>
+  <figure class="cal-side-reference cal-imu-reference">
+    <button id="imu-photo-button" type="button" class="cal-enlarge" data-picture="imu-calibration-pose.png" aria-label="Enlarge picture · IMU placement reference">
+      <img id="imu-photo" src="imu-calibration-pose.png" width="910" height="1155" loading="lazy" alt="Duck supported with its board upright and the bottom edge against a level table">
+    </button>
+    <figcaption data-label="imuPhotoCaption">IMU placement reference</figcaption>
+  </figure>
+  <div>
+    <div class="cal-action-line">
+      <button id="imu-start" class="cal-primary" type="button" data-label="imuStart" disabled>Calibrate IMU</button>
+      <button id="imu-unload" type="button" data-action="unload" data-label="unloadAll" hidden>Unload all</button>
+      <progress id="imu-progress" max="1" value="0" aria-labelledby="imu-title" hidden></progress>
+    </div>
     <p id="imu-status" role="status">Waiting for IMU feedback…</p>
   </div>
-  <button id="imu-picture" type="button" class="cal-enlarge cal-imu-picture" data-picture="imu-calibration-pose.png" aria-label="Enlarge IMU posture guide">
-    <img id="imu-pose" src="imu-calibration-pose.png" width="910" height="1155" alt="Board upright with the battery connector pointing up">
-  </button>
+</section>
+<section id="finish" class="cal-finish" aria-labelledby="finish-title">
+  <div>
+    <div class="cal-panel-heading">
+      <span class="cal-step" aria-hidden="true">03</span>
+      <h2 id="finish-title" data-label="finishTitle">Check the default pose</h2>
+    </div>
+    <p data-label="finishText">When calibration is complete, support Duck on a level surface, click Default pose and compare its stance with the photo.</p>
+    <div class="buttons">
+      <button id="pose-start" class="cal-primary" type="button" data-label="poseStart" disabled>Default pose</button>
+      <button type="button" data-action="unload" data-label="unloadAll">Unload all</button>
+      <button type="button" data-action="exit" data-label="exit">Exit</button>
+    </div>
+    <p id="pose-status" role="status" hidden></p>
+    <p class="cal-finish-recheck" data-label="finishMismatch">If the pose differs, support Duck and click Unload all before rechecking the servo centers.</p>
+  </div>
+  <figure class="cal-side-reference cal-finish-reference">
+    <button type="button" class="cal-enlarge" data-picture="cal-default-pose.jpg">
+      <img id="default-pose-photo" src="cal-default-pose.jpg" width="1706" height="1279" loading="lazy" alt="Default pose reference photo">
+    </button>
+    <figcaption data-label="posePhotoCaption">Default pose · roller feet on the left, standard feet on the right</figcaption>
+  </figure>
 </section>
 </main>
 <dialog id="picture-dialog" class="cal-picture-dialog" aria-label="Calibration picture">
@@ -91,5 +82,5 @@
   <img id="picture-image" alt="">
 </dialog>
 <noscript><p>Enable JavaScript to use calibration. / 请启用 JavaScript 后再进行标定。</p></noscript>
-<script src="calibrate.js?v=method-2"></script>
+<script src="calibrate.js?v=20261117-servo-retry"></script>
 </html>

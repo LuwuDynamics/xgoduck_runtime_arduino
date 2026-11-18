@@ -35,7 +35,7 @@ def application_type(base, runtime):
             result = super()._handle_tts(data)
             mouth = getattr(runtime, 'mouth', None)
             if (mouth is not None and data.get('state') == 'start' and self.state == 'speaking'
-                    and self.config.get('tts_mouth_enabled', True)):
+                    and not getattr(self, 'aborted', False) and self.config.get('tts_mouth_enabled', True)):
                 mouth.begin(self._duck_session)
             return result
 

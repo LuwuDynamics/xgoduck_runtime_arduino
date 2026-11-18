@@ -2,8 +2,8 @@
 
 Router 0.11.0 treats a second `$/register` from the owner of a route as a no-op.
 Routers 0.5.4 through 0.10.x answer it with RouteAlreadyExists (error code 5)
-even though the route is intact. The supervisor re-asserts its routes every two
-seconds, so it has to accept that answer or it tears the Bridge down forever.
+even though the route is intact. The supervisor re-asserts its routes every
+second, so it has to accept that answer or it tears the Bridge down forever.
 """
 from pathlib import Path
 import shutil
@@ -38,6 +38,7 @@ void receiveCommand() {}
 void receiveCal() {}
 void receiveServo() {}
 void readTof() {}
+bool receiveStartupIp(int) { return true; }
 int scenario, polls;
 bool strictRouter;
 #define CHECK(condition) do { if (!(condition)) { \
@@ -83,14 +84,16 @@ struct Router {
     void invalidate() { ++invalidations; }
 } Bridge;
 const std::set<std::string> expected = {
-    "duck_command", "duck_cal", "duck_servo", "duck_tof"
+    "duck_command", "duck_cal", "duck_servo", "duck_tof", "duck_show_ip"
 };
 void k_msleep(uint32_t ms) {
-    if (ms != 2000) return;
+    if (ms != 1000) return;
     ++polls;
     if (polls == 1) {
         CHECK(bridgeReady && Bridge.methods == expected);
         if (scenario == 1) Bridge.methods.erase("duck_tof");
+        else if (scenario == 5) Bridge.methods.erase("duck_command");
+        else if (scenario == 6) Bridge.methods.erase("duck_show_ip");
         else if (scenario != 4) Bridge.methods.clear();  // scenario 4 keeps the registry intact
         Bridge.failRegister = scenario == 2;
         Bridge.failVersion = scenario == 3;
@@ -116,7 +119,7 @@ void k_msleep(uint32_t ms) {
 MAIN = r'''
 int main() {
     strictRouter = STRICT_ROUTER;
-    for (scenario = 0; scenario < 5; ++scenario) {
+    for (scenario = 0; scenario < 7; ++scenario) {
         bridgeReady = bridgeStage = bridgeAttempts = bridgeFailures = 0;
         bridgeReconnects = bridgeReadyUs = polls = 0;
         pending = true;

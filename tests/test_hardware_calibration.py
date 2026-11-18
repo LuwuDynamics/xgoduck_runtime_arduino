@@ -25,7 +25,7 @@ class HardwareCalibrationTest(unittest.TestCase):
         self.original = self.legacy.read_bytes()
         self.reply_ok = True
 
-    def controller(self):
+    def controller(self, replies=None):
         bridge = Mock()
         c = AppController(bridge, data_dir=self.data)
         def notify(method, payload):
@@ -36,7 +36,9 @@ class HardwareCalibrationTest(unittest.TestCase):
                 # An old reply for the same joint cannot acknowledge this call.
                 c.receive_cal_reply(wire.CAL_REPLY.pack(b'DQA1', seq - 1, index, 1))
                 self.assertFalse(c.cal_reply_event.is_set())
-                c.receive_cal_reply(wire.CAL_REPLY.pack(b'DQA1', seq, index, int(self.reply_ok)))
+                ok = next(replies) if replies is not None else self.reply_ok
+                if ok is not None:
+                    c.receive_cal_reply(wire.CAL_REPLY.pack(b'DQA1', seq, index, int(ok)))
         bridge.notify.side_effect = notify
         self.feedback(c)
         return c
@@ -70,11 +72,49 @@ class HardwareCalibrationTest(unittest.TestCase):
         self.feedback(c, flags=9)
         c.bridge.notify.reset_mock()
         self.reply_ok = False
-        with self.assertRaisesRegex(ValueError, 'failed at 2048'):
+        with patch('controller.SITTING_CALIBRATION_RETRY_DELAY_S', 0), self.assertRaisesRegex(
+                ValueError, 'failed after 3 retries.*failed at 2048'):
             c.cal_sitting([2048] * 15)
-        c.bridge.notify.assert_called_once()
+        writes = [wire.CAL.unpack(call.args[1])[1:3] for call in c.bridge.notify.call_args_list]
+        self.assertEqual(writes, [(seq, wire.CAL_CENTER_ALL) for seq in range(1, 5)])
         self.assertIsNone(c.cal_expected_index)
         self.assertTrue(c.status()['calibration']['requires_centering'])
+        self.assertFalse((self.data / 'hardware-centers.json').exists())
+
+    def test_sitting_calibration_retries_only_the_failed_phase_and_reports_progress(self):
+        c = self.controller(iter([False, True, None, False, True]))
+        c.set_mode('calibrate')
+        self.feedback(c, flags=9)
+        c.bridge.notify.reset_mock()
+        progress = []
+
+        def refresh_feedback(_delay):
+            progress.append(c.status()['sitting_calibration']['retry'])
+            self.assertIsNotNone(c.cal_expected_index)
+            self.feedback(c, flags=9)
+
+        with patch('controller.time.sleep', side_effect=refresh_feedback), patch(
+                'controller.SITTING_CALIBRATION_ACK_TIMEOUT_S', 0):
+            self.assertTrue(c.cal_sitting([2048] * 15)['ok'])
+        writes = [wire.CAL.unpack_from(call.args[1])[1:3] for call in c.bridge.notify.call_args_list]
+        self.assertEqual(writes, list(enumerate(
+            [wire.CAL_CENTER_ALL] * 2 + [wire.CAL_SET_POSITIONS] * 3, 1)))
+        self.assertEqual(progress, [1, 2, 3])
+        self.assertNotIn('sitting_calibration', c.status())
+        self.assertEqual(c.status()['calibration']['centered_ids'], MOTOR_IDS)
+
+    def test_sitting_calibration_does_not_write_again_after_exit_during_retry_wait(self):
+        c = self.controller(iter([False]))
+        c.set_mode('calibrate')
+        self.feedback(c, flags=9)
+        c.bridge.notify.reset_mock()
+        with patch('controller.time.sleep', side_effect=lambda _: c.set_mode('shadow')):
+            with self.assertRaisesRegex(ValueError, 'calibration session changed'):
+                c.cal_sitting([2048] * 15)
+        ops = [wire.CAL.unpack_from(call.args[1])[2] for call in c.bridge.notify.call_args_list
+               if call.args[0] == 'duck_cal']
+        self.assertEqual(ops, [wire.CAL_CENTER_ALL, wire.CAL_EXIT])
+        self.assertNotIn('sitting_calibration', c.status())
         self.assertFalse((self.data / 'hardware-centers.json').exists())
 
     def test_sitting_calibration_rejects_invalid_targets_and_loaded_or_missing_servos(self):
@@ -86,7 +126,8 @@ class HardwareCalibrationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '15 integer encoder positions'):
                 c.cal_sitting(positions)
         self.feedback(c, flags=9, mask=wire.ALL_MASK ^ 1)
-        with self.assertRaisesRegex(ValueError, '15 servos must be online'):
+        with patch('controller.SITTING_CALIBRATION_RETRY_DELAY_S', 0), self.assertRaisesRegex(
+                ValueError, 'failed after 3 retries.*15 servos must be online'):
             c.cal_sitting([2048] * 15)
         self.feedback(c, flags=9)
         c.cal_done[0] = True
@@ -98,10 +139,10 @@ class HardwareCalibrationTest(unittest.TestCase):
         c = self.controller()
         self.assertTrue(c.status()['calibration']['requires_centering'])
         for mode in ('hold', 'policy'):
-            with self.assertRaisesRegex(ValueError, 'Set center & hold'):
+            with self.assertRaisesRegex(ValueError, '统一标定'):
                 c.set_mode(mode)
         for action in ('sit', 'stand'):
-            with self.assertRaisesRegex(ValueError, 'Set center & hold'):
+            with self.assertRaisesRegex(ValueError, '统一标定'):
                 c.set_sitstand(action)
         self.assertEqual(c.mode, 'shadow')
         access = MotionAccess(c)

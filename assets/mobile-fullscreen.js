@@ -13,9 +13,6 @@
     button.setAttribute('aria-label', action);
     button.setAttribute('title', action);
     button.setAttribute('aria-pressed', String(on));
-    if (!on) {
-      try { screen.orientation?.unlock?.(); } catch {}
-    }
   }
 
   function failed(error) {
@@ -39,8 +36,6 @@
         if (!request) throw Error(t('fullscreenUnsupported', 'This browser does not support fullscreen.'));
         notice.hidden = true;
         await request.call(root, {navigationUI: 'hide'});
-        // Rotation lock is optional; it must never delay further button clicks.
-        try { screen.orientation?.lock?.('landscape')?.catch(() => {}); } catch {}
       }
     } catch (error) {
       failed(error);

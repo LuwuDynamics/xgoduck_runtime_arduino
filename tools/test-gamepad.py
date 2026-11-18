@@ -12,11 +12,12 @@ from unittest.mock import Mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT/'python'), str(ROOT/'tools/gamepad')]
 from input_reader import normalize, is_gamepad
+from duck_sound import KINDS
 # Avoid FastAPI/httpx dependencies for local tests; exercise actual control code.
 source = ast.parse((ROOT/'python/gamepad.py').read_text())
 nodes = [n for n in source.body if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and n.name in ('motion_from_input','GamepadControl')]
 nodes += [n for n in source.body if isinstance(n, ast.Assign)]
-ns = dict(time=time, threading=threading, json=json, Path=Path)
+ns = dict(time=time, threading=threading, json=json, Path=Path, KINDS=KINDS)
 exec(compile(ast.Module(body=nodes, type_ignores=[]), 'gamepad.py', 'exec'), ns)
 GamepadControl, motion = ns['GamepadControl'], ns['motion_from_input']
 
@@ -26,6 +27,8 @@ class GamepadTest(unittest.TestCase):
         self.c = Mock(lock=threading.RLock(), mode='off', input_source='gamepad')
         self.c.battery_phase, self.c.generation = 'normal', 0
         self.c.fault_hold = False
+        self.c.bridge_recovery = None
+        self.c._motion_needs_neutral = set()
         self.c.roller_mode = False
         self.c._imu_job = {'active': False}
         self.c.sitstand_phase, self.c.kick_until = 'idle', 0.
@@ -39,6 +42,9 @@ class GamepadTest(unittest.TestCase):
         self.g.learning = None
         self.g.binding_message = ''
         self.g.enabled, self.g.identity, self.g.buttons, self.g.error = True, 'pad1', {}, ''
+        self.g.play_sound = Mock()
+        self.g.sound_error = ''
+        self.g._sound_worker = None
         self.data = dict(connected=True, stamp=time.monotonic(), id='pad1',
             axes=dict(lx=0, ly=-1, rx=.5, ry=0), buttons=dict(lb=False))
 
@@ -140,17 +146,18 @@ class GamepadTest(unittest.TestCase):
         self.g.configure(dict(operation='learn', action=action))
 
     def test_learning_short_press_persists_without_motion(self):
-        self.learn()
+        self.learn('sit')
         self.data['button_presses'] = {'west': 1}
         self.g.consume(self.data)
         self.assertIsNone(self.g.learning)
-        self.assertEqual(self.g.bindings['pick'], 'west')
-        self.assertEqual(json.loads(self.g.bindings_path.read_text())['pick'], 'west')
+        self.assertEqual(self.g.bindings['sit'], 'west')
+        self.assertEqual(json.loads(self.g.bindings_path.read_text())['sit'], 'west')
+        self.c.set_sitstand.assert_not_called()
         self.c.set_mode.assert_not_called()
         self.c.command.assert_not_called()
         with unittest.mock.patch.object(threading.Thread, 'start'):
             loaded = GamepadControl(self.c, Mock(), self.g.bindings_path)
-        self.assertEqual(loaded.bindings['pick'], 'west')
+        self.assertEqual(loaded.bindings['sit'], 'west')
 
     def test_learning_waits_for_release_and_rejects_duplicate(self):
         self.data['buttons']['east'] = True
@@ -203,6 +210,91 @@ class GamepadTest(unittest.TestCase):
         self.data['buttons'] = {'rb':True,'start':True}
         self.g.consume(self.data)
         self.c.set_mode.assert_called_once_with('off')
+
+    def test_legacy_file_keeps_custom_bindings_without_assigning_new_actions(self):
+        saved = dict(walk='rb', hold=None, off='south', pick='west', roulade='north')
+        self.g.bindings_path.write_text(json.dumps(saved))
+        with unittest.mock.patch.object(threading.Thread, 'start'):
+            loaded = GamepadControl(self.c, Mock(), self.g.bindings_path)
+        expected = dict(saved, sit=None, roller=None, left_kick=None, right_kick=None) | dict.fromkeys(ns['SOUND_BINDINGS'])
+        self.assertEqual(loaded.bindings, expected)
+        self.assertEqual(loaded.binding_message, '')
+        self.assertEqual(json.loads(self.g.bindings_path.read_text()), saved)
+
+    def test_sit_then_walk_stands_from_the_seated_pose(self):
+        self.g.bindings['sit'] = 'north'
+        self.c.mode = 'policy'
+        self.c.feedback = Mock(enabled=True)
+        self.g.consume(dict(self.data, buttons={'north':True}))
+        self.c.set_sitstand.assert_called_once_with('sit')
+        self.c.sitstand_phase = 'sit'
+        self.g.consume(dict(self.data, buttons={'start':True}))
+        self.c.set_sitstand.assert_called_with('stand')
+        self.c.set_mode.assert_not_called()
+
+    def test_kick_sides_and_stop_priority(self):
+        self.g.bindings.update(left_kick='left', right_kick='right')
+        self.c.mode = 'policy'
+        self.c.feedback = Mock(enabled=True)
+        self.g.consume(dict(self.data, buttons={'left':True}))
+        self.c.start_kick.assert_called_once_with('left')
+        self.g.consume(dict(self.data, buttons={'right':True}))
+        self.c.start_kick.assert_called_with('right')
+        self.g.consume(dict(self.data, buttons={'left':True, 'east':True}))
+        self.assertEqual(self.c.start_kick.call_count, 2)
+        self.c.set_mode.assert_called_once_with('off')
+
+    def test_rejected_sit_stays_visible_until_the_next_accepted_action(self):
+        self.g.bindings['sit'] = 'north'
+        self.c.feedback = Mock(enabled=False)
+        self.g.consume(dict(self.data, buttons={'north':True}))
+        self.c.set_sitstand.assert_not_called()
+        self.g.consume(self.data)
+        self.assertEqual(self.g.status()['error'], 'Stand Duck up before using this action.')
+        self.g.consume(dict(self.data, buttons={'east':True}))
+        self.assertEqual(self.g.status()['error'], '')
+
+    def test_roller_toggles_once_per_press_and_waits_for_neutral(self):
+        self.g.bindings['roller'] = 'lb'
+        self.c.set_roller_mode.side_effect = lambda enabled: setattr(self.c, 'roller_mode', enabled)
+        moving = dict(self.data, buttons={'lb':True})
+        self.g.consume(moving)
+        self.g.consume(moving)
+        self.c.set_roller_mode.assert_called_once_with(True)
+        self.c.command.assert_not_called()
+        self.assertTrue(self.g.status()['roller_mode'])
+        self.g.consume(dict(self.data, axes={axis:0 for axis in self.data['axes']}))
+        self.g.consume(moving)
+        self.c.set_roller_mode.assert_called_with(False)
+        self.assertFalse(self.g.status()['roller_mode'])
+        self.c.set_mode.assert_not_called()
+
+    def test_duck_call_plays_once_and_does_not_block_motion_or_torque_off(self):
+        self.g.bindings.update(duck_greet='up', duck_alarm='down')
+        started = threading.Event()
+        finish = threading.Event()
+
+        def play(_kind):
+            started.set()
+            finish.wait(2)
+
+        self.g.play_sound.side_effect = play
+        greet = dict(self.data, buttons={'up': True})
+        self.g.consume(greet)
+        try:
+            self.assertTrue(started.wait(1))
+            self.g.consume(greet)
+            self.g.consume(dict(self.data, buttons={'down': True}))
+            self.g.play_sound.assert_called_once_with('greet')
+            self.assertEqual(self.c.command.call_count, 3)
+            self.c.set_mode.assert_not_called()
+            self.assertTrue(self.g._sound_worker.is_alive())
+            self.g.consume(dict(self.data, buttons={'east': True, 'up': True}))
+            self.c.set_mode.assert_called_once_with('off')
+        finally:
+            finish.set()
+            self.g._sound_worker.join(1)
+        self.g.play_sound.assert_called_once_with('greet')
 
 
 if __name__=='__main__': unittest.main()

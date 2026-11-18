@@ -79,8 +79,8 @@ class AppController(Controller):
 
     def _center_message(self):
         remaining = [sid for sid in MOTOR_IDS if sid not in self._centered_ids]
-        return ('旧版软件零位不能直接用于当前硬件中点协议。请先在 9527 校准页将各关节'
-                '手动摆到机械中点，再逐个点击 Set center & hold；尚未完成的 ID：'
+        return ('旧版软件零位不能直接用于当前硬件中点协议。请在 9527 的标定页按参考图'
+                '完成 15 个舵机的统一标定；尚未完成的 ID：'
                 + ', '.join(map(str, remaining)) + '。原零位文件已保留，不会自动套用。')
 
     def set_mode(self, mode):

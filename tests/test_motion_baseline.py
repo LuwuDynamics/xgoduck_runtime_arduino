@@ -1,5 +1,6 @@
 """Exercise the pinned upstream motion stack through the AI boundary without physical I/O."""
 import ast
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import importlib.util
 import json
@@ -7,6 +8,7 @@ import math
 from pathlib import Path
 import sys
 import tempfile
+from threading import Event
 import unittest
 from unittest.mock import Mock, patch
 
@@ -15,7 +17,7 @@ sys.path.insert(0, str(ROOT / 'python'))
 import controller
 import wire
 from motion_access import MotionAccess
-from rl_core import DEFAULT_DEG
+from rl_core import DEFAULT_DEG, MOTOR_IDS
 
 
 def method_sha256(node):
@@ -58,6 +60,9 @@ class BaselineTest(unittest.TestCase):
         for overlay in manifest['sketch'].get('transport_overlays', []):
             self.assertEqual(source.count(overlay['integrated']), 1)
             source = source.replace(overlay['integrated'], overlay['upstream'])
+        display = manifest['sketch']['startup_display_overlay']
+        self.assertEqual(source.count(display['integrated']), 1)
+        source = source.replace(display['integrated'], display['upstream'])
         for overlay in manifest['mcu_compatibility']['battery_overlays']:
             self.assertEqual(source.count(overlay['integrated']), 1)
             source = source.replace(overlay['integrated'], overlay['upstream'])
@@ -110,7 +115,7 @@ class BaselineTest(unittest.TestCase):
             task = task.replace(overlay['integrated'], overlay['upstream'])
         self.assertEqual(hashlib.sha256(task.encode()).hexdigest(), manifest['normal_control_task_sha256'])
 
-    def make_motion(self, enabled, synchronized_clock=False):
+    def make_motion(self, enabled, synchronized_clock=False, *, mask=wire.ALL_MASK):
         self.now, self.seq = 20., 0
         if synchronized_clock:
             timer = patch('controller.time.monotonic', side_effect=lambda: self.now)
@@ -118,15 +123,19 @@ class BaselineTest(unittest.TestCase):
             self.addCleanup(timer.stop)
         self.c = controller.Controller(Mock())  # Actual five ONNX sessions.
         self.access = MotionAccess(self.c, clock=lambda: self.now)
-        self.feedback(enabled)
+        self.feedback(enabled, mask=mask)
         self.access.heartbeat(101)
 
-    def feedback(self, enabled=True):
+    def feedback(self, enabled=True, *, mask=wire.ALL_MASK, servo_debug=False,
+                 command_seq=None, command_age_us=0, targets=DEFAULT_DEG,
+                 angles=DEFAULT_DEG, sample_us=None):
         self.seq += 1
-        sample = self.seq * 10000
-        raw = wire.STATE.pack(b'DQS1', 1, 3 if enabled else 1, wire.ALL_MASK,
-            self.seq, sample, sample, self.c.seq, 0, 10000, 500, 0, 0, 0,
-            0, 0, -16384, 0, 0, 0, *DEFAULT_DEG, *([0.] * 15), *DEFAULT_DEG)
+        sample = self.seq * 10000 if sample_us is None else sample_us
+        flags = 1 | (2 if enabled else 0) | (16 if servo_debug else 0)
+        raw = wire.STATE.pack(b'DQS1', 1, flags, mask,
+            self.seq, sample, sample, self.c.seq if command_seq is None else command_seq,
+            command_age_us, 10000, 500, 0, 0, 0,
+            0, 0, -16384, 0, 0, 0, *angles, *([0.] * 15), *targets)
         self.c.receive(raw)
 
     def battery_tick(self, millivolts, *, enabled=True, elapsed=.125):
@@ -134,6 +143,94 @@ class BaselineTest(unittest.TestCase):
         self.feedback(enabled)
         self.c.receive_diagnostics(wire.DIAGNOSTIC_V2.pack(b'DQD2', *([0] * 16), millivolts))
         self.c.step()
+
+    def test_servo_test_stop_cancels_pending_move_and_requires_matching_torque_readback(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.c.set_mode('servo_debug')
+        self.feedback(enabled=False, servo_debug=True)
+        target_id, session = 12, 42
+        self.c.guarded_servo_test = (target_id, session)
+        move_sent = Event()
+        torque_off = False
+
+        def notify(name, payload):
+            self.assertEqual(name, 'duck_servo')
+            _, op, sid, _, _, _, _, sid_session = wire.SERVO.unpack(payload)
+            self.assertEqual((sid, sid_session), (target_id, session))
+            if op == wire.SERVO_TEST_MOVE:
+                move_sent.set()
+                return
+            self.assertEqual(op, wire.SERVO_TEST_STOP)
+            self.c.receive_servo_reply(wire.SERVO_REPLY.pack(b'DQS3', op, sid, 1, 1, 0, session + 1, 0, 0))
+            self.assertFalse(self.c.servo_reply_event.is_set())
+            self.c.receive_servo_reply(wire.SERVO_REPLY.pack(b'DQS3', op, sid, 1, torque_off, 0, session, 0, 0))
+
+        self.c.bridge.notify.side_effect = notify
+        with ThreadPoolExecutor(max_workers=1) as worker:
+            move = worker.submit(self.c.servo_test, 'move', target_id, session, 30)
+            self.assertTrue(move_sent.wait(1))
+            with self.assertRaisesRegex(ValueError, 'did not confirm that torque is off'):
+                self.c.servo_test('stop', target_id, session)
+            with self.assertRaisesRegex(ValueError, 'angle update cancelled'):
+                move.result(timeout=1)
+        torque_off = True
+        reply = self.c.servo_test('stop', target_id, session)
+        self.assertTrue(reply['torque_off'])
+        self.assertIsNone(self.c.guarded_servo_test)
+
+    def test_calibration_pose_uses_hold_and_disarms_when_its_heartbeat_expires(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.access.web_mode('calibrate')
+        self.c.cal_done[2] = True
+        self.c.bridge.notify.reset_mock()
+        self.assertEqual(self.access.start_calibration_pose(), {'mode': 'hold'})
+        cal_frames = [wire.CAL.unpack(call.args[1])[2]
+                      for call in self.c.bridge.notify.call_args_list if call.args[0] == 'duck_cal']
+        self.assertEqual(cal_frames, [wire.CAL_EXIT])
+        self.assertFalse(any(self.c.cal_done))
+        self.c.step()
+        self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.ARM)
+        self.feedback()
+        self.c.step()
+        target = wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])
+        self.assertEqual(target[4], wire.HOLD)
+        self.assertEqual(list(target[7:]), self.c.policy.default_deg)
+        targets_by_id = dict(zip(MOTOR_IDS, target[7:]))
+        self.assertEqual([targets_by_id[sid] for sid in (13, 14, 23, 24)],
+                         [-2.0, 20.0, 2.0, -20.0])
+        self.now += 1.5
+        self.feedback()
+        self.assertEqual(self.access.renew_calibration_pose(), {'ok': True})
+        self.now += 1.75
+        self.feedback()
+        self.access.tick()
+        self.assertEqual(self.c.mode, 'hold')
+        self.now += .5
+        self.feedback()
+        with self.assertRaisesRegex(ValueError, 'test has ended'):
+            self.access.renew_calibration_pose()
+        self.access.tick()
+        self.assertEqual(self.c.mode, 'shadow')
+        self.c.step()
+        self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
+
+    def test_calibration_pose_needs_full_feedback_and_manual_hold_drops_its_lease(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.access.web_mode('calibrate')
+        self.feedback(enabled=False, mask=wire.ALL_MASK & ~(1 << 2))
+        with self.assertRaisesRegex(ValueError, 'All 15 servos'):
+            self.access.start_calibration_pose()
+        self.assertEqual(self.c.mode, 'calibrate')
+        self.feedback(enabled=False)
+        self.access.start_calibration_pose()
+        self.feedback()
+        self.access.web_mode('hold')
+        self.now += 3.
+        self.feedback()
+        self.access.tick()
+        self.assertEqual(self.c.mode, 'hold')
+        with self.assertRaisesRegex(ValueError, 'test has ended'):
+            self.access.renew_calibration_pose()
 
     def test_feedback_pause_preserves_torque_and_resumes_original_mode(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -160,7 +257,70 @@ class BaselineTest(unittest.TestCase):
                 self.assertFalse(self.c.fault_hold)
                 self.assertEqual(self.c.last_error, '')
                 self.assertEqual(self.c.twist, [0., 0., 0.])
+                self.assertIn('ignored', self.c.command(twist=[.1, 0., 0.]))
+                self.c.command(twist=[0., 0., 0.])
                 self.assertEqual(self.c.command(twist=[.1, 0., 0.]), {'ok': True})
+
+    def test_live_feedback_with_a_frozen_command_echo_only_sends_retained_targets(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.command(twist=[.1, 0., 0.])
+        self.c.step()
+        accepted = self.c.seq
+        targets = [17.] * 15
+        for tick in range(1, 43):
+            self.now += .025
+            self.feedback(command_seq=accepted, command_age_us=tick * 25000, targets=targets)
+            self.c.step()
+            if tick == 8:
+                self.c.bridge.notify.reset_mock()
+        self.assertEqual(self.c.bridge_stall(), 'command')
+        self.assertTrue(self.c.fault_hold)
+        self.assertEqual(self.c.twist, [0.] * 3)
+        self.assertGreater(self.c.bridge.notify.call_count, 1)
+        for call in self.c.bridge.notify.call_args_list:
+            packet = wire.COMMAND.unpack(call.args[1])
+            self.assertEqual(packet[4], wire.HOLD)
+            self.assertEqual(packet[7:], tuple(targets))
+
+        self.feedback(command_seq=accepted)  # A fresh state alone is insufficient.
+        self.c.step()
+        self.assertEqual(self.c.status()['bridge_recovery'], 'command')
+        self.feedback(command_seq=self.c.seq, targets=targets)
+        self.c.step()
+        self.c.step()
+        self.assertIsNone(self.c.status()['bridge_recovery'])
+        self.assertFalse(self.c.fault_hold)
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertEqual(self.c.twist, [0.] * 3)
+
+    def test_soft_reconnect_never_arms_after_the_mcu_unloaded(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('hold')
+        self.c.step()
+        self.now += 1.01
+        self.assertEqual(self.c.bridge_stall(), 'feedback')
+        self.c.bridge.notify.reset_mock()
+        self.c.step()
+        self.c.bridge.notify.assert_not_called()
+
+        self.feedback(enabled=False)
+        with self.assertRaisesRegex(ValueError, 'Bridge is reconnecting'):
+            self.c.set_mode('policy')
+        self.c.step()
+        self.feedback(enabled=False)
+        self.c.step()
+        self.assertIsNone(self.c.status()['bridge_recovery'])
+        self.assertEqual(self.c.mode, 'shadow')
+        self.assertEqual({wire.COMMAND.unpack(call.args[1])[4]
+                          for call in self.c.bridge.notify.call_args_list}, {wire.DISARM})
+
+    def test_no_command_stall_when_the_controller_is_not_transmitting(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.c.step()
+        self.now += 1.01
+        self.feedback(enabled=False, command_seq=0, command_age_us=0xffffffff)
+        self.assertIsNone(self.c.bridge_stall())
 
     def test_feedback_pause_preserves_sitting_and_cancels_queued_stand(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -199,34 +359,42 @@ class BaselineTest(unittest.TestCase):
         self.c.set_mode('policy')
         self.c.battery_warning = Mock()
         with patch('controller.threading.Thread') as audio:
-            for _ in range(40):
+            for _ in range(41):
                 self.battery_tick(6000)
-            self.assertEqual(self.c.status()['battery'], dict(voltage_v=6.0, low=False, phase='normal'))
-            self.battery_tick(6001)
+            self.assertEqual(self.c.status()['battery'],
+                             dict(voltage_v=6.0, below_threshold=False, low=False, phase='normal'))
+            self.assertIsNone(self.c.battery_since)
+            for _ in range(8):
+                self.battery_tick(5900)
+            self.assertIsNotNone(self.c.battery_since)
+            self.battery_tick(6000)
             self.assertIsNone(self.c.battery_since)
             for _ in range(40):
-                self.battery_tick(6000)
-            self.assertEqual(self.c.battery_phase, 'normal')
-            self.battery_tick(6000)
+                self.battery_tick(5900)
+            self.assertEqual(self.c.status()['battery'],
+                             dict(voltage_v=5.9, below_threshold=True, low=False, phase='normal'))
+            self.battery_tick(5900)
             self.assertEqual(self.c.battery_phase, 'warning')
             audio.assert_called_once_with(target=self.c._play_battery_warning,
                                           args=(self.c.battery_warning_done,),
                                           name='battery-warning', daemon=True)
-            self.assertEqual(self.c.status()['battery'], dict(voltage_v=6.0, low=True, phase='warning'))
+            self.assertEqual(self.c.status()['battery'],
+                             dict(voltage_v=5.9, below_threshold=True, low=True, phase='warning'))
             with self.assertRaisesRegex(ValueError, 'Low battery'):
                 self.c.set_mode('hold')
             for _ in range(64):
-                self.battery_tick(6000)
+                self.battery_tick(5900)
             self.assertEqual(self.c.battery_phase, 'warning')
             self.assertEqual(self.c.sitstand_phase, 'idle')
             self.c._play_battery_warning(self.c.battery_warning_done)
             self.c.battery_warning.assert_called_once_with()
-            self.battery_tick(6000)
+            self.battery_tick(5900)
             self.assertEqual(self.c.battery_phase, 'locked')
             self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
             for _ in range(20):
                 self.battery_tick(7500, enabled=False)
-            self.assertEqual(self.c.battery_phase, 'locked')
+            self.assertEqual(self.c.status()['battery'],
+                             dict(voltage_v=7.5, below_threshold=False, low=True, phase='locked'))
             for _ in range(17):
                 self.battery_tick(7600, enabled=False)
             self.assertEqual(self.c.battery_phase, 'normal')
@@ -239,20 +407,21 @@ class BaselineTest(unittest.TestCase):
         self.c.battery_warning = Mock()
         with patch('controller.threading.Thread'):
             for _ in range(41):
-                self.battery_tick(6000)
+                self.battery_tick(5900)
             self.assertEqual(self.c.battery_phase, 'warning')
             self.assertFalse(self.c.battery_warning_done.is_set())
             for _ in range(int(controller.BATTERY_WARNING_TIMEOUT_S / .125)):
-                self.battery_tick(6000)
+                self.battery_tick(5900)
         self.assertEqual(self.c.battery_phase, 'locked')
         self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
 
     def test_battery_does_not_arm_unpowered_servos_and_ignores_missing_voltage(self):
         self.make_motion(enabled=False, synchronized_clock=True)
         self.c.receive_diagnostics(wire.DIAGNOSTIC.pack(b'DQD1', *([0] * 16)))
-        self.assertIsNone(self.c.status()['battery']['voltage_v'])
+        self.assertEqual(self.c.status()['battery'],
+                         dict(voltage_v=None, below_threshold=False, low=False, phase='normal'))
         for _ in range(41):
-            self.battery_tick(6000, enabled=False)
+            self.battery_tick(5900, enabled=False)
         self.assertEqual(self.c.battery_phase, 'locked')
         self.assertEqual(self.c.sitstand_phase, 'idle')
         self.assertTrue(self.c.bridge.notify.call_args_list)
@@ -271,6 +440,78 @@ class BaselineTest(unittest.TestCase):
         self.c.step()
         self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.POLICY)
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+
+    def test_stand_tolerates_fifteen_missed_feedback_frames_for_one_servo(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        index = controller.MOTOR_IDS.index(22)
+        missing_22 = wire.ALL_MASK ^ (1 << index)
+        missing_21_and_22 = missing_22 ^ (1 << controller.MOTOR_IDS.index(21))
+        start = self.now
+        for missed in range(1, 16):
+            self.now = start + missed / 100
+            self.feedback(enabled=False, mask=missing_22 if missed <= 8 else missing_21_and_22)
+            status = self.c.status()
+            self.assertNotIn(22, status['servo_ids'])
+            self.assertIn(22, status['motion_servo_ids'])
+            self.assertFalse(status['full_robot_ready'])
+        self.c.bridge.notify.assert_not_called()
+        self.assertEqual(self.access.start_action(kind='stand', session=101)['status'], 'accepted')
+        self.c.step()
+        command = wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])
+        self.assertEqual(command[4], wire.ARM)
+        self.assertAlmostEqual(command[7 + index], DEFAULT_DEG[index])
+
+        self.now = start + .16
+        self.feedback(enabled=True, mask=missing_21_and_22)
+        status = self.c.status()
+        self.assertIn(21, status['motion_servo_ids'])
+        with self.assertRaisesRegex(ValueError, '22 号舵机'):
+            self.access._require_feedback(status)
+
+        self.now += .01
+        angles = list(DEFAULT_DEG)
+        angles[index] = 12.5
+        self.feedback(enabled=True, mask=wire.ALL_MASK, angles=angles)
+        status = self.c.status()
+        self.assertEqual(status['angles'][index], 12.5)
+        self.assertTrue(status['full_robot_ready'])
+        self.assertIn(22, status['motion_servo_ids'])
+
+    def test_motion_feedback_window_expires_on_time_gap_or_mcu_restart(self):
+        mask = wire.ALL_MASK ^ (1 << controller.MOTOR_IDS.index(22))
+        self.make_motion(enabled=False, synchronized_clock=True, mask=mask)
+        self.assertNotIn(22, self.c.status()['motion_servo_ids'])
+
+        self.now += .01
+        self.feedback(enabled=False)
+        self.now += .10
+        self.feedback(enabled=False, mask=mask)
+        self.assertIn(22, self.c.status()['motion_servo_ids'])
+        self.now += .051
+        self.assertNotIn(22, self.c.status()['motion_servo_ids'])
+
+        self.now += .01
+        self.feedback(enabled=False, sample_us=100_000)
+        self.now += .01
+        self.feedback(enabled=False, mask=mask, sample_us=250_001)
+        self.assertNotIn(22, self.c.status()['motion_servo_ids'])
+
+        self.now += .01
+        self.feedback(enabled=False, sample_us=260_000)
+        self.seq += 15  # Dropped Bridge packets still count toward the frame window.
+        self.now += .12
+        self.feedback(enabled=False, mask=mask, sample_us=380_000)
+        self.assertNotIn(22, self.c.status()['motion_servo_ids'])
+
+        self.now += .01
+        self.feedback(enabled=False, sample_us=390_000)
+        self.now += .01
+        self.feedback(enabled=False, mask=mask, sample_us=400_000)
+        self.assertIn(22, self.c.status()['motion_servo_ids'])
+        self.seq -= 2  # The new stream can reuse a sequence and timestamp.
+        self.now += .01
+        self.feedback(enabled=False, mask=mask, sample_us=390_000)
+        self.assertNotIn(22, self.c.status()['motion_servo_ids'])
 
     def test_ten_second_voice_move_uses_walk_and_stops_inputs_on_deadline(self):
         # Advance the controller's input timeout and the voice lease together.

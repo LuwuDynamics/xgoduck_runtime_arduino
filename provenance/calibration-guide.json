@@ -1,5 +1,5 @@
 {
-  "scope": "Calibration page and its static references for unified and individual joint calibration.",
+  "scope": "Unified calibration page, its reference photos, and shared servo setup diagrams.",
   "assembly_photo": {
     "page": "https://www.xgorobot.com/duck-developer-guide/06-assembly.html",
     "image": "https://www.xgorobot.com/duck-developer-guide/assets/06-assembly-01.png",
@@ -30,6 +30,11 @@
     },
     "description": "Original white servo ID tags are retained. Neck/head crops are joined with a 20-pixel gap. The page dims the opposite leg; no generated identification tags replace the photo labels."
   },
+  "joint_reference_photos": {
+    "source": "User-supplied calibration photographs",
+    "12": {"side": "left", "asset": "assets/cal-photo-12.jpg"},
+    "22": {"side": "right", "asset": "assets/cal-photo-22.jpg"}
+  },
   "calibration_guide": "https://www.xgorobot.com/duck-developer-guide/07-calibration-control.html",
   "urdf": {
     "repository": "https://github.com/LuwuDynamics/xgoduck_rl",
@@ -53,7 +58,7 @@
       "assets/right_knee.stl": "644e3fcc3b9b4815f8a5185aa2c4597cc54afcfdc876e42d5f9f04c0838c830d",
       "assets/trunk_base.stl": "7df63591596f4cf627c80e78ac5e37dff889c67f63c9f2a726e61899d3c358c3"
     },
-    "pose": "All 14 articulated URDF joints at zero. The hip-pitch upper link is horizontal in the side view; the lower-leg link is vertical. Reference geometry must be checked against actual assembly.",
+    "pose": "All 14 articulated URDF joints at zero. ID 12 uses the unmirrored left profile with the fitted hip cover, matching the photo orientation. The horizontal guide marks the top of the cover, and the vertical guide follows the lower leg.",
     "mouth": "ID 34 has no articulated jaw in the URDF. Its picture marks the closed-mouth reference on the head mesh; it is not a simulated jaw joint."
   },
   "canonical_motor_ids": [
@@ -74,17 +79,21 @@
     34
   ],
   "sha256": {
-    "assets/calibrate.html": "f5e724556e6194eadadd0aeeaace436b80fb961f51bd9b0c43cf331c5c40fde5",
-    "assets/calibrate.js": "66f4d5481f021b209ea51127066667ab1c8793781e236703c191015910c99709",
-    "assets/calibrate.css": "5a5d3d271a076e333f6ba099cefcb61106bebe5189f9f639cf926ae761efcbfe",
-    "assets/calibrate-joints.json": "374301c5c61b45323a86feabae9c9df3b7a74c76e92b06632104b8d82b6de533",
+    "assets/calibrate.html": "1afa371b9711fe28fe7e4c698da557ae8f438c99d0ef5f5d6f968b2ed4b3e4dd",
+    "assets/calibrate.js": "37e9ba5d5b1c8f214ac025310c899073ab76bfe21059ac0d08a3bce1c4a1e4b1",
+    "assets/calibrate.css": "c07b331280520102e5ad03d2e2f0c7db4944380e3363575c908f82174810b9b9",
+    "assets/imu-calibration-pose.png": "eb0415f86555cab9fb6f70d017b55aff6ad9dc6ec8e81775bac0a20177ff1da5",
+    "assets/calibrate-joints.json": "78059f090b2f869203306a264dc8aef5242c71e4cbacf3a3c1acb929e1730989",
     "assets/cal-photo-head.webp": "f5462e5783a75c89bcfa83109d11d281164de49df29e01a6811064342b591909",
     "assets/cal-photo-legs.webp": "973617f39f5046f4b1b9f1f908b6f9bf496d5ee0ad5a25335e5b51d4b6f1866b",
-    "tools/make-calibration-art.py": "3fd1f4c09fe30f4a7d45a35a05c654c33f9e019ea30da05b1e78cfd1f0256681",
+    "assets/cal-photo-12.jpg": "3864aab2e85a8084460ef51b50ddf4b3457beae583731ad7bd81ff943c296c4a",
+    "assets/cal-photo-22.jpg": "e1900387f13203f9d8dbbd84d7ff85068405b75749ef6e51f05c4e15bc97f180",
+    "assets/cal-default-pose.jpg": "7838aefc056fc6ab849ed8ae29ebc46f69a3b2a319a2f664c061508f098c4429",
+    "tools/make-calibration-art.py": "7592e6173a299a7d59af00e3c77ec90da35adfad02fd17650469bb55cba18056",
     "tools/make-calibration-photos.py": "66923de6baae9411a752299c2f02594fd21d61f350feb5415b335c39fa701336",
     "assets/cal-10-pose.svg": "da0c61d1d83105869690a593fc9526936263cb0254a61e7f03c1e33f64523bce",
     "assets/cal-11-pose.svg": "455a2ec52f0e8d3ed97d8147ad06a80d009e117bd5617c8000611a120f9221c3",
-    "assets/cal-12-pose.svg": "d478ed4994279b0874d0ee2694f978d5396bbeda364bc27b0dd2f16e91c34879",
+    "assets/cal-12-pose.svg": "82ef4e25fe0f3cfa62e2a3e1ee683ce54d6e4df5439832a8fb3d07f7b6ea84fb",
     "assets/cal-13-pose.svg": "2bb074dd680c29cacb1a5e44c75a43cfcaf30032dab790f704069f005e254d26",
     "assets/cal-14-pose.svg": "13aaf5e042b776bcf3232249da06fb9891b12337b99c4c37efb617bfc49cefbb",
     "assets/cal-20-pose.svg": "2dc19dabee917ebecf085bb94ffc25d26e88f668c84278db9d051cf316910555",
@@ -102,15 +111,21 @@
     "assets/cal-unified-3.png": "dddb7e312aff1febcd1810474771547fa66e2f995f8a025c2d2a7ac330500513",
     "assets/cal-unified-4.png": "e0a1812aba5126aa26784332adbf50a8644804aeae5656dc848ff3548fbc767c"
   },
-  "ui_status": "Center set / 已设中位 confirms calibration, not physical torque or holding. The existing MCU enable/goal sequence is unchanged; no torque register readback is inferred from its acknowledgement.",
+  "ui_status": "All 15 servo centers saved requires acknowledgements for both writes. The calibration leaves the servos unloaded.",
+  "default_pose_test": {
+    "asset": "assets/cal-default-pose.jpg",
+    "source": "User-supplied reference photo, identical to docs/images/default-pose-reference.jpg",
+    "endpoint": "/api/cal/default-pose",
+    "workflow": "Exit calibration, enter Hold using the existing mode transition and show enable status for visual comparison. The test uses a two-second heartbeat. Unloading, exit or expiration ends the test."
+  },
   "imu_section": {
-    "image": "assets/imu-calibration-pose.png",
     "endpoint": "/api/imu-calibration",
-    "position": "After servo calibration in both methods",
-    "workflow": "Start the existing standing IMU sample after unloading. Display the result from status and pause servo centering while sampling."
+    "position": "Step 2, after unified servo calibration",
+    "workflow": "Start the standing IMU sample with the servos unloaded and display the result from status.",
+    "reference_image": "assets/imu-calibration-pose.png"
   },
   "unified_reference_photos": {
-    "source": "User-supplied reference photographs",
+    "source": "https://github.com/LuwuDynamics/xgoduck_runtime_arduino/commit/05b83cf927a4501a05cdf1d77b894418972dddb3",
     "files": [
       "assets/cal-unified-1.png",
       "assets/cal-unified-2.png",

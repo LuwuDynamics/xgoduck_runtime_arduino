@@ -2,6 +2,7 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=overcurrent-check">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
+<link rel="stylesheet" href="remote-control-notice.css">
 <main>
 <header>
   <div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div>
@@ -12,7 +13,8 @@
       <a href="/servo.html" data-zh="舵机设置">Servo setup</a>
       <a id="cockpit-link" href="/mobile.html" data-zh="语音交互驾驶舱">Cockpit</a>
       <a href="https://github.com/LuwuDynamics/xgoduck_runtime_arduino" target="_blank" rel="noopener noreferrer">GitHub</a>
-      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer">Wiki</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck" target="_blank" rel="noopener noreferrer">Wiki</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer" data-zh="常见问题">FAQ</a>
     </nav>
     <button id="language" type="button">中文</button>
     <button class="stop" id="stop" data-zh="舵机卸力">Torque off</button>
@@ -38,8 +40,8 @@
       <div class="walking-help-body">
         <p data-zh="如果小鸭走不稳或发抖，先停止移动并扶稳小鸭。">If Duck shakes or walks unsteadily, stop moving and support it.</p>
         <ol>
-          <li><strong data-zh="检查舵机安装">Check servo installation</strong><p data-zh="卸力后按编号图核对每个舵机的 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。">Release servo torque, then check each servo's ID, mounting position and order against the diagrams. Check the servo horns and retaining screws for looseness.</p></li>
-          <li><a href="/calibrate.html" data-zh="打开标定">Open Calibration</a><p data-zh="先标定 IMU，再按参考图重新标定全部 15 个舵机。">Recalibrate the IMU first, then use the reference images to recalibrate all 15 servos.</p></li>
+          <li><strong data-zh="检查舵机安装">Check servo installation</strong><p data-zh="卸力后，在舵机设置的单舵机安装检查中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。">Release servo torque, then use the single-servo test in Servo setup to check IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.</p></li>
+          <li><a href="/calibrate.html" data-zh="打开标定">Open Calibration</a><p data-zh="先按参考图统一标定 15 个舵机，再标定 IMU，最后检查默认姿势。">Use the reference photos to calibrate all 15 servos, then calibrate the IMU and check the default pose.</p></li>
           <li><a href="/servo.html" data-zh="打开舵机设置">Open Servo setup</a><p data-zh="扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。">Scan all IDs. Set KP to 5 and KD to 10 on each servo, then read back the saved and runtime values. Power-cycling reloads the saved values.</p></li>
         </ol>
       </div>
@@ -80,4 +82,4 @@
     </figure>
   </div>
 </section>
-</main><script src="panel-language.js"></script><script src="app.js?v=overcurrent-check"></script></html>
+</main><script src="panel-language.js"></script><script src="remote-control-notice.js"></script><script src="app.js?v=rear-cover-notice"></script></html>

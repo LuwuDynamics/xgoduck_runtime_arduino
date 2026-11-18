@@ -2,6 +2,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const t = window.DuckI18n.t;
+  const allowRemote = () => window.DuckRemoteNotice?.allow() !== false;
   const controllerId = Array.from(crypto.getRandomValues(new Uint8Array(12)),
     value => value.toString(16).padStart(2, '0')).join('');
   const actions = [...document.querySelectorAll('[data-motion]')];
@@ -13,8 +14,10 @@
   });
   const driveKeys = new Set(['KeyW','KeyA','KeyS','KeyD','KeyQ','KeyE']);
   const heldKeys = new Set();
-  const portraitPhone = window.matchMedia('(orientation:portrait) and (pointer:coarse) and (max-width:600px)');
+  const portraitOrientation = window.matchMedia('(orientation: portrait)');
+  const rollerSwitch = $('rollerMode');
   let robot = null, gamepadActive = false, sequence = 0, gesture = null, pending = null, notice = null, noticeTimer;
+  let rollerBusy = false, rollerRevision = 0;
   const deadzone = value => Math.abs(value) <= .15 ? 0 : value;
 
   async function send(kind, twist) {
@@ -53,25 +56,39 @@
     const active = ['pick','roulade','left_kick','right_kick'].find(kind => robot?.[kind]?.active)
       || (robot?.sitstand?.phase === 'stand' ? 'stand' : null);
     const usable = robot?.control_ready === true && !exclusive && !robot.battery?.low;
-    const standing = usable && robot.enabled === true && robot.mode === 'policy' && !robot.fault_hold
-      && robot.recovery?.phase === 'walk' && Number.isFinite(robot.recovery.angle_deg)
-      && robot.recovery.angle_deg < (gesture ? 55 : 15);
-    return {exclusive, seated, active, usable, ready:standing && !seated && !active};
+    const upright = usable && robot.enabled === true && !robot.fault_hold && robot.recovery?.phase === 'walk';
+    const angle = robot?.recovery?.angle_deg;
+    const standAngle = robot?.recovery?.thresholds?.stand_deg ?? 15;
+    const fallAngle = robot?.recovery?.thresholds?.fall_deg ?? 55;
+    const walkingUpright = upright && robot.mode === 'policy' && Number.isFinite(angle);
+    const gravity = robot?.gravity;
+    const holdUpright = upright && robot.mode === 'hold' && Array.isArray(gravity) && gravity.length === 3
+      && -gravity[2] > Math.cos(standAngle * Math.PI / 180) * Math.hypot(...gravity);
+    const free = !seated && !active;
+    return {exclusive, seated, active, usable, ready:free && walkingUpright && angle < (gesture ? fallAngle : standAngle),
+      canSit:free && !robot?.action_preparation?.active && (holdUpright || walkingUpright && angle < standAngle)};
   }
 
   function render() {
     const state = mode();
     const roller = robot?.roller?.enabled === true;
+    const busy = !!pending || rollerBusy;
+    rollerSwitch.setAttribute('aria-checked', String(roller));
+    rollerSwitch.textContent = t(rollerBusy ? 'rollerSwitching' : roller ? 'rollerOn' : 'rollerOff');
+    rollerSwitch.title = t(state.seated ? 'rollerStandFirst' : 'rollerMode');
+    rollerSwitch.disabled = typeof robot?.roller?.enabled !== 'boolean' || !state.usable || state.seated
+      || !!state.active || busy || !!robot.arming || !!robot.action_preparation?.active || !!robot.imu_calibration?.active;
     $('moveStickLabel').textContent = t(roller ? 'moveStickRoller' : 'moveStick');
     $('keyboardStrafe').hidden = roller;
     sticks[0].pad.classList.toggle('roller-pad', roller);
-    for (const stick of sticks) stick.pad.setAttribute('aria-disabled', String(!state.ready || !!pending));
+    for (const stick of sticks) stick.pad.setAttribute('aria-disabled', String(!state.ready || busy));
     for (const button of actions) {
       const kind = button.dataset.motion;
       const headAction = kind.startsWith('head_');
       button.disabled = kind === 'stop' ? !robot || state.exclusive
-        : kind === 'stand' || kind === 'default_pose' ? !state.usable || !!state.active || !!pending || robot?.arming === true
-        : !state.ready || !!pending || roller && headAction;
+        : kind === 'stand' || kind === 'default_pose' ? !state.usable || !!state.active || busy || robot?.arming === true || !!robot?.action_preparation?.active
+        : kind === 'sit' ? !state.canSit || busy
+        : !state.ready || busy || roller && headAction;
       if (headAction) button.title = roller ? t('poseRoller') : '';
       button.toggleAttribute('data-active', kind === state.active || kind === 'sit' && state.seated);
     }
@@ -82,18 +99,21 @@
       && ['default_pose','getup'].includes(robot.recovery?.phase);
     const key = !robot ? 'waitingFeedback' : robot.battery?.low ? 'motionBattery'
       : state.exclusive ? 'motionOtherOwner' : robot.arming ? 'motionArming' : standStarting ? 'motionStarting'
-      : pending ? 'motionBusy' : gesture?.forwardBlocked ? 'motionTof' : gesture?.paused ? 'motionVoiceBusy'
+      : rollerBusy ? 'rollerSwitching' : pending ? 'motionBusy' : gesture?.forwardBlocked ? 'motionTof' : gesture?.paused ? 'motionVoiceBusy'
       : !state.usable ? 'waitingFeedback' : armFailed ? 'motionArmFailed'
       : state.active ? 'motionInProgress' : gettingUp ? 'motionGettingUp' : state.seated ? 'motionSeated'
       : state.ready ? 'motionReady' : robot.mode === 'policy' && !robot.fault_hold ? 'motionSettling' : 'motionStandHint';
     const action = pending?.kind || state.active;
     const status = $('motionStatus');
-    const text = feedback?.text || (feedback && feedback.kind !== 'stand' && !state.active && !state.seated
+    const needsStandButton = ['motionStandHint', 'motionArmFailed', 'motionSeated'].includes(key);
+    const sticksOnly = document.body.dataset.hud === 'sticks' && !document.body.classList.contains('compact-cockpit');
+    const statusKey = sticksOnly && needsStandButton ? 'motionShowControls' : key;
+    const text = feedback?.text || (feedback?.key ? t(feedback.key) : feedback && feedback.kind !== 'stand' && !state.active && !state.seated
       ? t('motionAccepted', {action:t(names[feedback.kind])})
-      : t(key, {action:action ? t(names[action]) : ''}));
+      : t(statusKey, {action:action ? t(names[action]) : ''}));
     if (status.textContent !== text) status.textContent = text;
     status.title = text;
-    status.toggleAttribute('data-warning', !!(feedback?.text || gesture?.forwardBlocked
+    status.toggleAttribute('data-warning', !!(feedback?.text || feedback?.key || gesture?.forwardBlocked
       || robot?.battery?.low || key === 'motionArmFailed'));
   }
 
@@ -103,6 +123,30 @@
     if (value) noticeTimer = setTimeout(() => {notice = null; render();}, 4500);
     render();
   }
+
+  async function switchRoller() {
+    if (rollerSwitch.disabled) return;
+    const enabled = !robot.roller.enabled;
+    release();
+    rollerBusy = true;
+    rollerRevision++;
+    showNotice(null);
+    try {
+      const response = await fetch('/api/roller', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({enabled}), signal:AbortSignal.timeout(5000)
+      });
+      if (!response.ok || (await response.json()).enabled !== enabled) throw Error('Roller mode not confirmed');
+      if (robot) robot = {...robot, roller:{...robot.roller, enabled}};
+    } catch {
+      showNotice({key:'rollerSwitchFailed'});
+    } finally {
+      rollerBusy = false;
+      rollerRevision++;
+      render();
+    }
+  }
+  rollerSwitch.addEventListener('click', switchRoller);
 
   async function drive() {
     const current = gesture;
@@ -152,8 +196,9 @@
   for (const stick of sticks) {
     const pad = stick.pad;
     pad.addEventListener('pointerdown', event => {
-      if (event.button !== 0 || stick.pointer !== null || gesture?.source === 'keyboard' || !mode().ready || pending) return;
+      if (event.button !== 0 || stick.pointer !== null || gesture?.source === 'keyboard' || !mode().ready || pending || rollerBusy) return;
       event.preventDefault();
+      if (!allowRemote()) return;
       pad.setPointerCapture(event.pointerId);
       stick.pointer = event.pointerId;
       pad.classList.add('is-held');
@@ -183,7 +228,7 @@
   }
 
   function keyboardBlocked(target) {
-    return portraitPhone.matches || document.body.classList.contains('clean') || document.querySelector('dialog[open]')
+    return document.body.dataset.hud === 'video' || document.querySelector('dialog[open]')
       || target.closest?.('input, textarea, select, [contenteditable], [role="textbox"]');
   }
 
@@ -196,10 +241,10 @@
       if (!event.repeat) action('stop');
       return;
     }
-    if (!driveKeys.has(event.code) || !mode().ready || pending || gesture?.source === 'pointer') return;
+    if (!driveKeys.has(event.code) || !mode().ready || pending || rollerBusy || gesture?.source === 'pointer') return;
     if (robot?.roller?.enabled && ['KeyA','KeyD'].includes(event.code)) return;
     event.preventDefault();
-    if (event.repeat || heldKeys.has(event.code)) return;
+    if (event.repeat || heldKeys.has(event.code) || !allowRemote()) return;
     heldKeys.add(event.code);
     gesture ??= {source:'keyboard', twist:[0,0,0], started:false, busy:false};
     notice = null;
@@ -230,21 +275,30 @@
       if (pending === request) {pending = null; render();}
     }
   }
-  for (const button of actions) button.addEventListener('click', () => action(button.dataset.motion));
+  for (const button of actions) {
+    if (button.dataset.motion !== 'stop') window.DuckRemoteNotice?.bindButton(button);
+    button.addEventListener('click', () => action(button.dataset.motion));
+  }
   $('torqueOff').addEventListener('click', () => action('torque_off'));
-  portraitPhone.addEventListener('change', () => {
-    if (portraitPhone.matches) {release(); render();}
+  portraitOrientation.addEventListener('change', () => {
+    release();
+    render();
   });
-  for (const id of ['clean','settings','padLink','openBinding','openWalkingHelp']) $(id)?.addEventListener('click', release);
+  for (const id of ['settings','padLink','openBinding','openWalkingHelp']) $(id)?.addEventListener('click', release);
   for (const event of ['blur','pagehide']) window.addEventListener(event, release);
   document.addEventListener('visibilitychange', () => {if (document.hidden) release();});
   window.addEventListener('duck-languagechange', render);
   setInterval(drive, 75);
-  window.DuckMotion = {update(status, physicalGamepadActive) {
-    if (robot && robot.roller?.enabled !== status?.roller?.enabled) release();
-    robot = status;
-    gamepadActive = physicalGamepadActive;
-    if (!mode().ready) release();
-    render();
-  }};
+  window.DuckMotion = {
+    get revision() {return rollerRevision;},
+    release() {release(); render();},
+    update(status, physicalGamepadActive, revision) {
+      if (status && robot && (rollerBusy || revision !== rollerRevision)) status = {...status, roller:robot.roller};
+      if (robot && robot.roller?.enabled !== status?.roller?.enabled) release();
+      robot = status;
+      gamepadActive = physicalGamepadActive;
+      if (!mode().ready) release();
+      render();
+    }
+  };
 })();

@@ -12,6 +12,7 @@ import tempfile
 import time
 import httpx
 from app_paths import DATA, PRIVATE
+from startup_ip_display import display_startup_ip
 
 
 def _retry_after_seconds(value):
@@ -186,7 +187,7 @@ class Onboarding:
         self.last_advertise = None
         self.last_advertise_at = 0.
         self.generation = 0
-        self.info = dict(state='starting', bound=None, wifi_connected=None, advertising=False,
+        self.info = dict(state='starting', bound=None, wifi_connected=None, ipv4=None, advertising=False,
                          name='', hardware_error='', cloud_error='', cached=False, identity_mismatch=False,
                          cloud_region=None, cloud_configured=False)
 
@@ -253,12 +254,14 @@ class Onboarding:
             setup = await self.hardware.snapshot()
             expected, actual = os.environ.get('DUCK_DEVICE_ID', ''), setup.get('device_id', '')
             mismatch = bool(expected and actual and expected.upper() != actual.upper())
-            self.info.update(wifi_connected=setup['network'].get('connected'),
+            connected = setup['network'].get('connected')
+            self.info.update(wifi_connected=connected,
+                ipv4=setup['network'].get('ipv4') if connected is True and not mismatch else None,
                 advertising=bool(setup.get('advertising')), name=setup.get('name', ''),
                 hardware_error='Device identity mismatch; reinstall host support.' if mismatch else setup.get('error', ''),
                 identity_mismatch=mismatch)
         except (OSError, ValueError, httpx.HTTPError):
-            self.info.update(wifi_connected=None, advertising=False,
+            self.info.update(wifi_connected=None, ipv4=None, advertising=False,
                              hardware_error='Hardware support unavailable; run install-ai-support.sh.')
         cfg, now = self.config.get(), self.clock()
         url = ota_url(cfg)
@@ -350,14 +353,21 @@ class Onboarding:
             self.probe_task = None
 
     async def run(self):
+        display_task = None
         try:
             while not self.stop.is_set():
                 await self.step()
+                if display_task is None and self.info['ipv4']:
+                    display_task = asyncio.create_task(display_startup_ip(lambda: self.info['ipv4']))
                 try:
                     await asyncio.wait_for(self.stop.wait(), 1)
                 except asyncio.TimeoutError:
                     pass
         finally:
+            if display_task is not None:
+                display_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await display_task
             await self.cancel_probe()
             await self.hardware.close()
             await self.probe.close()

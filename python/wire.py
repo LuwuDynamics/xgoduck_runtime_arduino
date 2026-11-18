@@ -253,6 +253,8 @@ def decode_servo_reply(data):
                 'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
     if x[1] in SERVO_TEST_OPS:
         reply = {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]), 'raw_pos': x[5], 'session': x[6]}
+        if x[1] == SERVO_TEST_STOP:
+            reply['torque_off'] = bool(x[3] and x[4] == 1)
         # A guarded start advertises the limits. A rejected move reports the one that ended the test.
         if (x[1] == SERVO_TEST_START and x[3]) or (x[1] == SERVO_TEST_MOVE and not x[3]):
             if x[4]:

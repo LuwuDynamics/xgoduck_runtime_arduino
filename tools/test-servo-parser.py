@@ -51,8 +51,17 @@ servoParamsId=42;servoParamsSeen=false;
 packet(41,0,{5,10});assert(!servoParamsSeen);
 packet(42,4,{5,10});assert(!servoParamsSeen);
 packet(42,0,{5,10});assert(servoParamsSeen&&servoParamKp==5&&servoParamKd==10);
+packet(42,0,{0});assert(!servoTorqueSeen);
+servoTorqueId=42;
+packet(41,0,{0});assert(!servoTorqueSeen);
+packet(42,0,{0},true);assert(!servoTorqueSeen);
+packet(42,4,{0});assert(!servoTorqueSeen);
+packet(42,0,{});assert(!servoTorqueSeen);
+packet(42,0,{1});assert(servoTorqueSeen&&servoTorqueValue==1);
+servoTorqueSeen=false;
+packet(42,0,{0});assert(servoTorqueSeen&&servoTorqueValue==0);
 }
 ''')
     subprocess.run(['c++','-std=c++11','-I'+td,'-I'+str(root/'sketch'),str(p/'test.cpp'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)
-print('PASS: arbitrary-ID Ping/read, no reply, bad checksum, wrong ID, device error, and normal feedback.')
+print('PASS: arbitrary-ID Ping/read, torque readback, invalid replies, and normal feedback.')

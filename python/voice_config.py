@@ -28,8 +28,11 @@ def wake_profile(config):
     else:
         # Custom servers keep the legacy language-based English profile.
         return 'Hi Luka', dict(shared_capture=True)
-    return phrase, dict(shared_capture=True, model_path=str(WAKE_MODELS / model),
-                        threshold=.50, input_scale=1., stride_duration=.08, cooldown_sec=2.)
+    profile = dict(shared_capture=True, model_path=str(WAKE_MODELS / model),
+                   threshold=.50, input_scale=1., stride_duration=.08, cooldown_sec=2.)
+    if model == 'xiaoya.onnx':
+        profile['playback_threshold'] = .30
+    return phrase, profile
 
 
 class VoiceConfig:

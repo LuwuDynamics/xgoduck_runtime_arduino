@@ -1,9 +1,103 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Gamepad · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="media.css"><link rel="stylesheet" href="gamepad.css"></head>
-<body><main><header><div><small>ARDUINO UNO Q</small><h1>Gamepad</h1></div><nav class="nav"><a href="/">Control</a><a href="/calibrate.html">Calibration</a><a href="/servo.html">Servo setup</a><a href="/audio.html">Audio</a><a href="/gamepad.html" aria-current="page">Gamepad</a><a href="/mobile.html">Cockpit</a></nav></header>
-<p class="hint" id="connection" role="status">Connecting…</p><p id="error" class="notice" role="alert" hidden></p>
-<section class="usb-settings"><h2>USB connection</h2><p class="small">Enable Host for a USB camera, audio device or wired controller. Off uses Device mode. Host is off after reboot; starting Duck does not enable it.</p><button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host: Checking…</button><p id="usbStatus" class="small" role="status">Checking USB mode…</p><p class="small">Use Wi-Fi when switching modes; USB connections will be interrupted.</p></section>
-<section><div class="card-head"><h2>Bluetooth controllers</h2><span class="badge" id="adapter">Checking</span></div><p class="small">Put your controller in pairing mode, scan, then select Pair &amp; connect. Pairing does not enable robot movement. For Unitree remotes, select Connect BLE; no PIN is required.</p><div class="row"><button id="scan" disabled>Scan for controllers</button><button id="stopScan" disabled>Stop scan</button><span id="scanStatus" class="small" role="status"></span></div><div id="devices" class="device-list"></div><p class="small" id="empty">No controllers found yet.</p><details class="pair-help"><summary>Pairing help</summary><p class="small"><strong>Xbox:</strong> Turn on the controller and hold its pairing button until the Xbox light flashes quickly. A Bluetooth-capable model is required.</p><p class="small"><strong>Switch Pro / compatible controllers:</strong> Hold the SYNC button until the player lights cycle. Compatibility depends on the controller and installed Linux driver.</p></details></section>
-<div class="audio-grid"><section><div class="card-head"><h2>Remote control</h2><span id="controlState" class="badge">Off</span></div><label for="inputDevice">Input device</label><select id="inputDevice" disabled><option>No gamepad connected</option></select><p id="inputStatus" class="small">Waiting for a gamepad input device.</p><div class="row"><button id="enable" disabled>Enable gamepad control</button><button id="disable" disabled>Disable &amp; torque off</button></div><p class="small">Center both sticks and release the buttons before enabling. Browser movement inputs are ignored while gamepad control is enabled. Losing the gamepad connection turns torque off.</p><div class="stick-grid"><div><div class="stick"><i id="leftStick"></i></div><span class="small">Left stick</span></div><div><div class="stick"><i id="rightStick"></i></div><span class="small">Right stick</span></div></div><p id="buttons" class="small">Buttons: —</p></section>
-<section><h2>Sticks &amp; button bindings</h2><table class="mapping"><tbody><tr><td>Left stick ↑ ↓</td><td>Forward / backward</td></tr><tr><td>Left stick ← →</td><td>Strafe left / right</td></tr><tr><td>Right stick ← →</td><td>Turn left / right</td></tr></tbody></table><p class="small">Move the sticks directly — no shoulder button required. Center the sticks to stop movement. Select Walk / get up to start walking.</p><h3>Button bindings</h3><p class="small">Disable gamepad control, select Bind next to a function, then press one controller button. Bindings are saved on Duck and survive restarts. Binding a button does not run the action.</p><div id="bindings" class="binding-list"></div><p id="bindingStatus" class="small" role="status" aria-live="polite">Loading bindings…</p><div class="row"><button id="cancelBinding" hidden>Cancel binding</button><button id="resetBindings" disabled>Restore defaults</button></div><p class="small">Button names use Xbox labels and physical positions. Pick and Roulade require Walk mode. Each button controls one function; Torque off always keeps an assigned button.</p></section></div>
-</main><script src="gamepad.js?v=input-selection-20261013"></script><script src="usb-role.js?v=20261013"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title data-i18n="gamepadPageTitle">Gamepad · XGO Duck</title>
+  <link rel="icon" type="image/png" href="/xgo-favicon.png">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="media.css">
+  <link rel="stylesheet" href="gamepad.css">
+</head>
+<body>
+<main>
+  <header>
+    <div><small>ARDUINO UNO Q</small><h1 data-i18n="gamepad">Gamepad</h1></div>
+    <nav class="nav">
+      <a href="/index.html" data-i18n="controlPage">Control</a>
+      <a href="/calibrate.html" data-i18n="gamepadCalibration">Calibration</a>
+      <a href="/servo.html" data-i18n="modeServo">Servo setup</a>
+      <a href="/audio.html" data-i18n="gamepadAudio">Audio</a>
+      <a href="/gamepad.html" aria-current="page" data-i18n="gamepad">Gamepad</a>
+      <a href="/mobile.html" data-i18n="pageTitle">Duck Cockpit</a>
+      <button id="language" type="button">中文</button>
+    </nav>
+  </header>
+  <p class="hint" id="connection" role="status"></p>
+  <p id="error" class="notice" role="alert" hidden></p>
+  <section class="usb-settings">
+    <h2 data-i18n="usbConnection">USB connection</h2>
+    <p class="small" data-i18n="usbDescription"></p>
+    <button id="usbHost" type="button" role="switch" aria-checked="false" disabled>USB Host</button>
+    <p id="usbStatus" class="small" role="status"></p>
+    <p class="small" data-i18n="usbNotice"></p>
+  </section>
+  <section>
+    <div class="card-head">
+      <h2 data-i18n="gamepadBluetooth">Bluetooth controllers</h2>
+      <span class="badge" id="adapter"></span>
+    </div>
+    <p class="small" data-i18n="gamepadPairInstructions"></p>
+    <div class="row">
+      <button id="scan" data-i18n="gamepadScan" disabled>Scan for controllers</button>
+      <button id="stopScan" data-i18n="gamepadStopScan" disabled>Stop scan</button>
+      <span id="scanStatus" class="small" role="status"></span>
+    </div>
+    <div id="devices" class="device-list"></div>
+    <p class="small" id="empty"></p>
+    <details class="pair-help">
+      <summary data-i18n="gamepadPairHelp">Pairing help</summary>
+      <p class="small" data-i18n="gamepadPairXbox"></p>
+      <p class="small" data-i18n="gamepadPairSwitch"></p>
+    </details>
+  </section>
+  <div class="audio-grid">
+    <section>
+      <div class="card-head">
+        <h2 data-i18n="gamepadControl">Gamepad control</h2>
+        <span id="controlState" class="badge"></span>
+      </div>
+      <label for="inputDevice" data-i18n="gamepadInput">Input device</label>
+      <select id="inputDevice" disabled></select>
+      <p id="inputStatus" class="small"></p>
+      <div class="row">
+        <button id="enable" data-i18n="gamepadEnable" disabled>Enable gamepad control</button>
+        <button id="disable" data-i18n="gamepadDisable" disabled>Disable &amp; torque off</button>
+      </div>
+      <p class="small" data-i18n="gamepadEnableHint"></p>
+      <div class="stick-grid">
+        <div><div class="stick"><i id="leftStick"></i></div><span class="small" data-i18n="gamepadLeftStick">Left stick</span></div>
+        <div><div class="stick"><i id="rightStick"></i></div><span class="small" data-i18n="gamepadRightStick">Right stick</span></div>
+      </div>
+      <p id="buttons" class="small"></p>
+    </section>
+    <section>
+      <h2 data-i18n="gamepadMapping">Sticks &amp; button bindings</h2>
+      <table class="mapping"><tbody>
+        <tr><td data-i18n="gamepadLeftVertical">Left stick ↑ ↓</td><td data-i18n="keyboardTravel">Forward / back</td></tr>
+        <tr><td data-i18n="gamepadLeftHorizontal">Left stick ← →</td><td data-i18n="keyboardStrafe">Strafe</td></tr>
+        <tr><td data-i18n="gamepadRightHorizontal">Right stick ← →</td><td data-i18n="turnStick">Turn in place</td></tr>
+      </tbody></table>
+      <p class="small" data-i18n="gamepadStickHint"></p>
+      <h3 data-i18n="gamepadBindings">Button bindings</h3>
+      <p class="small" data-i18n="gamepadLearnHint"></p>
+      <h4 data-i18n="gamepadMotionBindings">Motion actions</h4>
+      <div id="bindings" class="binding-list"></div>
+      <div id="soundBindingGroup" hidden>
+        <h4 data-i18n="duckSounds">Duck calls</h4>
+        <div id="soundBindings" class="binding-list"></div>
+      </div>
+      <p id="bindingStatus" class="small" role="status" aria-live="polite"></p>
+      <div class="row">
+        <button id="cancelBinding" data-i18n="gamepadCancel" hidden>Cancel binding</button>
+        <button id="resetBindings" data-i18n="gamepadReset" disabled>Restore defaults</button>
+      </div>
+      <p class="small" data-i18n="gamepadBindingRules"></p>
+    </section>
+  </div>
+</main>
+<script src="gamepad-i18n.js?v=gamepad-bindings"></script>
+<script src="mobile-i18n.js?v=gamepad-language"></script>
+<script src="gamepad.js?v=connect-status"></script>
+</body>
+</html>

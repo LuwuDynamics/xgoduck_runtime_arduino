@@ -50,12 +50,14 @@ async function setup(t,viewport={width:1100,height:900},locale='en-US',control=f
       const same=state.testSession?.id===id&&state.testSession.session===body.session;
       if(action==='stop'){
         if(same)state.testSession=null;
+        return reply({ok:true,target_id:id,session:body.session,torque_off:state.testStopConfirmed!==false});
       }else{
         if(!same)return reply({detail:'servo operation failed'},400);
         if(state.testIdleExpired){
           state.testSession=null;
           return reply({detail:'Servo unloaded after 10 seconds without an angle change.'},400);
         }
+        if(body.offset_deg===30&&state.holdTestMove)await state.holdTestMove();
       }
       return reply({ok:true,target_id:id,session:body.session,raw_pos:2048});
     }
@@ -207,9 +209,14 @@ test('Control warns about low current thresholds with only some servos online',a
 test('Installation check shows the selected joint and only jogs the enabled ID',async t=>{
   const {page,state}=await setup(t);
   await page.waitForFunction(()=>document.querySelectorAll('#servo-test-id option').length===15);
+  const diagram=page.locator('#servo-test-image');
+  await page.selectOption('#servo-test-id','12');
+  assert.equal(await diagram.getAttribute('src'),'cal-12-pose.svg?v=left-profile');
+  await diagram.evaluate(image=>image.decode());
   await page.selectOption('#servo-test-id','22');
+  assert.equal(await diagram.getAttribute('src'),'cal-22-pose.svg');
+  assert.equal(await page.locator('.servo-test img').count(),1);
   assert.match(await page.locator('#servo-test-caption').innerText(),/Right leg · ID 22 · Hip pitch/);
-  assert.equal(await page.locator('#servo-test-image').getAttribute('src'),'cal-22-pose.svg');
   assert.equal(await page.locator('#servo-test-offset').isDisabled(),true);
   assert.equal(state.calls.some(call=>call.path==='/api/servo/test'),false);
   await page.click('#servo-test-start');
@@ -269,6 +276,43 @@ test('Installation check survives a visible window losing focus and unloads when
   assert.match(await page.locator('#servo-test-status').innerText(),/tab was hidden/);
   assert.equal(state.mode,'shadow');
   assert.equal(state.testSession,null);
+});
+
+test('Stop can interrupt a pending angle update and needs torque readback before reporting success',async t=>{
+  const {page,state}=await setup(t);
+  const slider=page.locator('#servo-test-offset');
+  const stop=page.locator('#servo-test-stop');
+  const status=page.locator('#servo-test-status');
+  let releaseMove;
+  const moveStarted=new Promise(started=>{
+    state.holdTestMove=()=>new Promise(resolve=>{
+      releaseMove=resolve;
+      started();
+    });
+  });
+  state.testStopConfirmed=false;
+  await page.click('#servo-test-start');
+  await page.locator('#servo-test-offset:enabled').waitFor();
+  try{
+    await slider.press('End');
+    await moveStarted;
+    await stop.click();
+    await status.filter({hasText:'STM32 did not confirm that torque is off.'}).waitFor();
+    assert.equal(await slider.isDisabled(),true);
+    assert.equal(await page.locator('#servo-test-start').isDisabled(),true);
+    assert.equal(await stop.isEnabled(),true);
+    assert.equal(state.testSession,null);
+
+    const lateMove=page.waitForResponse(response=>response.url().endsWith('/api/servo/test')&&response.request().postDataJSON()?.offset_deg===30);
+    releaseMove();
+    await lateMove;
+    state.testStopConfirmed=true;
+    await stop.click();
+    await status.filter({hasText:'Test stopped. Servo unloaded.'}).waitFor();
+    assert.deepEqual(state.calls.filter(call=>call.path==='/api/servo/test').slice(-3).map(call=>call.action),['move','stop','stop']);
+  }finally{
+    releaseMove?.();
+  }
 });
 
 test('Installation check shows automatic unload and waits for an explicit restart',async t=>{

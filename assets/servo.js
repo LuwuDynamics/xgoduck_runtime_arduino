@@ -26,6 +26,7 @@ const serverErrors=new Map([
   ['Runtime gain reads wait until calibration/servo setup closes','请退出标定或舵机设置后再读取运行值。'],
   ['Servo setup is not ready for the position test.','请等待舵机设置就绪后再开始测试。'],
   ['Invalid servo test reply','收到无效的舵机测试回包。'],
+  ['STM32 did not confirm that torque is off.','STM32 未确认扭矩已关闭。'],
   ['Unexpected servo test reply.','舵机测试回包与当前测试不匹配，请重试。'],
   ['IMU calibration is in progress. Wait for it to finish or exit calibration.','IMU 正在标定，请等待完成或退出标定。'],
   ['低电压保护中，请充电后重新使能。 Low battery protection is active.','低电压保护中，请充电后重试。','Low battery protection is active. Recharge and try again.'],
@@ -117,8 +118,8 @@ function lock(value){
   $('exit').disabled=value&&!scanController;
   $('servo-test-id').disabled=settingsLocked||!testJoints.size;
   $('servo-test-start').disabled=settingsLocked||!testJoints.size;
-  $('servo-test-stop').disabled=!testSession||closing;
-  $('servo-test-offset').disabled=!testSession||closing;
+  $('servo-test-stop').disabled=!testSession||testBusy||closing;
+  $('servo-test-offset').disabled=!testSession||testSession.stopping||closing;
 }
 function selectId(id){
   selectedId=validId(id);
@@ -398,14 +399,15 @@ function showTestJoint() {
   const id = Number($('servo-test-id').value);
   const joint = testJoints.get(id);
   if (!joint) return;
-  $('servo-test-image').src = joint.image;
-  $('servo-test-image').hidden = false;
+  const image = $('servo-test-image');
+  image.src = joint.image_version ? `${joint.image}?v=${joint.image_version}` : joint.image;
+  image.hidden = false;
   setText('servo-test-caption',()=>testJointName(id,joint));
 }
 
 async function loadTestJoints() {
   try {
-    const response = await fetch('calibrate-joints.json?v=20261107-2');
+    const response = await fetch('calibrate-joints.json',{cache:'no-store'});
     if (!response.ok) throw new Error('Could not load the joint guide');
     const guide = await response.json();
     for (const zone of guide.zones) {
@@ -434,8 +436,11 @@ function setTestAngle(degrees) {
   $('servo-test-angle').value = `${degrees > 0 ? '+' : ''}${degrees}°`;
 }
 
-function releaseServoTest(test) {
-  return api('servo/test',{action:'stop',target_id:test.id,session:test.session});
+async function releaseServoTest(test) {
+  const reply = await api('servo/test',{action:'stop',target_id:test.id,session:test.session},AbortSignal.timeout(1500));
+  if (!reply.ok || reply.target_id !== test.id || reply.session !== test.session)
+    throw new Error('Unexpected servo test reply.');
+  if (reply.torque_off !== true) throw new Error('STM32 did not confirm that torque is off.');
 }
 
 async function startServoTest() {
@@ -475,26 +480,29 @@ async function startServoTest() {
 
 async function stopServoTest(error) {
   const test = testSession;
-  if (!test) return;
+  if (!test || testBusy || closing) return;
   const revision = testRevision;
-  testSession = null;
+  test.stopping = true;
   testBusy = true;
-  setTestAngle(0);
+  setText('servo-test-status',()=>t(`Stopping ID ${test.id} and checking torque…`,`正在停止 ID ${test.id} 并确认卸力…`));
   lock(busy);
-  let failure = error;
   try {
     await releaseServoTest(test);
+    if (revision !== testRevision) return;
+    testSession = null;
+    setTestAngle(0);
+    const idle = error?.message.match(/^Servo unloaded after (\d+) seconds without an angle change\.$/);
+    setText('servo-test-status',()=>{
+      if (idle) return t(error.message,`${idle[1]} 秒未调整角度，已自动卸力。`);
+      if (error) return t('Test interrupted. Servo unloaded. ','测试中断，已卸力。')+errorText(error);
+      return t('Test stopped. Servo unloaded.','已停止测试并卸力。');
+    });
   } catch (stopError) {
-    failure ??= stopError;
-  } finally {
     if (revision === testRevision) {
-      const idle = failure?.message.match(/^Servo unloaded after (\d+) seconds without an angle change\.$/);
-      setText('servo-test-status',()=>{
-        if (idle) return t(failure.message,`${idle[1]} 秒未调整角度，已自动卸力。`);
-        if (failure) return t('Test interrupted. ','测试中断。')+errorText(failure);
-        return t('Test stopped. Servo unloaded.','已停止测试并卸力。');
-      });
+      setText('servo-test-status',()=>errorText(stopError)+t(
+        ' Press Stop and unload again.',' 请再次点击「停止并卸力」。'));
     }
+  } finally {
     testBusy = false;
     lock(busy);
   }
@@ -502,13 +510,13 @@ async function stopServoTest(error) {
 
 async function refreshServoTest() {
   const test = testSession;
-  if (!test || test.pending || document.hidden || closing) return;
+  if (!test || test.stopping || test.pending || document.hidden || closing) return;
   test.pending = true;
   try {
     await api('servo/test',{action:'move',target_id:test.id,session:test.session,
       offset_deg:Number($('servo-test-offset').value)},AbortSignal.timeout(650));
   } catch (error) {
-    if (testSession === test) await stopServoTest(error);
+    if (testSession === test && !test.stopping) await stopServoTest(error);
   } finally {
     test.pending = false;
   }
@@ -519,7 +527,6 @@ $('servo-test-start').onclick=startServoTest;
 $('servo-test-stop').onclick=()=>stopServoTest();
 $('servo-test-offset').oninput=e=>setTestAngle(Number(e.target.value));
 setInterval(refreshServoTest,150);
-$('servo-test-image').loading='lazy';
 void loadTestJoints();
 
 $('scan').onclick=()=>{

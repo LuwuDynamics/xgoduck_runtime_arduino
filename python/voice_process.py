@@ -8,7 +8,7 @@ import subprocess
 import sys
 import threading
 import time
-import wave
+from binding_prompt import BINDING_SAMPLE_RATE, binding_pcm
 from voice_application import application_type
 from app_paths import DATA, PRIVATE, VENDOR, private_directory
 from voice_config import VoiceConfig, wake_profile
@@ -18,6 +18,7 @@ from onboarding import Onboarding, ota_url
 from speech_mouth import SpeechMouthPublisher
 from mouth_ipc import MouthSender
 from connection_sounds import ConnectionSounds
+from duck_sound import DuckSoundPlayer
 from capture_channels import CaptureChannels, hardware_channels
 from audio_devices import capture_capabilities, aec_playback_transform
 
@@ -95,11 +96,9 @@ class Runtime:
             from duck_sound import sound_pcm, amplify_sound
             cfg = self.config.get()
             output = select_audio(usb_audio_cards(), 'output', cfg['output_device'])
-            sample_rate = 16000
+            sample_rate = BINDING_SAMPLE_RATE
             if event == 'binding_required':
-                prompt = Path(__file__).with_name('assets') / f'bind-device-{cfg["language"]}.wav'
-                with wave.open(str(prompt), 'rb') as wav:
-                    pcm = wav.readframes(wav.getnframes())
+                pcm = binding_pcm(cfg['language'], self.onboarding.snapshot().get('ipv4'))
                 pause = bytes(sample_rate)  # Half a second of mono PCM16.
                 pcm = pause.join([pcm] * 3)
             else:
@@ -202,7 +201,7 @@ class Runtime:
             send_wake_word_data=False, auto_start_chat=False, ambient_sound={'enabled': False},
             audio=dict(output_sample_rate=16000, input_device=input_index, output_device=output_index,
                        input_channels=channels, input_latency=.32, output_latency=.5, prebuffer_ms=1000, aec_ref_delay_ms=500),
-            wakeword=wakeword, wake_phrase=wake_phrase,
+            wakeword=dict(wakeword, interrupt_playback=True), wake_phrase=wake_phrase,
             input_transform=capture_gain.pcm,
             output_transform=aec_playback_transform(self.volume, cfg['aec_output_headroom_db'],
                 lambda: (app.audio is not None and app.audio.aec_enabled
@@ -277,6 +276,16 @@ class Runtime:
             return self.config.select_region(body['cloud_region'])
         if method == 'POST' and path == '/battery-warning':
             self.bench.play_battery_warning()
+            return {'ok': True}
+        if method == 'POST' and path == '/duck-call':
+            kind = body.get('kind')
+            DuckSoundPlayer.validate(kind)
+            if self.gate.busy():
+                raise ValueError('Audio is busy. Stop playback or recording first.')
+            app = self.app
+            if app is not None and self.audio_ready:
+                return app.duck_sounds.call(kind)
+            self.bench.audio_start('playing', source=f'duck-{kind}')
             return {'ok': True}
         if method == 'POST' and path == '/stop':
             self.loop.call_soon_threadsafe(self.stop.set)

@@ -524,8 +524,9 @@ try:
     assert bytes(out) == codec._far_pending[-1][-1] == bytes(1920)
     mouth.process_once()
     points = send.call_args.args[0]['points']
-    assert [round(t,2) for t,_ in points] == [100.54,100.56,100.58]
-    assert all(v == 0 for _,v in points)
+    # Each 20 ms analysis window ends on the DAC clock. The jaw leads it by 100 ms.
+    assert [round(t,2) for t,_ in points] == [100.46,100.48,100.50]
+    assert all(v == -3.0 for _,v in points)
     mouth.frames.clear()
     codec._output_callback(out, 960, None, None)  # Underflow is not speech.
     assert not mouth.frames
@@ -575,8 +576,10 @@ async def check():
             mouth.process_once()
             angles.extend(mouth.send.call_args.args[0]['points'])
         cue_end = 100.54 + len(cue)/32000
-        assert all(a == 0 for t,a in angles if t+.02 <= cue_end)
-        assert any(a > 0 for t,a in angles if t >= cue_end), 'speech no longer moves the mouth'
+        # Convert scheduled jaw times back to the audible end of each analysis window.
+        cue_angles = [angle for t, angle in angles if t + .100 <= cue_end]
+        assert cue_angles and all(angle == -3.0 for angle in cue_angles)
+        assert any(angle > 0 for t, angle in angles if t + .100 > cue_end), 'speech no longer moves the mouth'
     finally:
         await app.shutdown()
 asyncio.run(check())

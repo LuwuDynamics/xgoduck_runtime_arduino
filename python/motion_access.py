@@ -6,7 +6,7 @@ from collections import deque
 import threading
 import time
 import uuid
-from controller import ACTION_PREPARE_TIMEOUT_S, ROULADE_S
+from controller import ACTION_PREPARE_TIMEOUT_S, BRIDGE_RECOVERY_REASON, ROULADE_S
 from recovery import Recovery
 from speech_mouth import OUTPUT_HZ, SpeechMouthMotion
 from motion_feedback import (LEG_IDS, HEAD_IDS, MOUTH_ID, SERVO_IDS,
@@ -17,6 +17,7 @@ WALK_VX_LIMITS = (-.18, .2)
 REMOTE_TWIST_LIMITS = (.15, .1, 1.)
 COCKPIT_TWIST_LIMITS = (.15, .3, 1.)
 COCKPIT_LEASE_S = .4
+CALIBRATION_POSE_LEASE_S = 2.
 COCKPIT_ACTIONS = ('stand', 'sit', 'pick', 'roulade', 'left_kick', 'right_kick')
 COCKPIT_POSES = {
     'head_left': ('head', .3),
@@ -45,7 +46,7 @@ def command_link_ready(status):
     """Sensor feedback alone does not prove Linux commands still reach the MCU."""
     age = status.get('mcu_command_age_us')
     bypass = status.get('timeout_checks_disabled') is True
-    return (status.get('mcu_watchdog') is False and not isinstance(age, bool)
+    return (not status.get('bridge_recovery') and status.get('mcu_watchdog') is False and not isinstance(age, bool)
             and isinstance(age, (int, float)) and math.isfinite(age)
             and 0 <= age < 0xffffffff and (bypass or age <= 150000))
 
@@ -60,6 +61,7 @@ class MotionAccess:
         self.cockpit_sequences = {}
         self.cockpit_driver = None
         self.cockpit_deadline = 0.
+        self.calibration_pose_deadline = None
         self.lock = controller.lock
         self.voice_seen = float('-inf')
         self.voice_session = None
@@ -234,12 +236,38 @@ class MotionAccess:
         with self.lock:
             previous_mode = self.controller.mode
             result = self.controller.set_mode(mode)
+            self.calibration_pose_deadline = None
             self._release_cockpit()
             self._stop_gamepad_travel()
             self.speech_mouth.override('manual mode takeover', restore=previous_mode == mode)
             self._retire_remote_directions()
             self.cancel('manual takeover', keep_arm=True)
             return result
+
+    def start_calibration_pose(self):
+        with self.lock:
+            c = self.controller
+            status = c.status()
+            if c.mode not in ('calibrate', 'shadow', 'off') or status.get('enabled') is not False:
+                raise ValueError('Unload the servos before testing the default pose.')
+            if c.cal_expected_index is not None or status['imu_calibration']['active']:
+                raise ValueError('Wait for the current calibration to finish.')
+            if not status['full_robot_ready']:
+                raise ValueError('All 15 servos and the IMU need fresh feedback for the default pose test.')
+            if c.mode == 'calibrate':
+                self.web_mode('shadow')
+            result = self.web_mode('hold')
+            self.calibration_pose_deadline = self.clock() + CALIBRATION_POSE_LEASE_S
+            return result
+
+    def renew_calibration_pose(self):
+        with self.lock:
+            now = self.clock()
+            deadline = self.calibration_pose_deadline
+            if self.controller.mode != 'hold' or deadline is None or now >= deadline:
+                raise ValueError('Default pose test has ended.')
+            self.calibration_pose_deadline = now + CALIBRATION_POSE_LEASE_S
+            return {'ok': True}
 
     def web_action(self, name, *args):
         with self.lock:
@@ -583,6 +611,8 @@ class MotionAccess:
         return [old if value is None else value for old, value in zip(self.controller.head, payload['head'])]
 
     def _require_feedback(self, status, *, required_ids=LEG_IDS, resume_hold=False):
+        if status.get('bridge_recovery'):
+            raise ValueError(BRIDGE_RECOVERY_REASON)
         if not feedback_ready(status, required_ids):
             raise ValueError('Feedback not ready. ' + feedback_problem(status, required_ids))
         can_resume = (resume_hold and status.get('enabled') is True
@@ -921,6 +951,11 @@ class MotionAccess:
 
     def tick(self, *, speech=True):
         with self.lock:
+            if self.calibration_pose_deadline is not None:
+                if self.controller.mode != 'hold':
+                    self.calibration_pose_deadline = None
+                elif self.clock() >= self.calibration_pose_deadline:
+                    self.web_mode('shadow')
             status = self.controller.status()
             self._interrupt_obstructed_forward(status)
             running = self._action_running()

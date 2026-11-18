@@ -108,7 +108,7 @@ struct __attribute__((packed)) RawPacket {
 struct __attribute__((packed)) ServoReplyPacket {
   char magic[4];
   uint8_t op, targetId, ok;
-  union { uint8_t reserved; uint8_t protectionFlags; uint8_t testFeedbackLimit; };
+  union { uint8_t reserved; uint8_t protectionFlags; uint8_t testFeedbackLimit; uint8_t testTorqueOff; };
   union { uint16_t rawPos; uint16_t protectionCurrent; };
   union { uint16_t centerPos; uint16_t testSession; };
   union { uint8_t kp; uint8_t testOffsetLimitDeg; };

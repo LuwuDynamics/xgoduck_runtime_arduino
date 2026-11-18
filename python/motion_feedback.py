@@ -22,7 +22,7 @@ def feedback_ready(status, required_ids=SERVO_IDS, *, allow_timeout_bypass=True)
             return False
     elif not full:
         return False
-    present = status.get('servo_ids')
+    present = status.get('motion_servo_ids', status.get('servo_ids'))
     if isinstance(present, (list, tuple)):
         return all(i in present for i in required_ids)
     missing = status.get('missing_joint_ids')
@@ -42,7 +42,7 @@ def feedback_problem(status, required_ids=SERVO_IDS):
     elif (not isinstance(age, bool) and isinstance(age, (int, float))
           and math.isfinite(age) and age >= 150):
         problems.append(f'STM32 反馈已 {age:.0f} 毫秒未更新')
-    present = status.get('servo_ids')
+    present = status.get('motion_servo_ids', status.get('servo_ids'))
     if isinstance(present, (list, tuple)):
         missing = [i for i in required_ids if i not in present]
     else:

@@ -14,8 +14,10 @@ from usb_startup import verify_usb_ready
 verify_usb_ready()
 
 from fastapi import HTTPException, Request
-from arduino.app_utils import App, Bridge
+from arduino.app_utils import App
 from arduino.app_bricks.web_ui import WebUI
+from arduino.router_bridge import Bridge, DEFAULT_ADDRESS
+from bridge_recovery import BridgeRecovery
 from motion_calibration import AppController as Controller
 from controller import BATTERY_WARNING_TIMEOUT_S
 from media_proxy import register_media
@@ -32,7 +34,8 @@ from forward_avoidance import ForwardAvoidance
 
 # Bound GIL handoff latency between the 100 Hz receiver, policy and WebUI.
 sys.setswitchinterval(0.001)
-controller = Controller(Bridge)
+bridge = Bridge(os.environ.get('APP_SOCKET', DEFAULT_ADDRESS))
+controller = Controller(bridge)
 voice_config = VoiceConfig()
 access = MotionAccess(controller, remote_allowed=lambda: voice_config.get()['remote_motion_enabled'])
 token = secrets.token_urlsafe(32)
@@ -76,18 +79,21 @@ def play_battery_warning():
 controller.battery_warning = play_battery_warning
 ui = WebUI(port=9527, cors_origins='')
 register_media(ui)
-gamepad_control = register_gamepad(ui, controller)
+gamepad_control = register_gamepad(
+    ui, controller, play_sound=lambda kind: request(voice_port, token, '/duck-call', {'kind': kind}, timeout=12))
 access.gamepad = gamepad_control
 tof = ToFMonitor(retry=1.)
 avoidance = ForwardAvoidance(tof, settings_path=DATA / 'obstacle-avoidance.json')
 controller.attach_forward_avoidance(avoidance)
-Bridge.provide('duck_state', controller.receive)
-Bridge.provide('duck_diagnostics', controller.receive_diagnostics)
-Bridge.provide('duck_voltage', controller.receive_voltage)
-Bridge.provide('duck_boot_pd', controller.receive_boot_pd)
-Bridge.provide('duck_raw', controller.receive_raw)
-Bridge.provide('duck_servo_reply', controller.receive_servo_reply)
-Bridge.provide('duck_cal_reply', controller.receive_cal_reply)
+bridge_recovery = BridgeRecovery(controller, {
+    'duck_state': controller.receive,
+    'duck_diagnostics': controller.receive_diagnostics,
+    'duck_voltage': controller.receive_voltage,
+    'duck_boot_pd': controller.receive_boot_pd,
+    'duck_raw': controller.receive_raw,
+    'duck_servo_reply': controller.receive_servo_reply,
+    'duck_cal_reply': controller.receive_cal_reply,
+})
 
 def mode(body: dict):
     try: return access.web_mode(body['mode'])
@@ -165,8 +171,15 @@ def cal_exit(_body: dict = None):
     try: return access.web_mode('shadow')
     except ValueError as exc: raise HTTPException(400, str(exc))
 
-def cal_heartbeat(_body: dict = None):
-    try: return controller.cal_heartbeat()
+def cal_heartbeat(body: dict = None):
+    try:
+        if body and body.get('default_pose') is True:
+            return access.renew_calibration_pose()
+        return controller.cal_heartbeat()
+    except ValueError as exc: raise HTTPException(400, str(exc))
+
+def cal_default_pose(_body: dict = None):
+    try: return access.start_calibration_pose()
     except ValueError as exc: raise HTTPException(400, str(exc))
 
 def cal_center(body: dict):
@@ -238,6 +251,7 @@ ui.expose_api('POST', '/api/left_kick', left_kick)
 ui.expose_api('POST', '/api/cal/enter', cal_enter)
 ui.expose_api('POST', '/api/cal/exit', cal_exit)
 ui.expose_api('POST', '/api/cal/heartbeat', cal_heartbeat)
+ui.expose_api('POST', '/api/cal/default-pose', cal_default_pose)
 ui.expose_api('POST', '/api/cal/center', cal_center)
 ui.expose_api('POST', '/api/cal/sitting', cal_sitting)
 ui.expose_api('POST', '/api/servo/enter', servo_enter)
@@ -247,6 +261,7 @@ ui.expose_api('GET', '/api/servo/overcurrent-check', controller.servo_parameters
 ui.expose_api('POST', '/api/servo/test', servo_test)
 ui.expose_api('POST', '/api/servo', servo_action)
 worker = threading.Thread(target=controller.run, name='policy50', daemon=True)
+bridge_recovery.start()
 avoidance.start()
 worker.start()
 ipc.start()
@@ -256,11 +271,15 @@ voice.start()
 try:
     App.run()
 finally:
+    bridge_recovery.close()
     avoidance.close()
     tof.close()
     mouth_receiver.close()
     access.close()
     voice.close()
     ipc.close()
-    controller.stop()
-    worker.join(timeout=2)
+    try:
+        controller.stop()
+        worker.join(timeout=2)
+    finally:
+        bridge.disconnect()

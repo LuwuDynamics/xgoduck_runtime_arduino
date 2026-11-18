@@ -118,6 +118,13 @@
     "model": "qwen-audio-3.1-tts-flash",
     "voice": "XGO Duck custom voice",
     "format": "16 kHz mono PCM16",
+    "address_parts": {
+      "asset": "python/assets/bind-ip-parts.zip",
+      "description": "Prerecorded prefix, suffix, decimal digits and dot in both languages. Device composes its own address locally.",
+      "cn": "请在浏览器打开［IP 地址］，完成 AI 绑定。",
+      "en": "Please open [IP address] in your browser to complete AI pairing.",
+      "sha256": "6a384c298b75a77c7c53d8e634e24815e505822ca890b931882ea89ac7887503"
+    },
     "cn": {
       "asset": "python/assets/bind-device-cn.wav",
       "text": "请打开小鸭驾驶舱，完成设备绑定。",

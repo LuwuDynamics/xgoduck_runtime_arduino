@@ -59,10 +59,16 @@ WantedBy=multi-user.target
 ''')
     dropin = system / 'arduino-app-cli.service.d'
     dropin.mkdir(parents=True, exist_ok=True)
+    if (Path(root) / 'release.yaml').is_file():
+        # The daemon can still serve App Lab when recovery needs the network.
+        prepare = ('ExecStartPre=-/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/release_firmware.py '
+                   f'--if-default {quote(root)}\nTimeoutStartSec=10min')
+    else:
+        prepare = f'ExecStartPre=/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/sketch_cache.py {quote(root)}'
     (dropin / 'xgoduck-ai.conf').write_text(f'''[Unit]
 After=xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
 Wants=xgoduck-ai-hardware.service xgoduck-ai-usb-startup.service
 
 [Service]
-ExecStartPre=/usr/bin/python3 /usr/local/lib/xgoduck-ai-support/sketch_cache.py {quote(root)}
+{prepare}
 ''')

@@ -1,0 +1,26 @@
+#remote-control-notice {
+  box-sizing: border-box;
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 24px);
+  padding: 22px;
+  overflow: auto;
+  border: 1px solid #3c555b;
+  border-radius: 16px;
+  background: #13202c;
+  color: #eef4f5;
+  box-shadow: 0 16px 46px #0008;
+}
+#remote-control-notice::backdrop {background: #000a}
+#remote-control-notice h2 {margin: 0; font-size: 1.25rem; line-height: 1.4}
+#remote-control-notice p {margin: 10px 0 18px; color: #bdcdd5}
+#remote-control-notice form {margin: 0; text-align: end}
+#remote-control-notice button {
+  min-height: 44px;
+  padding: 8px 18px;
+  border-color: #9be6bf;
+  background: #9be6bf;
+  color: #102a23;
+  font-weight: 600;
+}
+#remote-control-notice button:hover {background: #b8efcf}
+#remote-control-notice button:focus-visible {outline: 2px solid #9be6bf; outline-offset: 3px}

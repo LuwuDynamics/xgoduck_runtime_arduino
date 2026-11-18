@@ -49,8 +49,15 @@ void k_msleep(int){}
 void setTorqueEnable(bool){++torqueWrites;}
 struct ServoWrite { uint8_t id; uint16_t value; };
 std::vector<ServoWrite> testTorque, testGoals;
+uint8_t testTorqueRegister=0;
+int missedTorqueOffWrites=0;
+bool torqueReadAvailable=true;
 void scsWriteByte(uint8_t id,uint8_t reg,uint8_t value){
- if (reg==ADDR_TORQUE) testTorque.push_back({id,value});
+ if (reg==ADDR_TORQUE) {
+  testTorque.push_back({id,value});
+  if (value==0&&missedTorqueOffWrites>0) --missedTorqueOffWrites;
+  else testTorqueRegister=value;
+ }
  if (reg==ADDR_UNLOAD_CONDITION){
   assert(id==33);
   storedProtection=value;
@@ -67,6 +74,11 @@ void servoUnlock(uint8_t){} void servoSetId(uint8_t,uint8_t){}
 void servoSetProtectionCurrent(uint16_t){}
 bool pingServo(uint8_t){return true;}
 bool readServoPresent(uint8_t,uint16_t &p){p=2048;return true;}
+bool readServoTorque(uint8_t id,uint8_t &torque){
+ assert(id==33);
+ torque=testTorqueRegister;
+ return torqueReadAvailable;
+}
 bool readServoGains(uint8_t,uint8_t &p,uint8_t &d,uint8_t address=ADDR_PERM_KP_KD){
  readAddress=address;
  p=address==ADDR_TEMP_KP ? liveKp : savedKp;
@@ -86,10 +98,11 @@ uint32_t servoMidNextUs=0;
 ServoReplyPacket lastReply;
 void publishServoReply(const ServoReplyPacket &r){lastReply=r;}
 ''' + writer+receiver+dispatch+r'''
-void receive(ServoPacket p){
+void receive(ServoPacket p,bool resetMailbox=true){
  memcpy(p.magic,"DQV2",4);
  MsgPack::bin_t<uint8_t> bytes(sizeof p);memcpy(bytes.data(),&p,sizeof p);
- servoPending=false;receiveServo(bytes);
+ if (resetMailbox) servoPending=false;
+ receiveServo(bytes);
 }
 int main(){
  ServoPacket p={};p.op=SERVO_APPLY_RUN_GAINS;p.targetId=254;p.kp=5;p.kd=10;
@@ -208,9 +221,9 @@ int main(){
  test.op=SERVO_TEST_START;test.testSession=102;
  applyServoOp(test, false);assert(lastReply.ok);
  test.op=SERVO_TEST_STOP;test.testSession=100;
- applyServoOp(test, false);assert(servoTest.session==102);
+ applyServoOp(test, false);assert(!lastReply.ok&&servoTest.session==102);
  test.testSession=102;applyServoOp(test, false);
- assert(lastReply.ok&&!servoTest.session&&testTorque.back().value==0);
+ assert(lastReply.ok&&lastReply.testTorqueOff&&!servoTest.session&&testTorque.back().value==0);
 
  // Identical angle heartbeats do not extend the hold, including across micros() rollover.
  constexpr uint32_t idleUs=10000000u, heartbeatUs=150000u;
@@ -254,6 +267,35 @@ int main(){
  clockUs=changed+idleUs;test.testOffset=30;
  applyServoOp(test, false);assert(!lastReply.ok&&lastReply.testIdleTimeoutSec==10);
  assert(!servoTest.session&&testTorque.back().id==33&&testTorque.back().value==0);
+
+ // An accepted STOP takes priority over a late MOVE and cancels the ramp mid-motion.
+ test.op=SERVO_TEST_START;test.testSession=105;test.testOffset=0;
+ applyServoOp(test,false);assert(lastReply.ok&&testTorqueRegister==1);
+ test.op=SERVO_TEST_MOVE;test.testOffset=40;
+ applyServoOp(test,false);
+ clockUs+=TICK_US;serviceServoOperation(nullptr,false);
+ assert(servoTest.position!=servoTest.goal);
+ const size_t goalsBeforeStop=testGoals.size(), torqueBeforeStop=testTorque.size();
+ ServoPacket stop=test;stop.op=SERVO_TEST_STOP;stop.testOffset=0;
+ receive(stop);receive(test,false);
+ assert(servoPending&&pendingServo.op==SERVO_TEST_STOP);
+ missedTorqueOffWrites=1;
+ clockUs+=TICK_US;serviceServoOperation(&pendingServo,false);
+ assert(lastReply.ok&&lastReply.testTorqueOff&&lastReply.testSession==105);
+ assert(testGoals.size()==goalsBeforeStop&&testTorque.size()==torqueBeforeStop+2);
+ assert(!servoTest.session&&testTorqueRegister==0);
+ serviceServoOperation(&test,false);
+ assert(!lastReply.ok&&!servoTest.session&&testGoals.size()==goalsBeforeStop);
+
+ // A missing readback must fail explicitly. Retrying the same STOP can confirm release.
+ test.op=SERVO_TEST_START;test.testSession=106;test.testOffset=0;
+ applyServoOp(test,false);assert(lastReply.ok);
+ stop.testSession=106;torqueReadAvailable=false;
+ serviceServoOperation(&stop,false);
+ assert(!lastReply.ok&&!lastReply.testTorqueOff&&!servoTest.session);
+ torqueReadAvailable=true;
+ serviceServoOperation(&stop,false);
+ assert(lastReply.ok&&lastReply.testTorqueOff&&testTorqueRegister==0);
  assert(savedWrites==6&&liveWrites==2);
 }
 '''
