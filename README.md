@@ -8,8 +8,6 @@ Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data
 
 The first seven steps follow the official developer guide, with this repository’s XGO Duck AI packages and startup commands.
 
-The ordinary walking pose on this branch uses −2° at the left knee, +20° at the left ankle, +2° at the right knee and −20° at the right ankle. To use this pose, import the [App Lab source ZIP from this branch](packages/xgoduck_ai.zip) and verify its [checksum](packages/xgoduck_ai.zip.sha256). The published `v0.3.6` packages use 0°, +22°, 0° and −22° at the same joints.
-
 ## 1. Set up Wi-Fi
 
 Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)

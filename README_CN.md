@@ -8,8 +8,6 @@
 
 下面按官方开发者指南的七步顺序配置，使用本仓库的 XGO Duck AI 安装包和启动命令。
 
-本分支的普通步行默认姿势使用左膝 −2°、左踝 +20°、右膝 +2°、右踝 −20°。要使用这组角度，请导入本分支的 [App Lab 源码 ZIP](packages/xgoduck_ai.zip)，并核对[校验文件](packages/xgoduck_ai.zip.sha256)。已发布的 `v0.3.6` 安装包在这四个关节上分别使用 0°、+22°、0°、−22°。
-
 ## 1. 设置并连接 Wi-Fi
 
 用 USB 数据线把 UNO Q 连到电脑，在 Arduino App Lab 完成首次设置。选择键盘布局、设置设备名、连接 Wi-Fi 并设置板端 Linux 登录密码。等待检查和更新完成，断开 USB 后按指南接好扩展板，再重开 App Lab 并连接开发板。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/index.html)
