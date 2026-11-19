@@ -185,7 +185,8 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    已绑定、音频设备齐全且公网可用时，才要求语音云连接和音频就绪；不要把待绑定当作安装失败。
    本次正常重启不要求断开公网；断网冷启动可在配置完成后另测。已接 ToF 时轮询 /api/tof/status，确认 state=ranging、
    fresh=true、seq 递增且 valid_zones > 0。若异常，用容器内 python /app/tools/read-tof.py --seconds 4 对照。
-   接入 ToF 后需要重启整板才能生效。如果暂时没有读数，可以稍后重启整板，再检查 /api/tof/status。
+   若验收重启后仍检测不到已接入的 ToF，记录为「ToF 待复测」。
+   只提醒我「请手动将小鸭的电源开关关闭再打开一次。等小鸭启动后，再查看 /api/tof/status。」
    若语音日志提示 libopus.so.0 权限错误，检查新 App 的 native 库和目录对容器运行用户是否可读及可遍历。
    启动失败先查 App、Router 和硬件服务日志。若需回退，停止新 App，按 docs/deployment.md 从旧目录
    恢复硬件服务和默认项，再启动旧 App，保留备份。汇报所用安装包、校验结果、版本、实际目录和验收结果。

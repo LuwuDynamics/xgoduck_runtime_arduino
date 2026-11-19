@@ -211,7 +211,8 @@ Path to any package I already downloaded: [optional].
    for this normal reboot if it was available before; offline cold boot can be tested after setup. If ToF is attached,
    poll /api/tof/status for state=ranging, fresh=true, increasing seq and valid_zones > 0.
    If needed, compare against python /app/tools/read-tof.py --seconds 4 inside the App container.
-   After connecting the ToF sensor, reboot the board to activate it. If readings are unavailable, you can reboot the board later and check /api/tof/status again.
+   If the connected ToF sensor is still undetected after the verification reboot, mark it as pending a retest.
+   Just tell me, “Turn Duck’s power switch off and back on once. After Duck starts, check /api/tof/status again.”
    If voice reports a libopus.so.0 permission error, check the container user's access to the native
    library and its parent directories. On failure, inspect App, Router and hardware service logs.
    To roll back, stop the new App, follow docs/deployment.md to restore hardware support and the default
