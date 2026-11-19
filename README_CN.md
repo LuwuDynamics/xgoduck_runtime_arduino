@@ -102,17 +102,19 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    核对 UNO Q、官方 Debian 13 ARM64、可用空间、arduino 用户（UID 1000）、App CLI 和 daemon 版本。
    用 arduino-app-cli app list 查看已装 App，用 app details <App ID> 核对实际目录，用 app ps 查看运行状态，
    用 arduino-app-cli properties get default 查看开机默认 App。旧版 CLI 的状态查询以帮助为准。
-   已安装正确版本时从实际目录继续，避免重复导入。保持 Wi-Fi SSH，USB 探测可能中断 USB/ADB。
+   先确定目标版本。我选“最新 AI 版”时，查看 GitHub 最新 Release 的版本号即可。若我指定 master 腿姿，
+   复用已有 App 前要用目标构建的 build-manifest.json 核对实际目录中 python/rl_core.py 的 SHA-256，两种构建都可能显示 0.3.6。
+   已有 App 运行时，只读检查驾驶舱、/api/version 和 /api/status。若运行的是目标版本及所需构建，且状态正常，
+   告诉我“已是目标版本，跳过安装”，到此结束。若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
+   需要安装时保持 Wi-Fi SSH，USB 探测可能中断 USB/ADB。
 
-2. 按板子现状选包。优先复用已下载且校验通过的同版本文件。
-   若我指定 master 腿姿，用 master 工作区的 packages/xgoduck_ai.zip 和同目录的 .sha256，走第 6 项源码路线。
-   两种构建都显示 0.3.6，复用前请用 build-manifest.json 核对 python/rl_core.py 的 SHA-256。下面的下载地址用于发布版。
-   - 新板或刚重刷系统，优先用全量首装 ZIP。
+2. 首次安装和跨版本更新默认都用目标版本的全量 ZIP（第 4 项）。优先复用电脑上已通过校验的包。
+   - 全量 ZIP 内已包含 .ard、运行镜像和依赖，只需下载全量 ZIP 和对应的 .sha256。
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
-   - 已有 XGO Duck AI，更新优先用预编译 .ard。已准备好运行环境的板子也可用它首装。
+   - 我明确选择轻量安装，或目标版本缺少全量包时，若板端支持 Release，可用同版本预编译 .ard（第 5 项）。
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard
-   - 全量包缺失时，板端环境允许就用同版本 .ard。若需要编辑源码、板端 CLI/daemon 无法支持 Release，
-     或同版本 .ard 也不可用，用源码 ZIP。
+   - 需要编辑源码、板端无法安装 Release，或目标版本只有源码 ZIP 时，走第 6 项。若我指定 master 腿姿，
+     用 master 工作区的 packages/xgoduck_ai.zip 和同目录的 .sha256。发布版对应的 AI 分支源码 ZIP 在这里。
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
    Release 链接缺失或需指定版本时，到这里选对应 AI 版本。
    https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
@@ -128,13 +130,13 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    处理历史零位文件，跳过旧 .cache、data/native/ 和运行时 socket。确认其他 App 可停止并停妥，再运行安装器
    或改共享 Router。第 4～6 项只做所选的安装路线。
 
-4. 全量首装 ZIP 在板上解压到新目录。参考首装环境预留至少 2.5 GiB，按 INSTALL.txt 以 arduino
+4. 将全量 ZIP 在板上解压到新目录。参考首装环境预留至少 2.5 GiB，按 INSTALL.txt 以 arduino
    用户运行 bash install.sh，按需提供 sudo。先从 install.sh 核对固定的 app_root；解压到新目录不会改变它。
    目标目录已存在时，核对 .xgoduck-full-install.sha256 是否与包内 .ard 的 SHA-256 完全一致。
    相同才可停掉 App 后重跑安装器。收据缺失或不同时，保留已核实可用的安装并报告冲突；若我已明确要求
    重装，则先保存需保留的数据、停止相关服务并处理旧目录，再运行安装器。不要伪造收据或覆盖旧目录。
    安装器使用包内系统依赖、ARM64 镜像和上传工具，安装预编译 App、设置 2 Mbps Bridge 和开机自启，
-   然后启动。有旧数据要迁回时，停止新 App，再执行 sudo systemctl stop xgoduck-ai-hardware.service，
+   然后启动。跨版本更新或需要恢复已保存的配置时，停止新 App，再执行 sudo systemctl stop xgoduck-ai-hardware.service，
    迁移第 3 项的持久配置并核对内容、权限和归属，保留新生成的 native 文件。
    依次执行 sudo systemctl start xgoduck-ai-hardware.service 和 arduino-app-cli app start --no-prepare <新目录>。
    全量包不会重刷系统。完成配置迁移及第 7 项选区处理后再验收。
@@ -175,13 +177,15 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 8. 验收时保持舵机卸力。检查驾驶舱、9527 控制页和 /api/version，确认实际运行版本。
    首次启动及依赖准备完成后，执行 sudo systemctl reboot。重新连接 Wi-Fi SSH，等待网页/API 就绪，
-   确认 boot ID 已改变、默认 App 自动运行且版本正确；已有配置和标定应保留。
+   确认 boot ID 已改变、默认 App 自动运行且版本正确。跨版本更新后，对照旧 App 核实舵机中位、
+   IMU 标定、设备身份和原有账号绑定均已保留。
    检查 /api/status 的 Bridge；按实际接线情况检查舵机和 IMU。未接线或未标定时记录待完成项。
    检查 /api/voice/status 和日志。首次未绑定、缺少 USB 音频或没有公网时，不要求 bound、
    cloud_connected、audio_ready 全为 true；记录待联网、待绑定或待接设备。进程崩溃或依赖错误需处理。
    已绑定、音频设备齐全且公网可用时，才要求语音云连接和音频就绪；不要把待绑定当作安装失败。
    本次正常重启不要求断开公网；断网冷启动可在配置完成后另测。已接 ToF 时轮询 /api/tof/status，确认 state=ranging、
    fresh=true、seq 递增且 valid_zones > 0。若异常，用容器内 python /app/tools/read-tof.py --seconds 4 对照。
+   接入 ToF 后需要重启整板才能生效。如果暂时没有读数，可以稍后重启整板，再检查 /api/tof/status。
    若语音日志提示 libopus.so.0 权限错误，检查新 App 的 native 库和目录对容器运行用户是否可读及可遍历。
    启动失败先查 App、Router 和硬件服务日志。若需回退，停止新 App，按 docs/deployment.md 从旧目录
    恢复硬件服务和默认项，再启动旧 App，保留备份。汇报所用安装包、校验结果、版本、实际目录和验收结果。

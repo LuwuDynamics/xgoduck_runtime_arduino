@@ -104,18 +104,24 @@ Path to any package I already downloaded: [optional].
    the App CLI and daemon versions. Use arduino-app-cli app list for installed Apps,
    app details <App ID> for the actual path, app ps for running status, and
    arduino-app-cli properties get default for the startup App.
-   Check command help on older CLIs. Reuse a verified installation of the target version.
-   Keep Wi-Fi SSH available. USB detection can interrupt USB/ADB.
+   Check command help on older CLIs. Resolve the target version first. For “latest XGO Duck AI”, read the
+   version from the latest GitHub Release. If I requested the master walking pose, compare the installed
+   python/rl_core.py SHA-256 with the target build-manifest.json before reusing an App. Both builds can report 0.3.6.
+   If an App is running, check the cockpit, /api/version and /api/status without changing its state.
+   If the requested version and build are running normally, report that installation was skipped and finish here.
+   If the target version is installed but unhealthy, inspect its App and service logs before deciding how to repair it.
+   For an installation, keep Wi-Fi SSH available. USB detection can interrupt USB/ADB.
 
-2. Choose a package for the board and reuse a verified download of the right version when available.
-   If I request the master walking pose, take packages/xgoduck_ai.zip and its .sha256 from the master checkout and follow item 6.
-   Both builds report 0.3.6. Check the python/rl_core.py hash in build-manifest.json before reusing an installation. The downloads below are for the published build.
-   - For a new or freshly flashed board, prefer the full first-install ZIP.
+2. Use the full ZIP for the target version by default for both first installs and upgrades from an older
+   version (item 4). Reuse a verified copy on my computer when available.
+   - The full ZIP includes the .ard, runtime image and dependencies. Only download the full ZIP and its .sha256.
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
-   - For an update, prefer the precompiled .ard. It can also install the App on a prepared board.
+   - If I request a lightweight install or the target version has no full package, use its precompiled
+     .ard on a board that supports Releases (item 5).
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard
-   - If the full package is unavailable, use the matching .ard if the board supports it. Use the source
-     ZIP if you need to edit the App, the board cannot support Releases, or the matching .ard is unavailable.
+   - Use the source ZIP (item 6) for editing, for a board that cannot install Releases, or when only the
+     source ZIP is available for the target version. If I request the master walking pose, use
+     packages/xgoduck_ai.zip and its .sha256 from the master checkout. The AI branch source ZIP is here.
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
    For a specific version or missing direct links, look for the matching XGO Duck AI version here.
    https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
@@ -134,7 +140,7 @@ Path to any package I already downloaded: [optional].
    installer or configuring the shared Router. The full package starts automatically: follow item 4
    to stop services before migrating data and handle any existing destination first. Use only one route in items 4–6.
 
-4. For the full first-install ZIP, allow at least 2.5 GiB on the reference image. Extract on the board
+4. For the full ZIP, allow at least 2.5 GiB for a first install on the reference image. Extract on the board
    into a new directory. Read INSTALL.txt and the fixed app_root in install.sh; the extraction directory
    does not change that destination. If it exists, compare .xgoduck-full-install.sha256 with the exact
    SHA-256 of the bundled .ard. Only a match permits stopping the App and rerunning the installer.
@@ -143,7 +149,7 @@ Path to any package I already downloaded: [optional].
    handle the old directory first. Do not fabricate a receipt or overwrite the directory.
    Run bash install.sh as arduino, using sudo when prompted. It uses bundled system packages, ARM64
    images and upload tools, installs the App, sets the 2 Mbps Bridge and autostart, then launches it.
-   If saved data needs restoring, stop the new App, then run sudo systemctl stop xgoduck-ai-hardware.service.
+   When upgrading or restoring saved settings, stop the new App, then run sudo systemctl stop xgoduck-ai-hardware.service.
    Migrate the persistent settings from item 3 and check their content, permissions and ownership;
    retain the new native files. Run sudo systemctl start xgoduck-ai-hardware.service, then
    arduino-app-cli app start --no-prepare <new-directory>. The full package does not reflash the OS.
@@ -194,7 +200,8 @@ Path to any package I already downloaded: [optional].
 8. Keep the servos unloaded during verification. Check the cockpit, the port 9527 control page and
    /api/version. After preparation and the first startup finish, run sudo systemctl reboot. Reconnect
    over Wi-Fi SSH and wait for the web pages/API. Confirm a changed boot ID, automatic startup of the
-   default App and the correct version. Existing settings and calibration must remain intact.
+   default App and the correct version. After an upgrade, check the servo centers, IMU calibration,
+   device identity and any existing account binding against the old App.
    Check Bridge in /api/status and servo/IMU feedback for connected hardware. Record unwired or
    uncalibrated hardware as unfinished setup. Check /api/voice/status and logs. On an unbound first
    install, with no USB audio, or without internet, do not require bound, cloud_connected and
@@ -204,6 +211,7 @@ Path to any package I already downloaded: [optional].
    for this normal reboot if it was available before; offline cold boot can be tested after setup. If ToF is attached,
    poll /api/tof/status for state=ranging, fresh=true, increasing seq and valid_zones > 0.
    If needed, compare against python /app/tools/read-tof.py --seconds 4 inside the App container.
+   After connecting the ToF sensor, reboot the board to activate it. If readings are unavailable, you can reboot the board later and check /api/tof/status again.
    If voice reports a libopus.so.0 permission error, check the container user's access to the native
    library and its parent directories. On failure, inspect App, Router and hardware service logs.
    To roll back, stop the new App, follow docs/deployment.md to restore hardware support and the default
