@@ -30,11 +30,11 @@ I will enter the password at the terminal prompt.
 
 | Package | When to use it | What it includes |
 | --- | --- | --- |
-| [Full first-install ZIP (Release)][duck-full] · [SHA-256][duck-full-sha] | **A new board or a board with a freshly flashed OS** | About 470 MB. Includes the precompiled App, ARM64 Docker base image, board dependencies and STM32 upload tools. Once the package is on the board, installation can run over the local network. |
+| Full package · [GitHub ZIP][duck-full] ([SHA-256][duck-full-sha]) · [ModelScope ZIP][duck-full-ms] ([SHA-256][duck-full-ms-sha]) | **Default for first installs and version upgrades** | About 470 MB. Includes the precompiled App, ARM64 Docker base image, board dependencies and STM32 upload tools. Once the package is on the board, installation can run over the local network. |
 | [Precompiled .ard (Release)][duck-ard] · [SHA-256][duck-ard-sha] | **Updates** or a first install on a board with the runtime environment ready | About 80 MB. Includes STM32 firmware and the built Python environment. Startup uploads the bundled firmware. The board may still need internet access for missing system packages, container images or upload tools. |
 | [App Lab source ZIP (repository)][duck-zip] · [SHA-256][duck-zip-sha] | **Boards that cannot install .ard** or editing the App | About 35 MB. Uses the existing `packages/xgoduck_ai.zip` link. Import it in App Lab, then prepare the dependencies and build the STM32 sketch on the board. |
 
-Once the assets are published, both direct links point to the latest release. For a specific version or a missing asset, pick the appropriate XGO Duck AI version in [GitHub Releases][duck-releases]. Download the matching checksum for each package.
+For the full package, use ModelScope first on mainland China networks and GitHub first elsewhere. If the download fails, get both the ZIP and its SHA-256 file from the other source. For an older version, download the files from the matching [GitHub Release][duck-releases].
 
 ### Full first-install ZIP
 
@@ -105,8 +105,10 @@ Path to any package I already downloaded: [optional].
    app details <App ID> for the actual path, app ps for running status, and
    arduino-app-cli properties get default for the startup App.
    Check command help on older CLIs. Resolve the target version first. For “latest XGO Duck AI”, read the
-   version from the latest GitHub Release. If I requested the master walking pose, compare the installed
-   python/rl_core.py SHA-256 with the target build-manifest.json before reusing an App. Both builds can report 0.3.6.
+   version from the latest GitHub Release with a five-second timeout. If the lookup fails, verify the
+   version in the ModelScope full ZIP as in item 2, use it for the checks below, and report that the latest
+   release is unconfirmed. If I requested the master walking pose, compare the installed python/rl_core.py
+   SHA-256 with the target build-manifest.json before reusing an App. Both builds can report 0.3.6.
    If an App is running, check the cockpit, /api/version and /api/status without changing its state.
    If the requested version and build are running normally, report that installation was skipped and finish here.
    If the target version is installed but unhealthy, inspect its App and service logs before deciding how to repair it.
@@ -114,8 +116,21 @@ Path to any package I already downloaded: [optional].
 
 2. Use the full ZIP for the target version by default for both first installs and upgrades from an older
    version (item 4). Reuse a verified copy on my computer when available.
-   - The full ZIP includes the .ard, runtime image and dependencies. Only download the full ZIP and its .sha256.
+   - When a download is needed, check the public IP region on the computer that will download the full ZIP,
+     using the same proxy settings as the download. Read only the loc field with this command.
+     curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     For CN, try ModelScope first. For other known regions, try GitHub first. If the lookup fails or a
+     split proxy makes the region unclear, briefly probe both .sha256 links in parallel and use the first
+     valid checksum response. The board's LAN address and voice service region do not determine the download source.
+     ModelScope full ZIP and checksum
+     https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip
+     https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip.sha256
+     GitHub full ZIP and checksum
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
+     https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip.sha256
+     Download the pair from the selected source. On timeout, a missing file, a checksum failure or a version
+     mismatch, fetch and verify both files for the target version from the other source. The full ZIP includes
+     the .ard, runtime image and dependencies.
    - If I request a lightweight install or the target version has no full package, use its precompiled
      .ard on a board that supports Releases (item 5).
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard
@@ -125,10 +140,10 @@ Path to any package I already downloaded: [optional].
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
    For a specific version or missing direct links, look for the matching XGO Duck AI version here.
    https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
-   Get each package and .sha256 from the same Release. For the source ZIP, get both from the branch
-   above. Verify on my computer, transfer the files with SCP, and run sha256sum -c again on the board.
-   Download again if the checksum fails. Verify version.txt and the UNO Q target. For the full package,
-   inspect its bundled .ard. If the requested version is missing or the candidate is older than the
+   Get each GitHub package and its .sha256 from the same Release. For the source ZIP, get both from the
+   selected branch. Verify on my computer, transfer the files with SCP, and run sha256sum -c again on the board.
+   If a checksum fails, download a fresh copy and verify it. Check version.txt and the UNO Q target.
+   For the full ZIP, inspect the bundled .ard. If the requested version is missing or the candidate is older than the
    installed version, keep the existing installation and report the versions.
 
 3. If the servos are wired, have me support Duck and confirm torque is off. For an update, stop the old
@@ -224,6 +239,8 @@ Path to any package I already downloaded: [optional].
 ```
 
 [duck-releases]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
+[duck-full-ms]: https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip
+[duck-full-ms-sha]: https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip.sha256
 [duck-full]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
 [duck-full-sha]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip.sha256
 [duck-ard]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard

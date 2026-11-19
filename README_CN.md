@@ -30,11 +30,11 @@
 
 | 安装包 | 什么时候用 | 包内有什么 |
 | --- | --- | --- |
-| [全量首装 ZIP（Release）][duck-full] · [SHA-256][duck-full-sha] | **新板或重刷系统后首装** | 约 470 MB。包含预编译 App、ARM64 Docker 基础镜像、板端依赖和 STM32 上传工具。下载并传到板子后，可在局域网内完成安装。 |
+| 全量包 · [魔搭 ZIP][duck-full-ms]（[SHA-256][duck-full-ms-sha]）· [GitHub ZIP][duck-full]（[SHA-256][duck-full-sha]） | **首次安装和跨版本更新的默认选择** | 约 470 MB。包含预编译 App、ARM64 Docker 基础镜像、板端依赖和 STM32 上传工具。下载并传到板子后，可在局域网内完成安装。 |
 | [预编译 .ard（Release）][duck-ard] · [SHA-256][duck-ard-sha] | **已有安装时更新**，也可在环境已准备好的板子上首装 | 约 80 MB。包含预编译 STM32 固件和 Python 环境。启动时直接上传固件。板上缺少的系统依赖、Docker 镜像或上传工具仍可能需要联网获取。 |
 | [App Lab 源码 ZIP（代码仓库）][duck-zip] · [SHA-256][duck-zip-sha] | **板端无法安装 .ard**，或需要编辑源码 | 约 35 MB。沿用原来的 `packages/xgoduck_ai.zip` 下载地址。在 App Lab 导入后，由板子准备依赖并编译 STM32。 |
 
-两个 Release 直链在附件发布后指向最新版本。需要指定版本，或最新发布缺少对应附件时，到 [GitHub Releases][duck-releases] 选择所需的 XGO Duck AI 版本。下载时请配套取同一版本的校验文件。
+下载全量包时，中国大陆网络优先选魔搭，其他地区优先选 GitHub。如果下载失败，从另一来源重新取 ZIP 和配套的 SHA-256 文件。需要历史版本时，请从[对应的 GitHub Release][duck-releases] 下载该版本的文件。
 
 ### 全量首装 ZIP
 
@@ -102,15 +102,26 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    核对 UNO Q、官方 Debian 13 ARM64、可用空间、arduino 用户（UID 1000）、App CLI 和 daemon 版本。
    用 arduino-app-cli app list 查看已装 App，用 app details <App ID> 核对实际目录，用 app ps 查看运行状态，
    用 arduino-app-cli properties get default 查看开机默认 App。旧版 CLI 的状态查询以帮助为准。
-   先确定目标版本。我选“最新 AI 版”时，查看 GitHub 最新 Release 的版本号即可。若我指定 master 腿姿，
+   先确定目标版本。我选“最新 AI 版”时，限时 5 秒查询 GitHub 最新 Release 的版本号。若查不到，可按第 2 项
+   核实魔搭全量包的实际版本，并用该版本做下面的检查，说明尚未确认它是否为最新。若我指定 master 腿姿，
    复用已有 App 前要用目标构建的 build-manifest.json 核对实际目录中 python/rl_core.py 的 SHA-256，两种构建都可能显示 0.3.6。
    已有 App 运行时，只读检查驾驶舱、/api/version 和 /api/status。若运行的是目标版本及所需构建，且状态正常，
    告诉我“已是目标版本，跳过安装”，到此结束。若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
    需要安装时保持 Wi-Fi SSH，USB 探测可能中断 USB/ADB。
 
 2. 首次安装和跨版本更新默认都用目标版本的全量 ZIP（第 4 项）。优先复用电脑上已通过校验的包。
-   - 全量 ZIP 内已包含 .ard、运行镜像和依赖，只需下载全量 ZIP 和对应的 .sha256。
+   - 需要下载全量包时，在实际下载的电脑上沿用当前代理设置，用下面的命令读取公网出口的国家/地区代码。
+     curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     CN 优先魔搭，其他已识别的地区优先 GitHub。查询失败或代理分流导致出口不明时，并行短测下面两个
+     .sha256 链接，选先返回有效校验文件的来源。板子的局域网 IP 和语音服务区域不参与选源。
+     魔搭全量 ZIP 和校验文件
+     https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip
+     https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip.sha256
+     GitHub 全量 ZIP 和校验文件
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
+     https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip.sha256
+     从选定来源下载这一对文件。若超时、缺文件、校验失败或包内版本不符，换另一来源取目标版本的
+     ZIP 和校验文件并重新校验。全量 ZIP 已包含 .ard、运行镜像和依赖。
    - 我明确选择轻量安装，或目标版本缺少全量包时，若板端支持 Release，可用同版本预编译 .ard（第 5 项）。
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard
    - 需要编辑源码、板端无法安装 Release，或目标版本只有源码 ZIP 时，走第 6 项。若我指定 master 腿姿，
@@ -118,9 +129,9 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
      https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/packages/xgoduck_ai.zip
    Release 链接缺失或需指定版本时，到这里选对应 AI 版本。
    https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
-   从同一 Release 取包和 .sha256。源码 ZIP 与其 .sha256 都从上面的分支地址取。
+   GitHub 安装包和 .sha256 要取自同一 Release。源码 ZIP 与其 .sha256 都从对应分支取。
    优先在电脑下载并校验，再用 SCP 传到板上，用 sha256sum -c 再核对。
-   校验失败时重新下载。核对包内 version.txt 和 UNO Q 目标。全量包以其中的 .ard 为准。
+   校验失败的文件要重新下载并校验。核对包内 version.txt 和 UNO Q 目标。全量包以其中的 .ard 为准。
    指定版本缺包或候选包比已装版本旧时，保留已装版本并告诉我。
 
 3. 已接舵机时，先让我扶稳小鸭并确认卸力。更新时停止旧 App，记下默认 App 和旧目录，备份旧 App 及 data/。
@@ -195,6 +206,8 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 ```
 
 [duck-releases]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases
+[duck-full-ms]: https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip
+[duck-full-ms-sha]: https://modelscope.cn/models/mingyangbj/xgo-duck-ai/resolve/master/xgoduck-ai-unoq-full.zip.sha256
 [duck-full]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip
 [duck-full-sha]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq-full.zip.sha256
 [duck-ard]: https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases/latest/download/xgoduck-ai-unoq.ard
