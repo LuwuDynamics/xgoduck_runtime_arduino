@@ -30,6 +30,15 @@
 
 三个包使用同一版本的源码。源码 ZIP 继续放在 `packages/xgoduck_ai.zip`，同时更新其 `.sha256`。在 UNO Q 上用 `python3 tools/package-ai-app.py --release` 构建带版本号的 `.ard`，让每版有独立的安装目录。制作全量包时使用同一版本的 `.ard`，让包内脚本、安装目录和清单与新版本一致。 [预编译包制作与恢复](ai-chat.md#precompiled-uno-q-release)
 
+用专用目录暂存这个版本的 `.ard`、安装脚本、说明、运行镜像、上传工具和 `debs/`。为每个目标镜像保留一份出厂 `/var/lib/dpkg/status`。在已更新 APT 索引的 Debian 13 ARM64 构建环境中准备依赖，然后用 Python 3.9+ 生成最终 ZIP。
+
+```bash
+bash tools/prepare-full-debs.sh build/full/debs baselines/*.status
+python3 tools/package-ai-app.py --full-bundle build/full
+```
+
+构建仓库随源码维护一份[必带包清单](../tools/full-bundle-packages.txt)，其中包括 `python3-dbus`、Router 使用的 `socat`、`v4l-utils` 和配套的 `libv4l2rds0t64`。准备脚本保留暂存目录中已选定的版本，从 Debian 下载缺少的包，按各个镜像的状态解析依赖，并重建 `debs/Packages`。最终打包命令检查清单、索引、每个 deb 的大小和 SHA-256，检查通过才写出 `dist/xgoduck-ai-unoq-full.zip` 和 `.sha256`，包内的 `SHA256SUMS` 也会重新生成。
+
 构建完成后将 Release 的外层附件命名为 `xgoduck-ai-unoq.ard` 和 `xgoduck-ai-unoq-full.zip`。为这两个最终文件名分别生成 `.sha256` 后一起上传，把这一版设为最新 Release。只在发布时使用固定附件名，`.ard` 的内部目录仍带版本号。旧版可从 [GitHub Releases](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases) 的对应标签获取。
 
 仅修改文档而保留版本号时，也需同步源码 ZIP、`.ard` 内的文档及 `build-manifest.json`，并把新的 `.ard` 放入全量包。全量包外层 `INSTALL.txt` 与本仓库 `docs/full-install.txt` 保持一致，更新包内 `SHA256SUMS` 及三个成品的校验文件。保留原实机测试对应的旧校验值，并注明新归档是否重新做过实机安装；仅文档重打包不能表述为新归档已通过实机重装。

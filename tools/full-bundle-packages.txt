@@ -1,0 +1,4 @@
+python3-dbus
+socat
+v4l-utils
+libv4l2rds0t64

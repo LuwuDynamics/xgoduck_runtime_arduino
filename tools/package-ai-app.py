@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create an App Lab ZIP, or an Arduino release with precompiled STM32 firmware."""
+"""Create an App Lab ZIP, precompiled Arduino release, or full offline installer."""
 import argparse
 import hashlib
 import json
@@ -100,11 +100,23 @@ def package_release(output, root=ROOT, toolchain_archive=None):
 
 if __name__ == '__main__':
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--release', action='store_true', help='Build a precompiled .ard on UNO Q')
+    mode = p.add_mutually_exclusive_group()
+    mode.add_argument('--release', action='store_true', help='Build a precompiled .ard on UNO Q')
+    mode.add_argument('--full-bundle', type=Path, metavar='STAGING_DIR', help='Pack a staged full installer and check its offline Debian packages')
     p.add_argument('--output', type=Path, help='Output archive path')
     p.add_argument('--toolchain-archive', type=Path, help='Verified Linux ARM64 toolchain archive to bundle in ZIP or use for release builds')
     args = p.parse_args()
-    if args.release:
+    if args.full_bundle:
+        from full_bundle import package_full
+
+        if args.toolchain_archive:
+            p.error('--toolchain-archive is only used when building a source ZIP or .ard.')
+        output = args.output or ROOT / 'dist/xgoduck-ai-unoq-full.zip'
+        try:
+            package_full(args.full_bundle.resolve(), output.resolve())
+        except (OSError, ValueError) as error:
+            p.exit(1, f'Could not build full installer: {error}\n')
+    elif args.release:
         version = (ROOT / 'version.txt').read_text().strip()
         version_slug = re.sub(r'[^A-Za-z0-9]+', '-', version).strip('-')
         output = args.output or ROOT / f'dist/xgoduck-ai-{version_slug}-unoq.ard'
