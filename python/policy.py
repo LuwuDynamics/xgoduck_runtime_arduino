@@ -96,7 +96,7 @@ class Policy:
             raise ValueError('observation contains NaN or Inf')
         return obs
 
-    def infer(self, grav, gyro_rad, angles_deg, vels_deg, cmd=None, head=None):
+    def infer(self, grav, gyro_rad, angles_deg, vels_deg, cmd=None, head=None, *, action_alphas=None):
         if not self.loaded:
             return None
         self.build_obs(grav, gyro_rad, angles_deg, vels_deg, cmd, head)
@@ -104,10 +104,13 @@ class Policy:
         if not np.isfinite(action).all():
             raise ValueError('model output contains NaN or Inf')
         self.prev_action[:] = action
+        if action_alphas is None:
+            action_alphas = self.action_alpha, self.action_alpha_head
+        leg_alpha, head_alpha = action_alphas
         # Four head joints occupy [5:9]; ID 20 starts the right leg at index 9.
-        for sl, alpha in ((slice(0, 5), self.action_alpha),
-                          (slice(5, 9), self.action_alpha_head),
-                          (slice(9, 14), self.action_alpha)):
+        for sl, alpha in ((slice(0, 5), leg_alpha),
+                          (slice(5, 9), head_alpha),
+                          (slice(9, 14), leg_alpha)):
             self._act_filt[sl] *= alpha
             self._act_filt[sl] += action[sl] * (1 - alpha)
         return self._act_filt.copy()
@@ -125,6 +128,7 @@ class Policy:
         self.prev_action = np.zeros(ACTION_DIM, dtype=np.float32)
         self._act_filt = np.zeros(ACTION_DIM, dtype=np.float32)
 
-    def action_to_deg(self, action):
+    def action_to_deg(self, action, *, action_scale=None):
+        scale = self.action_scale if action_scale is None else action_scale
         return deg_from_action(np.asarray(action, dtype=np.float32),
-                               home_deg=self.home_deg, action_scale=self.action_scale)
+                               home_deg=self.home_deg, action_scale=scale)

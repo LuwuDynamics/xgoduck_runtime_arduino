@@ -1,5 +1,19 @@
 # XGO Duck AI 更新记录 / Changelog
 
+## 0.3.7
+
+### 简体中文
+
+- 更新坐站模型。站起阶段运行 1.2 秒，腿部和头部 action 滤波 α 均为 0.2，输出倍率为 1.1。站起首帧沿用坐姿的动作历史。
+- 前后倾超过 55° 或左右侧倾超过 35°，持续达到 150 ms 阈值后直接运行起身模型。机身倾角低于 15° 并持续 1 秒后恢复行走。
+- 左右脚踢球的腿部和头部 action 滤波 α 均改为 0.2，输出倍率改为 1.0，踢球时长为 0.4 秒。
+
+### English
+
+- Update the sit/stand model. Stand runs for 1.2 s with leg and head action smoothing α = 0.2 and an action scale of 1.1. The first standing frame carries over the seated action history.
+- Start the get-up policy as soon as pitch exceeds 55° or roll exceeds 35° for the 150 ms detection window. Return to walking after the body stays within 15° of upright for 1 s.
+- Both kicks use leg and head action smoothing α = 0.2 and an action scale of 1.0. Each kick lasts 0.4 s.
+
 ## 0.3.6
 
 ### 简体中文
