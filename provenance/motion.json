@@ -79,12 +79,12 @@
     "python/wire.py": "c662d7aa561bbe908d26079646652dfd95eff92fcb51b7a9edc4ca81e4956d89",
     "python/xgoduck_ballkick_left.onnx": "3476e99a4d400dad9ff8a61167dc3bd9556b953cbbfcaffdda24e5d744c32873",
     "python/xgoduck_ballkick_right.onnx": "ddba8e793d5f2c8a47d25756fa4bc0f6d39cf46686ff3929a404ca46c7f7fb46",
-    "python/xgoduck_getup.onnx": "0aa9466310dddc17438e42a28d9fa20bd869b4ee0568c7b6d5bfef85e53cbb94",
+    "python/xgoduck_getup.onnx": "87bd91c6b87b9beaf9dee255a10cc815a766c19c66c4a7f89e42f51d7de203a3",
     "python/xgoduck_pick.onnx": "f34e990dda785e9a8c53890bdcd0f7f1d457592691fd3703f3776b48fb2d14b8",
     "python/xgoduck_roller.onnx": "6eed2d1514296294e2183125267801e59ee2d7fa62480780f9d3fd9999873884",
     "python/xgoduck_roulade.onnx": "4244090442d4025817d3c041174206ab4f91bc07294ef5fbc4e5643ffdb76e1a",
     "python/xgoduck_sitstand.onnx": "d0d98b675841be8d6eb0bf3b3155c61687390adb7f234f7f0bae063c771b5d59",
-    "python/xgoduck_walk.onnx": "1fc079512fe3fe23e274e7a9d8c9ad007e88439f0385ecf20c9596e57886249f",
+    "python/xgoduck_walk.onnx": "5f4e969538a9212280278ff335884be46fe33d7e9d93e85237b19f6485d2d59d",
     "sketch/duck_config.h": "d533b5033f286848dfd5ce99b551ef2d0f53c38b956331729c7e6c7027756f4f",
     "sketch/protocol.h": "890de77104f9cf43c0d074e6b34161eb428c2afc6e10b67fdeef6368aaa06be5",
     "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
@@ -110,11 +110,9 @@
     "python/proc.py",
     "python/xgoduck_ballkick_left.onnx",
     "python/xgoduck_ballkick_right.onnx",
-    "python/xgoduck_getup.onnx",
     "python/xgoduck_pick.onnx",
     "python/xgoduck_roller.onnx",
     "python/xgoduck_roulade.onnx",
-    "python/xgoduck_walk.onnx",
     "sketch/qmi8658.h",
     "sketch/sketch.yaml",
     "sketch/uart_fifo.h",
@@ -721,12 +719,14 @@
   },
   "motion_optimization_overlay": {
     "base_commit": "3f9db11c376030d234c5b1299862211e87b590f1",
-    "scope": "Update the sit/stand model and standing settings, kick action smoothing and scale, and directional fall thresholds with immediate get-up.",
+    "scope": "Update the walking, get-up and sit/stand models and standing settings, kick action smoothing and scale, and directional fall thresholds with immediate get-up.",
     "previous_sha256": {
       "python/controller.py": "1d0120047977189ab8d86aaed7656b80876bf599bc5360d3d3bccb18234991e3",
       "python/policy.py": "6c576113c2b545b8aba66e02516dbf785ffcc5174bbe42e9cb72c0a6bc9d6251",
       "python/recovery.py": "939e99e28e62c1bb287b17a930648bfd5ca94275d4e89904f16d76b1ff519ac9",
-      "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d"
+      "python/xgoduck_getup.onnx": "0aa9466310dddc17438e42a28d9fa20bd869b4ee0568c7b6d5bfef85e53cbb94",
+      "python/xgoduck_sitstand.onnx": "0edc351836a1c7e78728bac37d69f1108d0ee14277f5f85da6fe7ade988f949d",
+      "python/xgoduck_walk.onnx": "1fc079512fe3fe23e274e7a9d8c9ad007e88439f0385ecf20c9596e57886249f"
     },
     "previous_controller_method_sha256": {
       "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c"
