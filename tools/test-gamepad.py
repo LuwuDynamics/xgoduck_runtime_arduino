@@ -51,10 +51,12 @@ class GamepadTest(unittest.TestCase):
     def test_web_cannot_overwrite_gamepad_commands(self):
         source = ast.parse((ROOT/'python/controller.py').read_text())
         cls = next(n for n in source.body if isinstance(n, ast.ClassDef) and n.name == 'Controller')
-        fn = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'command')
+        functions = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in ('command', '_roller_command_locked')]
         import math
         ns = dict(math=math, time=time, EXCLUSIVE_MODES=('calibrate','servo_debug'))
-        exec(compile(ast.Module(body=[fn], type_ignores=[]), 'controller.py', 'exec'), ns)
+        exec(compile(ast.Module(body=functions, type_ignores=[]), 'controller.py', 'exec'), ns)
+        self.c._roller_pose = None
+        self.c._roller_command_locked = ns['_roller_command_locked'].__get__(self.c)
         self.c.pick_active = False
         self.c.twist = [.2,0,0]
         result = ns['command'](self.c, twist=[0,0,0])

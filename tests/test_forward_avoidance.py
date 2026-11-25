@@ -28,7 +28,7 @@ class ForwardAvoidanceTest(unittest.TestCase):
     def setUp(self):
         self.now = 10.
         self.monitor = Mock()
-        self.guard = ForwardAvoidance(self.monitor, clock=lambda: self.now)
+        self.guard = ForwardAvoidance(self.monitor, settings={'enabled': True}, clock=lambda: self.now)
 
     def test_forward_slows_and_stops_but_backward_sideways_turning_are_unchanged(self):
         self.guard.update(frame(125))
@@ -47,7 +47,7 @@ class ForwardAvoidanceTest(unittest.TestCase):
 
     def test_exact_ten_fifteen_cm_boundaries_and_31cm_uses_full_requested_speed(self):
         for mm, expected in [(310, .2), (150, .2), (125, .1), (101, .004), (100, 0), (99, 0)]:
-            guard = ForwardAvoidance(self.monitor, clock=lambda: self.now)
+            guard = ForwardAvoidance(self.monitor, settings={'enabled': True}, clock=lambda: self.now)
             guard.update(frame(mm))
             with self.subTest(mm=mm):
                 self.assertAlmostEqual(guard.limit([.2, 0, 0])[0], expected)
@@ -141,7 +141,7 @@ class ForwardAvoidanceTest(unittest.TestCase):
     def test_bad_config_fails_closed_and_explicit_disable_allows_missing_sensor(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp)/'settings.json'
-            self.assertTrue(load_settings(path)['enabled'])
+            self.assertFalse(load_settings(path)['enabled'])
             for values in ({'enabled': 'false'}, {'stop_mm': 0}, {'slow_mm': float('nan')},
                            {'rows': [-1, 8]}, {'columns': [4, 4]}, {'min_valid_zones': 17},
                            {'new_unknown_option': True}):
@@ -157,7 +157,31 @@ class ForwardAvoidanceTest(unittest.TestCase):
         disabled = ForwardAvoidance(self.monitor, settings={'enabled': False})
         self.assertTrue(disabled.status()['forward_ready'])
         disabled.start()
-        self.assertIsNone(disabled.thread)
+        try:
+            disabled.monitor.status.assert_not_called()
+        finally:
+            disabled.close()
+
+    def test_cockpit_switch_applies_and_persists_without_changing_distances(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'obstacle-avoidance.json'
+            path.write_text(json.dumps({'stop_mm': 120, 'slow_mm': 170}))
+            guard = ForwardAvoidance(self.monitor, settings_path=path)
+            guard.update(frame(110))
+            self.assertEqual(guard.limit([.2, 0, 0])[0], .2)
+            self.assertEqual(guard.set_enabled(True), {'enabled': True})
+            self.assertEqual(guard.limit([.2, 0, 0])[0], 0)
+            restored = ForwardAvoidance(self.monitor, settings_path=path)
+            self.assertTrue(restored.status()['enabled'])
+            self.assertEqual(restored.status()['stop_distance_mm'], 120)
+            with self.assertRaises(ValueError):
+                guard.set_enabled('false')
+            with patch.object(Path, 'replace', side_effect=OSError), self.assertRaises(OSError):
+                guard.set_enabled(False)
+            self.assertTrue(guard.status()['enabled'])
+            guard.set_enabled(False)
+            self.assertEqual(guard.limit([.2, 0, 0])[0], .2)
+            self.assertFalse(load_settings(path)['enabled'])
 
     def test_policy_proxy_preserves_model_attributes_reset_and_output(self):
         policy = Mock(action_scale=.8)
@@ -196,7 +220,7 @@ class ForwardControllerTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.c = AppController(Mock(), data_dir=Path(self.temp.name))
-        self.guard = ForwardAvoidance(Mock())
+        self.guard = ForwardAvoidance(Mock(), settings={'enabled': True})
         self.guard.update(frame())
         self.c.attach_forward_avoidance(self.guard)
         self.feedback()
@@ -238,6 +262,27 @@ class ForwardControllerTest(unittest.TestCase):
         self.assertNotIn('forward_blocked', self.c.command(twist=[-.1, 0, 1]))
         self.assertEqual(self.c.twist, [-.1, 0, 1])
         self.assertEqual(self.c.mode, 'policy')
+
+    def test_roller_release_uses_effective_velocity_for_obstacles_and_does_not_restart(self):
+        c, w = self.c, self.wire
+        c.set_roller_mode(True)
+        seq = c.received + 1
+        angles = c.roller_policy.default_deg
+        angles[1] += 22.
+        angles[6] -= 20.
+        c.receive(w.STATE.pack(b'DQS2', 2, 3, w.ALL_MASK, seq, seq*10000, seq*10000,
+            c.seq, 0, 10000, 500, 0, 0, 0, 0, 0, -16384, 0, 0, 0,
+            *angles, *([0.]*15), *angles))
+        c.filtered['imu_fusion_ready'] = True
+        c.recovery.angle_deg = 0.
+        c.command(twist=[.2, 0., 0.])
+        c.step()
+        self.assertTrue(c.command(twist=[0., 0., 0.], roller_release=True)['roller_gliding'])
+        self.guard.update(frame(80, 2))
+        c.step()
+        self.assertEqual(c.twist, [0., 0., 0.])
+        self.assertEqual(c.status()['roller']['glide_result'], 'obstacle')
+        self.assertFalse(c.command(twist=[0., 0., 0.], roller_release=True)['roller_gliding'])
 
     def test_walk_and_roller_wrappers_leave_all_special_policy_objects_untouched(self):
         self.assertIsInstance(self.c.walk_policy, GuardedWalkingPolicy)
@@ -298,6 +343,21 @@ class ForwardControllerTest(unittest.TestCase):
             self.assertEqual(result['status'], 'accepted')
             self.assertEqual(self.c.twist, twist)
             self.access.start_action('stop', session=101)
+
+    def test_cockpit_roller_commands_match_control_panel_limits(self):
+        self.ready_cockpit()
+        self.guard.update(OFFLINE)
+        cockpit, driver = self.access.cockpit_motion, 'a' * 24
+        with self.assertRaisesRegex(ValueError, 'exceeds bounds'):
+            cockpit(driver, 1, 'begin', [.4, 0., 0.])
+        self.access.web_roller(True)
+        for seq, sign in enumerate((1, -1), start=1):
+            self.assertTrue(cockpit(driver, seq, 'begin', [sign*.4, .2, sign*1.])['ok'])
+            self.assertEqual(self.c.twist, [sign*.4, 0., sign*.45])
+        with self.assertRaisesRegex(ValueError, 'exceeds bounds'):
+            cockpit(driver, 3, 'drive', [.401, 0., 0.])
+        cockpit(driver, 4, 'release')
+        self.assertEqual(self.c.twist, [0., 0., 0.])
 
     def test_cockpit_stops_on_release_expiry_and_feedback_loss(self):
         self.ready_cockpit()

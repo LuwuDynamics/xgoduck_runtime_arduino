@@ -209,36 +209,41 @@ class AppController(Controller):
 
     def _stop_forward_locked(self, decision):
         self.forward_avoidance.stopped(self.twist[0], self.input_source, decision)
+        self._finish_roller_glide_locked('obstacle')
         self._forward_release.add(self.input_source)
         self.twist[0] = 0.
         self.generation += 1  # Drop an obsolete positive action still in ONNX.
 
-    def command(self, twist=None, head=None, mouth=None, source='web'):
+    def command(self, twist=None, head=None, mouth=None, source='web', roller_release=False):
         with self.lock:
-            result = super().command(twist, head, mouth, source)
+            result = super().command(twist, head, mouth, source, roller_release)
             if 'ignored' in result or twist is None or self.forward_avoidance is None:
                 return result
             # A held joystick/key must return to neutral before forward travel
             # can resume. Voice cancellation sends zero and retires its job.
-            if float(twist[0]) <= 0:
+            if float(twist[0]) <= 0 and not roller_release and not result.get('roller_gliding'):
                 self._forward_release.discard(source)
             elif self.mode == 'policy' and self.twist[0] > 0:
                 decision = self.forward_avoidance.preview(self.twist[0])
                 if source in self._forward_release:
+                    self._finish_roller_glide_locked('obstacle')
                     self.twist[0] = 0.
-                    return dict(result, forward_blocked=True,
+                    return dict(result, roller_gliding=False, forward_blocked=True,
                                 reason='前进已停止，请先松开方向键/摇杆，再重新发出前进指令。')
                 if not decision['forward_ready']:
                     self._stop_forward_locked(decision)
-                    return dict(result, forward_blocked=True, reason=decision['blocking_reason'])
+                    return dict(result, roller_gliding=False, forward_blocked=True, reason=decision['blocking_reason'])
             return result
 
     def step(self):
         with self.lock:
             self._confirm_arm_locked()
             guard = self.forward_avoidance
-            if guard is not None and self.mode == 'policy' and self.twist[0] > 0:
-                decision = guard.preview(self.twist[0])
+            forward_glide = (self._roller_pose is not None
+                             and self._roller_pose.phase == 'gliding'
+                             and self._roller_pose.forward_stride)
+            if guard is not None and self.mode == 'policy' and (self.twist[0] > 0 or forward_glide):
+                decision = guard.preview(max(self.twist[0], 0.1 if forward_glide else 0.0))
                 if not decision['forward_ready']:
                     self._stop_forward_locked(decision)
         # Do not hold the controller lock across ONNX or invert policy_lock.

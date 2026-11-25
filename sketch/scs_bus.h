@@ -2,9 +2,19 @@
 
 #include <string.h>
 #include "duck_config.h"
+#include "protocol.h"
 
 extern struct k_mutex motorsMu;
 static uint16_t servoRxMask = 0;
+static ServoReplyDetail servoReplyDetail = {};
+static bool collectingStateReplies = false, abnormalStateReply = false;
+
+static void beginStateRead() {
+  servoRxMask = 0;
+  servoReplyDetail = {};
+  abnormalStateReply = false;
+  collectingStateReplies = true;
+}
 static uint8_t servoVoltage[NUM_MOTORS] = {};
 static uint16_t servoPdMask = 0;
 static uint8_t servoBootP[NUM_MOTORS] = {}, servoBootD[NUM_MOTORS] = {};
@@ -14,15 +24,14 @@ static uint8_t servoRxLen = 0;
 static uint8_t servoRxDataLen = 0;
 // Only the hardware task accesses these per-request results. 0xFF means idle;
 // ID 0 is a valid servo address, just like IDs 1..253.
-static uint8_t servoPingId = 0xFF;
-static bool servoPingSeen = false;
 static uint8_t servoCalAckId = 0xFF;
 static bool servoCalAckSeen = false, servoCalAckOk = false;
 static uint8_t servoReadId = 0xFF;
 static bool servoReadSeen = false;
 static uint16_t servoReadPos = 0;
-static uint8_t servoTorqueId = 0xFF, servoTorqueValue = 0;
-static bool servoTorqueSeen = false;
+static uint8_t servoReadAlarm = 0;
+static uint8_t servoByteReadId = 0xFF, servoByteValue = 0;
+static bool servoByteSeen = false;
 static uint8_t servoParamsId = 0xFF;
 static bool servoParamsSeen = false;
 static uint8_t servoParamKp = 0, servoParamKd = 0;
@@ -70,8 +79,11 @@ static uint16_t satPos(int32_t v) {
   return (uint16_t)v;
 }
 
-static void scsWriteBuf(uint8_t id, uint8_t fun, const uint8_t *nDat, uint8_t nLen) {
-  uint8_t buf[8 + NUM_MOTORS * 7];
+static void scsWriteBuf(uint8_t id, uint8_t fun, const uint8_t *nDat, uint8_t nLen,
+                        bool prefixFF = false) {
+  uint8_t wire[1 + 8 + NUM_MOTORS * 7];
+  wire[0] = 0xFF;
+  uint8_t *buf = wire + 1;
   uint8_t check = 0;
   buf[0] = 0xFF;
   buf[1] = 0xFF;
@@ -84,7 +96,7 @@ static void scsWriteBuf(uint8_t id, uint8_t fun, const uint8_t *nDat, uint8_t nL
   }
   check = (uint8_t)(check + buf[2] + buf[3] + buf[4]);
   buf[nLen + 5] = (uint8_t)~check;
-  Serial1.write(buf, nLen + 6);
+  Serial1.write(prefixFF ? wire : buf, nLen + 6 + prefixFF);
 }
 
 static void scsWriteByte(uint8_t id, uint8_t addr, uint8_t value) {
@@ -183,11 +195,11 @@ static void servoSetProtection(uint8_t id, uint8_t flags) {
   }
 }
 
-static void servoSetProtectionCurrent(uint16_t current) {
+static void servoSetProtectionCurrent(uint8_t id, uint16_t current) {
   // Only change the current threshold; preserve the enabled protection bits.
-  servoUnlock(0xFE);
+  servoUnlock(id);
   for (unsigned i = 0; i < 3; ++i) {
-    scsWriteWord(0xFE, ADDR_PROTECTION_CURRENT, current);
+    scsWriteWord(id, ADDR_PROTECTION_CURRENT, current);
     Serial1.flush();
     if (i < 2) k_msleep(10);
   }
@@ -213,11 +225,6 @@ static void readAllRegisters(uint8_t address, uint8_t length) {
 }
 
 static void readAllState() { readAllRegisters(ADDR_PRESENT, PRESENT_LEN); }
-
-static void readSinglePresent(uint8_t id) {
-  const uint8_t data[2] = {ADDR_PRESENT, PRESENT_LEN};
-  scsWriteBuf(id, 0x02, data, 2);
-}
 
 static void applyMotorFb(uint8_t id, int16_t pos, int32_t vel, uint8_t voltageDeciV = 0) {
   int idx = motorIndexById(id);
@@ -283,13 +290,17 @@ static void parseServoRx() {
         }
         break;
       case 2:
+        // 0xFF is reserved. Stay synchronized across a prefixed request echo.
+        if (res == 0xFF) break;
         servoRxBuffer[2] = res;
         servoParserFlag = 3;
         break;
       case 3:
         servoRxBuffer[3] = res;
         if (res == 0x02 || res == 0x04 || res == 0x08 || res == 0x09 || res == 0x0B ||
-            (res == 3 && servoTorqueId <= 253) ||
+            (res == 3 && servoByteReadId <= 253) ||
+            (collectingStateReplies && motorIndexById(servoRxBuffer[2]) >= 0 &&
+             res >= 2 && res <= sizeof(servoRxBuffer) - 4) ||
             (res == SERVO_PROTECTION_REG_LEN + 2 && servoProtectionId <= 253)) {
           servoParserFlag = 4;
           servoRxLen = 0;
@@ -312,25 +323,35 @@ static void parseServoRx() {
             check = (uint8_t)(check + servoRxBuffer[2 + i]);
           }
           check = (uint8_t)~check;
+          const uint8_t sid = servoRxBuffer[2], dataLen = servoRxDataLen;
+          const int idx = motorIndexById(sid);
+          // Look only inside the synchronous position read. A servo can return
+          // a short error-only status in place of its normal register data.
+          const bool stateReply = collectingStateReplies && idx >= 0;
           if (check != servoRxBuffer[3 + servoRxDataLen]) {
+            if (stateReply) {
+              servoReplyDetail.badChecksumMask |= 1u << idx;
+              abnormalStateReply = true;
+            }
             break;
           }
-          uint8_t sid = servoRxBuffer[2];
-          uint8_t dataLen = servoRxDataLen;
+          if (stateReply && servoRxBuffer[4] != 0) {
+            servoReplyDetail.error[idx] = servoRxBuffer[4];
+            abnormalStateReply = true;
+          }
+          if (stateReply && dataLen != 8 && dataLen != 9) {
+            servoReplyDetail.unexpectedLengthMask |= 1u << idx;
+            abnormalStateReply = true;
+          }
           if (dataLen == 2 && servoCalAckId <= 253 && sid == servoCalAckId) {
             servoCalAckSeen = true;
             servoCalAckOk = servoRxBuffer[4] == 0;
             break;
           }
-          if (dataLen == 2 && servoPingId <= 253 && sid == servoPingId) {
-            // Even a device error is evidence that this address responded.
-            servoPingSeen = true;
-            break;
-          }
           if (dataLen == 3) {
-            if (sid == servoTorqueId && servoRxBuffer[4] == 0) {
-              servoTorqueValue = servoRxBuffer[5];
-              servoTorqueSeen = true;
+            if (servoByteReadId <= 253 && sid == servoByteReadId && servoRxBuffer[4] == 0) {
+              servoByteValue = servoRxBuffer[5];
+              servoByteSeen = true;
             }
             break;
           }
@@ -343,7 +364,6 @@ static void parseServoRx() {
             }
             break;
           }
-          const int idx = motorIndexById(sid);
           if (dataLen == 4 && servoRxBuffer[4] == 0) {
             if (servoParamsId <= 253 && sid == servoParamsId) {
               servoParamKp = servoRxBuffer[5]; servoParamKd = servoRxBuffer[6];
@@ -358,12 +378,20 @@ static void parseServoRx() {
           if (dataLen != 8 && dataLen != 9) break;
           if (dataLen == 9 && idx >= 0)
             servoVoltage[idx] = servoRxBuffer[5 + ADDR_VOLTAGE - ADDR_PRESENT];
-          if (servoRxBuffer[4] != 0) break;
+          const uint16_t pos = (uint16_t)hostWord(servoRxBuffer[5], servoRxBuffer[6]);
+          if (pos > POS_MAX) {
+            if (stateReply) {
+              servoReplyDetail.invalidPositionMask |= 1u << idx;
+              abnormalStateReply = true;
+            }
+            break;
+          }
           if (servoReadId <= 253 && sid == servoReadId) {
             servoReadSeen = true;
-            servoReadPos = (uint16_t)hostWord(servoRxBuffer[5], servoRxBuffer[6]);
+            servoReadPos = pos;
+            servoReadAlarm = servoRxBuffer[4];
           }
-          applyMotorFb(sid, hostWord(servoRxBuffer[5], servoRxBuffer[6]),
+          applyMotorFb(sid, pos,
                        hostVelSignMag(servoRxBuffer[7], servoRxBuffer[8]),
                        dataLen == 9 ? servoRxBuffer[5 + ADDR_VOLTAGE - ADDR_PRESENT] : 0);
         }
@@ -406,69 +434,98 @@ static bool servoCalibrateChecked(uint8_t id, bool parameterized, uint16_t posit
   return servoCalAckSeen && servoCalAckOk;
 }
 
-static bool pingServo(uint8_t id) {
+// Some HD-1910s miss a read after idle unless the header has a leading 0xFF.
+// Keep a standard-header fallback for servos that require exactly two 0xFFs.
+static constexpr unsigned SETUP_READ_ATTEMPTS = 10;
+static void readRegister(uint8_t id, uint8_t address, uint8_t length,
+                         bool &seen, unsigned attempts) {
   drainServoRx();
-  servoPingId = id;
-  servoPingSeen = false;
-  scsWriteBuf(id, 0x01, nullptr, 0);
-  Serial1.flush();
-  waitServoReply();
-  servoPingId = 0xFF;
-  return servoPingSeen;
+  seen = false;
+  const uint8_t data[] = {address, length};
+  for (unsigned attempt = 0; attempt < attempts; ++attempt) {
+    const bool prefixFF = attempt + 1 < attempts;
+    scsWriteBuf(id, 0x02, data, sizeof(data), prefixFF);
+    Serial1.flush();
+    if (attempt + 1 == attempts) {
+      // Includes ordinary single-shot reads. Allow their full response window.
+      waitServoReply();
+      return;
+    }
+    const uint32_t start = micros();
+    do {
+      parseServoRx();
+      if (seen) {
+        // A delayed reply to an earlier copy must not leak into the next register read.
+        if (attempt > 0) waitServoReply();
+        return;
+      }
+      k_sleep(K_USEC(100));
+    } while ((uint32_t)(micros() - start) < 1500);
+  }
 }
 
-static bool readServoPresent(uint8_t id, uint16_t &pos) {
-  drainServoRx();
+static bool readServoPresent(uint8_t id, uint16_t &pos, bool requireNoAlarm = false,
+                             unsigned attempts = 1) {
   servoReadId = id;
-  servoReadSeen = false;
   servoReadPos = 0;
-  readSinglePresent(id);
-  Serial1.flush();
-  waitServoReply();
+  servoReadAlarm = 0;
+  readRegister(id, ADDR_PRESENT, PRESENT_LEN, servoReadSeen, attempts);
   pos = servoReadPos;
   servoReadId = 0xFF;
-  return servoReadSeen;
+  return servoReadSeen && (!requireNoAlarm || servoReadAlarm == 0);
 }
 
-static bool readServoTorque(uint8_t id, uint8_t &torque) {
-  drainServoRx();
-  servoTorqueId = id;
-  servoTorqueSeen = false;
-  const uint8_t data[2] = {ADDR_TORQUE, 1};
-  scsWriteBuf(id, 0x02, data, 2);
-  Serial1.flush();
-  waitServoReply();
-  servoTorqueId = 0xFF;
-  if (!servoTorqueSeen) return false;
-  torque = servoTorqueValue;
+static bool readServoByte(uint8_t id, uint8_t address, uint8_t &value, unsigned attempts = 1) {
+  servoByteReadId = id;
+  readRegister(id, address, 1, servoByteSeen, attempts);
+  servoByteReadId = 0xFF;
+  if (!servoByteSeen) return false;
+  value = servoByteValue;
   return true;
 }
 
+static bool pingServo(uint8_t id) {
+  // A half-duplex bus may echo the query. A real ID read returns one data byte.
+  uint8_t reportedId = 0;
+  return id <= 253 && readServoByte(id, ADDR_ID, reportedId, SETUP_READ_ATTEMPTS) && reportedId == id;
+}
+
+static bool readServoTorque(uint8_t id, uint8_t &torque) {
+  return readServoByte(id, ADDR_TORQUE, torque);
+}
+
 static bool readServoGains(uint8_t id, uint8_t &kp, uint8_t &kd,
-                           uint8_t address = ADDR_PERM_KP_KD) {
-  drainServoRx();
+                           uint8_t address = ADDR_PERM_KP_KD, unsigned attempts = 1) {
   servoParamsId = id;
-  servoParamsSeen = false;
-  const uint8_t data[2] = {address, 2};
-  scsWriteBuf(id, 0x02, data, 2);
-  Serial1.flush();
-  waitServoReply();
+  readRegister(id, address, 2, servoParamsSeen, attempts);
   kp = servoParamKp; kd = servoParamKd;
   servoParamsId = 0xFF;
   return servoParamsSeen;
 }
 
-static bool readServoProtection(uint8_t id, uint8_t &flags, uint16_t &current) {
-  drainServoRx();
+static bool readServoProtection(uint8_t id, uint8_t &flags, uint16_t &current, unsigned attempts = 1) {
   servoProtectionId = id;
-  servoProtectionSeen = false;
-  const uint8_t data[2] = {ADDR_UNLOAD_CONDITION, SERVO_PROTECTION_REG_LEN};
-  scsWriteBuf(id, 0x02, data, 2);
-  Serial1.flush();
-  waitServoReply();
+  readRegister(id, ADDR_UNLOAD_CONDITION, SERVO_PROTECTION_REG_LEN, servoProtectionSeen, attempts);
   servoProtectionId = 0xFF;
   if (!servoProtectionSeen) return false;
   flags = servoProtectionFlags;
   current = servoProtectionCurrent;
   return true;
+}
+
+static bool initServoIdProtection(uint8_t id, uint8_t &flags, uint16_t &current) {
+  constexpr uint16_t current2A = 308; // Nearest register value at 6.5 mA per count.
+  if (id > 253 || !readServoProtection(id, flags, current, SETUP_READ_ATTEMPTS)) return false;
+  const uint8_t wanted = flags | PROTECTION_VOLTAGE | PROTECTION_OVERCURRENT;
+  if (current != current2A) {
+    servoSetProtectionCurrent(id, current2A);
+    k_msleep(10);
+    if (!readServoProtection(id, flags, current, SETUP_READ_ATTEMPTS) || current != current2A) return false;
+  }
+  if (flags != wanted) {
+    servoSetProtection(id, wanted);
+    k_msleep(10);
+    if (!readServoProtection(id, flags, current, SETUP_READ_ATTEMPTS)) return false;
+  }
+  return flags == wanted && current == current2A;
 }

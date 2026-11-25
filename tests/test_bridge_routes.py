@@ -1,10 +1,4 @@
-"""Run the real MCU Bridge supervisor against Routers that lose or keep their registry.
-
-Router 0.11.0 treats a second `$/register` from the owner of a route as a no-op.
-Routers 0.5.4 through 0.10.x answer it with RouteAlreadyExists (error code 5)
-even though the route is intact. The supervisor re-asserts its routes every
-second, so it has to accept that answer or it tears the Bridge down forever.
-"""
+"""Exercise the reliable MCU route supervisor and session gate without hardware."""
 from pathlib import Path
 import shutil
 import subprocess
@@ -16,101 +10,86 @@ ROOT = Path(__file__).resolve().parents[1]
 HARNESS = r'''
 #include <cassert>
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <set>
-#include <stdexcept>
 #include <string>
 namespace MsgPack { using str_t = std::string; }
 #define BIND_METHOD "$/register"
 struct Finished {};
+enum Scenario { Healthy, MissingRoute, FailedBind, SessionReset, ResetWithDisarm };
+Scenario scenario;
+enum class BridgeProtocol { Reliable };
+constexpr int BRIDGE_MAX_BAUD = 2000000, K_FOREVER = -1, DISARM = 0;
 int bridgeReady, bridgeStage, bridgeAttempts, bridgeFailures, bridgeReconnects;
-int bridgeReadyUs, commandMu;
-bool pending = true;
-constexpr int K_FOREVER = -1, BRIDGE_BAUD = 2000000;
+int registeredSession, bridgeReadyUs, commandMu, ticks, retries;
+bool pending;
+struct { int mode; } latest;
 void atomic_clear(int *p) { *p = 0; }
 void atomic_set(int *p, int value) { *p = value; }
 void atomic_inc(int *p) { ++*p; }
+int atomic_get(int *p) { return *p; }
 void k_mutex_lock(int *, int) {}
 void k_mutex_unlock(int *) {}
-uint32_t micros() { return 100; }
+uint32_t micros() { return ticks * 50000 + 1; }
 void receiveCommand() {}
 void receiveCal() {}
 void receiveServo() {}
 void readTof() {}
-bool receiveStartupIp(int) { return true; }
-int scenario, polls;
-bool strictRouter;
-#define CHECK(condition) do { if (!(condition)) { \
-    std::fprintf(stderr, "strict_router=%d scenario=%d: %s\n", \
-                 strictRouter, scenario, #condition); std::exit(3); } } while (0)
-// Stands for RpcCall: result() is false for any error response or timeout.
-struct RouterCall {
-    bool ok;
-    int code;
-    bool result(bool &value) { value = ok; return ok; }
-    int getErrorCode() { return code; }
-};
-struct Router {
-    std::set<std::string> methods;
-    bool failRegister = false, failVersion = false;
-    int invalidations = 0;
-    // One implementation behind provide() and call("$/register"), like the real Router.
-    RouterCall registerRoute(const std::string &name) {
-        if (failRegister && name == "duck_cal") {
-            failRegister = false;
-            return {false, 0xFF};  // RPClite GENERIC_ERR, e.g. a timed-out reply
-        }
-        if (methods.count(name)) {
-            if (strictRouter) return {false, 5};  // ErrCodeRouteAlreadyExists
-            return {true, 0};
-        }
-        methods.insert(name);
-        return {true, 0};
-    }
-    bool begin(int, bool) { methods.clear(); return true; }
-    template<typename F> bool provide(const std::string &name, F) {
-        bool registered = false;
-        return registerRoute(name).result(registered);
-    }
-    RouterCall call(const std::string &method, const std::string &route) {
-        CHECK(method == BIND_METHOD);
-        return registerRoute(route);
-    }
-    bool getRouterVersion(std::string &) {
-        if (failVersion) { failVersion = false; return false; }
-        return true;
-    }
-    void invalidate() { ++invalidations; }
-} Bridge;
+bool receiveStartupIp(int, int, int, int) { return true; }
 const std::set<std::string> expected = {
     "duck_command", "duck_cal", "duck_servo", "duck_tof", "duck_show_ip"
 };
+struct Reply {
+    bool ok;
+    bool result(bool &value) { value = ok; return ok; }
+};
+struct Router {
+    std::set<std::string> methods, handlers;
+    uint32_t currentSession = 1;
+    bool fail = false;
+    void begin(int baud, BridgeProtocol protocol) {
+        assert(baud == 2000000 && protocol == BridgeProtocol::Reliable);
+    }
+    Router *getLinkTransport() { return this; }
+    bool connected() { return true; }
+    uint32_t session() { return currentSession; }
+    template<typename F> bool provide(const std::string &name, F) {
+        assert(handlers.insert(name).second);
+        methods.insert(name);
+        return true;
+    }
+    Reply call(const std::string &method, const std::string &route) {
+        assert(method == BIND_METHOD);
+        if (fail && route == "duck_cal") { fail = false; return {false}; }
+        methods.insert(route);
+        return {true};
+    }
+} Bridge;
+static bool bridgeSessionReady();
 void k_msleep(uint32_t ms) {
-    if (ms != 1000) return;
-    ++polls;
-    if (polls == 1) {
-        CHECK(bridgeReady && Bridge.methods == expected);
-        if (scenario == 1) Bridge.methods.erase("duck_tof");
-        else if (scenario == 5) Bridge.methods.erase("duck_command");
-        else if (scenario == 6) Bridge.methods.erase("duck_show_ip");
-        else if (scenario != 4) Bridge.methods.clear();  // scenario 4 keeps the registry intact
-        Bridge.failRegister = scenario == 2;
-        Bridge.failVersion = scenario == 3;
-    } else {
-        // A healthy version response is insufficient: all routes must exist.
-        if (!bridgeReady || Bridge.methods != expected)
-            throw std::runtime_error("Router alive but MCU methods stayed missing");
-        if (scenario == 2 || scenario == 3) {
-            CHECK(bridgeAttempts == 2 && bridgeFailures == 1);
-            CHECK(bridgeReconnects == 1 && Bridge.invalidations == 1);
-            CHECK(!pending);
-        } else {
-            // Healthy links must never be torn down by the supervisor.
-            CHECK(bridgeAttempts == 1 && bridgeFailures == 0);
-            CHECK(bridgeReconnects == 0 && Bridge.invalidations == 0);
-            CHECK(pending);
+    if (ms == 250) {
+        ++retries;
+        assert(!bridgeReady && bridgeStage == 4 && bridgeReconnects == 1);
+        assert(pending == (scenario == ResetWithDisarm));
+        return;
+    }
+    assert(ms == 50 && bridgeSessionReady());
+    ++ticks;
+    if (ticks == 1) {
+        assert(Bridge.methods == expected);
+        if (scenario == MissingRoute) Bridge.methods.erase("duck_tof");
+        if (scenario == FailedBind) Bridge.fail = true;
+        if (scenario == SessionReset || scenario == ResetWithDisarm) {
+            Bridge.currentSession++;
+            Bridge.methods.clear();
+            assert(!bridgeSessionReady());
         }
+    } else if (ticks == 21) {
+        assert(Bridge.methods == expected && Bridge.handlers == expected);
+        assert(bridgeReady && bridgeStage == 3 && bridgeAttempts == 1);
+        const bool interrupted = scenario == FailedBind || scenario == SessionReset ||
+                                 scenario == ResetWithDisarm;
+        assert(bridgeReconnects == int(interrupted) && retries == int(interrupted));
+        assert(pending == (!interrupted || scenario == ResetWithDisarm));
         throw Finished{};
     }
 }
@@ -118,12 +97,14 @@ void k_msleep(uint32_t ms) {
 
 MAIN = r'''
 int main() {
-    strictRouter = STRICT_ROUTER;
-    for (scenario = 0; scenario < 7; ++scenario) {
-        bridgeReady = bridgeStage = bridgeAttempts = bridgeFailures = 0;
-        bridgeReconnects = bridgeReadyUs = polls = 0;
-        pending = true;
+    for (Scenario test : {Healthy, MissingRoute, FailedBind, SessionReset, ResetWithDisarm}) {
+        scenario = test;
         Bridge = Router{};
+        registeredSession = -1;
+        bridgeReady = bridgeStage = bridgeAttempts = bridgeFailures = 0;
+        bridgeReconnects = bridgeReadyUs = ticks = retries = 0;
+        pending = true;
+        latest.mode = test == ResetWithDisarm ? DISARM : 1;
         try { bridgeTask(nullptr, nullptr, nullptr); }
         catch (Finished &) { continue; }
         return 2;
@@ -134,32 +115,15 @@ int main() {
 
 @unittest.skipUnless(shutil.which('c++'), 'A host C++ compiler is required')
 class BridgeRoutesTest(unittest.TestCase):
-    def run_supervisor(self, strict_router):
+    def test_session_invalidation_and_route_recovery(self):
         source = (ROOT / 'sketch/sketch.ino').read_text()
-        end = source.index('\nvoid setup()')
-        # The route re-assertion helper, when present, sits right above the supervisor.
-        start = min(index for index in (source.find('static bool routeRegistered('),
-                                        source.index('static void bridgeTask('))
-                    if index >= 0)
-        program = (HARNESS + source[start:end] +
-                   MAIN.replace('STRICT_ROUTER', 'true' if strict_router else 'false'))
+        gate = source[source.index('static bool bridgeSessionReady()'):source.index('static void receiveCommand(')]
+        supervisor = source[source.index('static bool routeRegistered('):source.index('\nvoid setup()')]
         with tempfile.TemporaryDirectory(prefix='duck-bridge-routes-') as directory:
             path = Path(directory)
-            (path / 'test.cpp').write_text(program)
-            compiled = subprocess.run(['c++', '-std=c++17', str(path / 'test.cpp'),
-                                       '-o', str(path / 'test')], capture_output=True, text=True)
-            self.assertEqual(compiled.returncode, 0, compiled.stderr)
-            result = subprocess.run([str(path / 'test')], capture_output=True, text=True,
-                                    timeout=5)
-            self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_registry_loss_is_repaired_even_when_router_version_still_answers(self):
-        # Router 0.11.0 and newer: same-owner registration succeeds.
-        self.run_supervisor(strict_router=False)
-
-    def test_routers_rejecting_duplicate_registration_neither_reconnect_nor_lose_repairs(self):
-        # Router 0.5.4 through 0.10.x: RouteAlreadyExists while the route is intact.
-        self.run_supervisor(strict_router=True)
+            (path / 'test.cpp').write_text(HARNESS + gate + supervisor + MAIN)
+            subprocess.run(['c++', '-std=c++17', str(path / 'test.cpp'), '-o', str(path / 'test')], check=True)
+            subprocess.run([str(path / 'test')], check=True, timeout=5)
 
 
 if __name__ == '__main__':

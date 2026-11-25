@@ -123,6 +123,8 @@ button:focus-visible, a:focus-visible {outline: 2px solid var(--mint); outline-o
 .chip i {width: 6px; height: 6px; border-radius: 50%; background: #aab6ba}
 .chip.online i {background: var(--mint); box-shadow: 0 0 10px #8be6b680}
 #batteryVoltage.low-voltage {background: #3b1d27; border-color: #c17881; color: #ffc1c5}
+#controlPageLink { background: var(--mint); border-color: var(--mint); color: #10231c; font-weight: 700; text-decoration: none; }
+#controlPageLink:hover, #controlPageLink:focus-visible { text-decoration: underline; }
 .icon-button, .language-button, .fullscreen-button {
   min-height: 40px;
   border-radius: 24px;
@@ -296,7 +298,7 @@ body:not(.compact-cockpit) .duck-call-row button {pointer-events: auto}
   border-radius: 24px;
   font-size: 12px;
 }
-body[data-hud=sticks] :is(.reticle, .tof-layer, .audio-dock, .keyboard-hint, #openWalkingHelp, #controlPageLink),
+body[data-hud=sticks] :is(.reticle, .tof-layer, .audio-dock, .keyboard-hint, #openWalkingHelp),
 body:not(.compact-cockpit)[data-hud=sticks] :is(.top, .flight-state > .eyebrow, #robotMode, #telemetry, #rollerMode, #additionalActions, .cockpit-action-rows > :not(.stop-action)),
 body[data-hud=video] :is(.top, .reticle, .tof-layer, .bottom, .welcome, .shade, .toast) {display: none}
 body:not(.compact-cockpit)[data-hud=sticks] .bottom {
@@ -407,7 +409,6 @@ iframe {width: 100%; min-height: 0; flex: 1; border: 0; background: #0b121a}
 .compact-cockpit .flight-state {justify-self: stretch}
 .compact-cockpit .flight-actions {margin-top: 0}
 .compact-cockpit :is(.flight-state > .eyebrow, #robotMode, #telemetry, .audio-dock) {display: none}
-.compact-cockpit .flight-actions .desktop-link {margin-left: auto}
 
 @media (orientation: portrait) and (max-width: 600px) {
   .compact-cockpit #cockpit {--stick-size: clamp(80px, 28vw, 128px)}
@@ -432,7 +433,6 @@ iframe {width: 100%; min-height: 0; flex: 1; border: 0; background: #0b121a}
     width: min(480px, calc(100% - 2 * var(--stick-size) - 20px));
   }
   .compact-cockpit .flight-state {justify-self: center}
-  .compact-cockpit .flight-actions .desktop-link {margin-left: 0}
   .compact-cockpit .flight-actions button {min-height: 36px; padding-block: 4px}
   .compact-cockpit .motion-status-row {margin-bottom: 3px}
   .compact-cockpit .cockpit-action-rows > button {min-height: 39px}

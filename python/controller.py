@@ -1,16 +1,19 @@
 """100Hz receive/filter callback and independent 50Hz ONNX loop."""
 import collections
 import math
+import os
 import secrets
 import threading
 import time
 from statistics import median
 from policy import Policy
+from runtime_gains import RECOMMENDED_GAINS
 from recovery import Recovery
+from stall_recovery import StallRecovery
 from proc import SignalFilter
 from heading import HeadingHold
-from standing_imu import (CALIBRATION_PATH, SAMPLE_SECONDS, ImuCorrection,
-                          check_standing, estimate as estimate_imu, load as load_imu,
+from standing_imu import (CALIBRATION_PATH, SAMPLE_SECONDS, ImuCorrection, ImuMovementError,
+                          estimate as estimate_imu, load as load_imu,
                           save as save_imu, disable as disable_imu)
 from rl_core import (MOTOR_IDS, POLICY_IDS, IMU_BIAS_DEG, MOUTH_INDEX, MOUTH_MAX_DEG, MOUTH_MIN_DEG,
                      ROLLER_LEG_DEFAULT_DEG)
@@ -22,9 +25,13 @@ PICK_MOUTH_CLOSE_PHI = 0.4
 ROULADE_S = 1.7
 ROULADE_ALPHA = 0.05
 ROULADE_START_TIMEOUT_S = 0.5
-SITSTAND_STAND_S = 1.0
+SITSTAND_STAND_S = 1.2
+SITSTAND_STAND_ALPHAS = (0.2, 0.2)
+SITSTAND_STAND_ACTION_SCALE = 1.1
 KICK_S = 0.4
 CONTROL_PERIOD = 1.0 / 50.0
+IMU_CALIBRATION_SETTLE_S = .5
+IMU_CALIBRATION_MAX_RETRIES = 10
 SITTING_CALIBRATION_RETRIES = 3
 SITTING_CALIBRATION_RETRY_DELAY_S = .35
 SITTING_CALIBRATION_ACK_TIMEOUT_S = 2.5  # 15 writes with 100 ms spacing, plus feedback and settling.
@@ -34,18 +41,77 @@ BATTERY_SAMPLE_MAX_AGE_S = .4
 LOW_BATTERY_CONFIRM_S = 5.
 BATTERY_REARM_CONFIRM_S = 2.
 BATTERY_WARNING_TIMEOUT_S = 12.0
+BATTERY_SIT_SETTLE_S = 1.5
 LEG_FEEDBACK_MASK = 0x3ff  # The first ten bits of the hardware servo order.
 SERVO_FEEDBACK_GRACE_FRAMES = 15
 SERVO_FEEDBACK_GRACE_US = 150_000
 FEEDBACK_HOLD_S = .15
 FEEDBACK_HOLD_REASON = 'STM32 feedback timed out; motion paused, holding last targets'
+IMU_DISARM_REASON = 'sensor feedback lost; disarmed'
 BRIDGE_STALL_S = 1.
 BRIDGE_RECOVERY_REASON = 'STM32 Bridge is reconnecting. 运动通信恢复中，请稍后重试。'
 ACTION_PREPARE_S = 0.2
 ACTION_PREPARE_TIMEOUT_S = 0.5
 ROLLER_YAW_LIMIT = 0.45  # rad/s, symmetric in Roller mode.
+ROLLER_VX_ACCEL_LIMIT = 0.50  # Soft-start accel slew rate (units/s); zero delay on release/brake.
+ROLLER_HIPS = tuple(MOTOR_IDS.index(i) for i in (11, 21))
+ROLLER_CAPTURE_DEG = 8.
+MANUAL_INPUT_TIMEOUT_S = 1.
 COMMAND_ACC_X_BIAS_MS2 = 1.5  # Temporary IMU trim magnitude; set to 0 to disable.
 VOLTAGE_TIMEOUT_S = 3.0
+SERVO_ALARM_DISPLAY_S = 2.0
+STALL_RETREAT = 'Servo stalled; returning to the default stance.'
+STALL_DISARMED = 'Stall recovery stopped; torque off. Support the duck and select Walk / get up.'
+
+class RollerStopPose:
+    """Monitor closed-loop RL deceleration on zero twist without open-loop leg overrides."""
+    MIN_DECEL_S = 0.35
+    GLIDE_TIMEOUT_S = 2.0
+    HIP_TOLERANCE_DEG = 6.
+    LEG_TOLERANCE_DEG = 8.
+
+    def __init__(self, owner, feedback, home, now, *, forward_stride=False):
+        self.phase = 'gliding'
+        self.owner = owner
+        self.seen = self.phase_started = now
+        self.forward_stride = bool(forward_stride)
+        self.home = list(home[:len(ROLLER_LEG_DEFAULT_DEG)])
+        self.confirmed = False
+        self.stable_since = None
+        self.last_sample = None
+
+    def expired(self, now):
+        if now - self.phase_started >= self.GLIDE_TIMEOUT_S:
+            return 'glide_timeout'
+        return None
+
+    def observe(self, fb, upright, gyro_rad, now):
+        if self.confirmed:
+            return
+        if now - self.phase_started < self.MIN_DECEL_S:
+            self.stable_since = None
+            return
+        if self.last_sample is not None and elapsed_us(fb.sample_us, self.last_sample) > StallRecovery.MAX_GAP_US:
+            self.stable_since = None
+        self.last_sample = fb.sample_us
+        stable = (upright
+                  and math.hypot(*gyro_rad) <= StallRecovery.BODY_SETTLE_RAD_S
+                  and all(abs(fb.angles[i] - self.home[i]) <= self.HIP_TOLERANCE_DEG for i in ROLLER_HIPS)
+                  and all(abs(fb.angles[i] - goal) <= self.LEG_TOLERANCE_DEG
+                          and abs(fb.velocities[i]) <= StallRecovery.SETTLE_SPEED_DEG_S
+                          for i, goal in enumerate(self.home)))
+        if not stable:
+            self.stable_since = None
+        elif self.stable_since is None:
+            self.stable_since = fb.sample_us
+        elif elapsed_us(fb.sample_us, self.stable_since) >= StallRecovery.SETTLE_US:
+            self.confirmed = True
+
+    def apply(self, target, now):
+        # Never overwrite or clamp leg targets open-loop; the roller policy stays in
+        # closed-loop balance control on all 14 joints.
+        return
+
 
 class Controller:
     def __init__(self, bridge, *, imu_calibration_path=None):
@@ -69,10 +135,14 @@ class Controller:
         for index, motor_id in enumerate(POLICY_IDS):
             if motor_id in ROLLER_LEG_DEFAULT_DEG:
                 self.roller_policy.home_deg[index] = ROLLER_LEG_DEFAULT_DEG[motor_id]
-        self.roller_policy.action_scale = 0.8
+        self.roller_policy.action_scale = 0.6
         self.roller_policy.set_action_alphas(leg=0.4, head=0.5)
         self.model_message += '; ' + message
         self.roller_mode = False
+        self._roller_pose = None
+        self._roller_glide_result = None
+        self._roller_stride = None
+        self._roller_vx_cmd = 0.0
         self.getup_policy = Policy()
         ok, message = self.getup_policy.load('xgoduck_getup.onnx')
         if not ok:
@@ -105,9 +175,11 @@ class Controller:
         self.model_message += '; ' + message
         self.kick_policies = {'left': self.left_kick_policy, 'right': self.right_kick_policy}
         for model in self.kick_policies.values():
-            model.action_scale = 0.8
-            model.set_action_alphas(leg=0.0, head=0.0)
+            model.action_scale = 1.0
+            model.set_action_alphas(leg=0.2, head=0.2)
         self.recovery = Recovery(period_s=CONTROL_PERIOD)
+        self.stall = StallRecovery()
+        self._last_policy_file = None
         self.heading = HeadingHold()
         self.policy_needs_reset = True
         self.pick_active = False
@@ -141,6 +213,8 @@ class Controller:
             self._imu_job.update(state='error', message='Calibration could not be loaded. Calibrate again or reset it.')
         self.filter = SignalFilter(ImuCorrection(self._imu_record) if self._imu_record else None)
         self.feedback = self.filtered = None
+        self.servo_feedback_log = None
+        self._servo_alarm_seen = {}
         self._servo_feedback_history = collections.deque(maxlen=SERVO_FEEDBACK_GRACE_FRAMES + 1)
         self.voltage_packet = None
         self.voltage_rx_time = 0.0
@@ -152,6 +226,7 @@ class Controller:
         self.battery_phase = 'normal'
         self.battery_since = None
         self.battery_deadline = 0.
+        self.battery_sit_since = None
         self.battery_warning = None
         self.battery_warning_done = threading.Event()
         self.mode = 'shadow'
@@ -173,6 +248,9 @@ class Controller:
         self.infer_ms = collections.deque(maxlen=500)
         self.rx_intervals = collections.deque(maxlen=1000)
         self.loop_missed = 0
+        self._fall_last_loop_missed = 0
+        self._last_fall_event = None
+        self._warm_tick = 0
         self.last_action = [0.0]*15
         self.started = time.monotonic()
         self.boot_pd = {}
@@ -248,6 +326,8 @@ class Controller:
             if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
                 self.battery_since = None
             self.diagnostics, self.diagnostic_time = values, now
+            if self.servo_feedback_log:
+                self.servo_feedback_log.sample_voltage(values.get('servo_bus_voltage_mv'))
 
     def _battery_voltage(self, now):
         if now - self.diagnostic_time > BATTERY_SAMPLE_MAX_AGE_S:
@@ -260,6 +340,8 @@ class Controller:
 
     def _require_motion_available(self):
         self._require_battery()
+        if self.stall.phase in ('retreat', 'disarmed'):
+            raise ValueError(STALL_RETREAT if self.stall.phase == 'retreat' else STALL_DISARMED)
         if self.bridge_recovery:
             raise ValueError(BRIDGE_RECOVERY_REASON)
         if self.fault_hold:
@@ -284,9 +366,17 @@ class Controller:
             if phase == 'locked':
                 self.battery_phase = 'normal'
                 return
-            self.battery_phase = 'warning'
             self.battery_deadline = now + BATTERY_WARNING_TIMEOUT_S
+            self.battery_sit_since = None
             self._cancel_preparation_locked()
+            # The ordinary sit entry point enforces calibration, recovery and action interlocks.
+            if (self.mode in ('hold', 'policy') and self.feedback and self.feedback.enabled
+                    and self.sitstand_phase == 'idle'):
+                try:
+                    self.set_sitstand('sit')
+                except ValueError as exc:
+                    self.last_error = str(exc)
+            self.battery_phase = 'warning'
             self._stop_pick_locked()
             self._stop_roulade_locked()
             self._stop_kick_locked()
@@ -307,8 +397,15 @@ class Controller:
                  and not fb.flags & 4 and fb.command_age_us <= 250000
                  and fb.mask & LEG_FEEDBACK_MASK == LEG_FEEDBACK_MASK and filt and filt['imu_fusion_ready']
                  and self.recovery.phase == 'walk')
-        if ready and now < self.battery_deadline and not self.battery_warning_done.is_set():
-            return
+        if (ready and not self.fault_hold and not self.bridge_recovery
+                and self.stall.phase not in ('retreat', 'disarmed') and now < self.battery_deadline):
+            if self.action_preparation and self.action_preparation['name'] == 'sit':
+                return
+            if self.sitstand_phase == 'sit':
+                if self.battery_sit_since is None:
+                    self.battery_sit_since = now
+                if now - self.battery_sit_since < BATTERY_SIT_SETTLE_S or not self.battery_warning_done.is_set():
+                    return
         self.battery_phase = 'locked'
         self.set_mode('off')
         self._disarm_now()
@@ -345,11 +442,14 @@ class Controller:
         now = time.monotonic()
         with self.lock:
             old = self.feedback
+            mcu_reset = False
             if old:
                 step = elapsed_us(fb.seq, old.seq)
                 if step == 0: return
                 if step > 0x80000000:
+                    mcu_reset = True
                     self._servo_feedback_history.clear()
+                    self._servo_alarm_seen.clear()
                     self.voltage_packet = None; self.voltage_rx_time = 0.0
                     self.mode = 'shadow'; self.generation += 1
                     self.arm_pending = False; self.filter.reset()
@@ -388,7 +488,23 @@ class Controller:
             # STM32 retains the last measured angle when a servo does not reply.
             # Only real replies enter the history used by the motion readiness check.
             self._servo_feedback_history.append((fb.seq, fb.sample_us, now, fb.mask))
+            if self.mode == 'policy' and fb.enabled and not mcu_reset:
+                self.stall.observe(fb, self.filtered, activity=self._stall_activity_locked(now))
+            elif self.stall.phase == 'retreat':
+                self.stall.invalid = True
+            elif self.stall.phase == 'monitor' and self.stall.last_sample is not None:
+                self.stall.clear_candidates()
+            elif self.stall.phase == 'idle' and self.stall.last_sample is not None:
+                self.stall.reset()
+            if fb.servo_errors and fb.servo_errors != NO_SERVO_ERRORS:
+                for index, code in enumerate(fb.servo_errors):
+                    if code:
+                        self._servo_alarm_seen[index] = (code, now)
+            if self.servo_feedback_log:
+                self.servo_feedback_log.observe(fb, old, self.mode, now, self.diagnostics.get('servo_bus_voltage_mv'),
+                                               self.diagnostic_time, reset=mcu_reset)
             self.feedback, self.rx_time = fb, now
+            self._check_roller_glide_locked(now)
             self.received += 1; self.rx_times.append(now)
 
     def _require_feedback(self, mask):
@@ -427,10 +543,19 @@ class Controller:
 
     def _imu_status_locked(self):
         record = self._imu_record or {}
-        return dict(self._imu_job, calibrated=bool(self._imu_record), seconds=SAMPLE_SECONDS,
-                    method='offset', acc_offset_ms2=record.get('acc_offset_ms2'),
-                    gyro_zero_dps=record.get('gyro_zero_dps'),
-                    calibrated_at=record.get('calibrated_at'), measurement=record.get('measurement'))
+        status = dict(self._imu_job, calibrated=bool(record), seconds=SAMPLE_SECONDS,
+                      method='offset', acc_offset_ms2=record.get('acc_offset_ms2'),
+                      gyro_zero_dps=record.get('gyro_zero_dps'),
+                      calibrated_at=record.get('calibrated_at'), measurement=record.get('measurement'))
+        if status['active']:
+            status['phase'] = 'sampling' if status['samples'] else 'settling'
+        return status
+
+    def _imu_calibration_feedback_locked(self):
+        fb = self._require_feedback(0)
+        if time.monotonic() - self.rx_time + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
+            raise ValueError('IMU readings are stale. Check the connection and try again.')
+        return fb
 
     def start_imu_calibration(self):
         with self.lock:
@@ -443,53 +568,77 @@ class Controller:
             if (self.action_preparation or self.pick_active or self._roulade_on(time.monotonic())
                     or self.sitstand_phase != 'idle' or self.kick_until):
                 raise ValueError('Wait for the current action to finish before calibrating.')
-            fb = self._require_feedback(0)
-            if elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
-                raise ValueError('IMU readings are stale. Check the connection and try again.')
-            check_standing(fb.acc)
+            self._imu_calibration_feedback_locked()
             self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
             self.generation += 1
             self._imu_job_token += 1
             token = self._imu_job_token
             self._imu_job = dict(state='sampling', active=True, progress=0., samples=0,
-                                 message=f'Keep the board still. Calibrating for {SAMPLE_SECONDS:g} seconds…')
+                                 retry=0, max_retries=IMU_CALIBRATION_MAX_RETRIES,
+                                 message='Hold the board still before sampling.')
             threading.Thread(target=self._sample_imu_calibration, args=(token, self.generation),
                              name='imu-calibration', daemon=True).start()
             return self._imu_status_locked()
 
-    def _sample_imu_calibration(self, token, generation):
+    def _check_imu_job_locked(self, token, generation):
+        if self.stop_event.is_set():
+            raise ValueError('Calibration cancelled because the app stopped.')
+        if token != self._imu_job_token or not self._imu_job['active'] or generation != self.generation:
+            raise ValueError('Calibration cancelled because the control mode changed.')
+
+    def _collect_imu_window(self, token, generation):
+        if self.stop_event.wait(IMU_CALIBRATION_SETTLE_S):
+            raise ValueError('Calibration cancelled because the app stopped.')
+        with self.lock:
+            self._check_imu_job_locked(token, generation)
+            # The first accepted frame must arrive after this window's settling period.
+            last_stamp = self._imu_source_time
         rows = []
-        begin = time.monotonic()
-        try:
-            while not self.stop_event.wait(.005):
-                with self.lock:
-                    if token != self._imu_job_token or not self._imu_job['active']:
-                        return
-                    if generation != self.generation:
-                        raise ValueError('Calibration cancelled because the control mode changed.')
-                    fb = self._require_feedback(0)
-                    if elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
-                        raise ValueError('IMU readings were interrupted. Try again.')
-                    stamp = self._imu_source_time
-                    if rows and stamp < rows[-1][0]:
-                        raise ValueError('The IMU restarted. Try again.')
-                    if not rows or stamp > rows[-1][0]:
-                        rows.append((stamp, list(fb.acc), list(fb.gyro)))
-                        span = stamp-rows[0][0]
-                        self._imu_job.update(samples=len(rows), progress=min(1., span/SAMPLE_SECONDS))
-                        if span >= SAMPLE_SECONDS:
-                            break
-                if time.monotonic()-begin > SAMPLE_SECONDS+2:
+        deadline = time.monotonic() + SAMPLE_SECONDS + 2
+        while not self.stop_event.wait(.005):
+            with self.lock:
+                self._check_imu_job_locked(token, generation)
+                fb = self._imu_calibration_feedback_locked()
+                if time.monotonic() > deadline:
                     raise ValueError('Not enough IMU readings. Check the connection and try again.')
-            else:
-                raise ValueError('Calibration cancelled because the app stopped.')
-            record = estimate_imu(rows)
+                stamp = self._imu_source_time
+                if stamp < last_stamp:
+                    raise ValueError('The IMU restarted. Try again.')
+                if stamp == last_stamp:
+                    continue
+                last_stamp = stamp
+                if not rows:
+                    self._imu_job['message'] = f'Keep the board still. Calibrating for {SAMPLE_SECONDS:g} seconds…'
+                rows.append((stamp, list(fb.acc), list(fb.gyro)))
+                span = stamp - rows[0][0]
+                self._imu_job.update(samples=len(rows), progress=min(1., span/SAMPLE_SECONDS))
+                if span >= SAMPLE_SECONDS:
+                    return rows
+        raise ValueError('Calibration cancelled because the app stopped.')
+
+    def _sample_imu_calibration(self, token, generation):
+        retry = 0
+        try:
+            while True:
+                rows = self._collect_imu_window(token, generation)
+                try:
+                    record = estimate_imu(rows)
+                    break
+                except ImuMovementError as exc:
+                    values = ' '.join(f'{name}={value:.4f}' for name, value in exc.metrics.items())
+                    print(f'[imu-calibration] rejected window {retry + 1}, samples={len(rows)} '
+                          f'{values} exceeded={",".join(exc.exceeded)}', flush=True)
+                    with self.lock:
+                        self._check_imu_job_locked(token, generation)
+                        if retry == IMU_CALIBRATION_MAX_RETRIES:
+                            raise ValueError(f'No stable IMU readings after {retry} automatic retries. '
+                                             'Support the board and try again.') from exc
+                        retry += 1
+                        self._imu_job.update(retry=retry, samples=0, progress=0.,
+                                             message=f'Movement detected. Retrying ({retry}/{IMU_CALIBRATION_MAX_RETRIES}).')
             correction = ImuCorrection(record)
             with self.lock:
-                if token != self._imu_job_token or not self._imu_job['active']:
-                    return
-                if generation != self.generation:
-                    raise ValueError('Calibration cancelled because the control mode changed.')
+                self._check_imu_job_locked(token, generation)
                 # A cancelled job must never publish a file or apply its result.
                 save_imu(self._imu_path, record)
                 self._imu_record = record
@@ -504,8 +653,10 @@ class Controller:
         except (OSError, ValueError, TypeError, KeyError) as exc:
             with self.lock:
                 if token == self._imu_job_token and self._imu_job['active']:
-                    self._imu_job.update(state='error', active=False,
-                                         message='Previous calibration kept. '+str(exc))
+                    cancelled = self.stop_event.is_set() or generation != self.generation
+                    prefix = 'Previous calibration kept. ' if self._imu_record else ''
+                    self._imu_job.update(state='cancelled' if cancelled else 'error', active=False,
+                                         message=prefix + str(exc))
 
     def reset_imu_calibration(self):
         with self.lock:
@@ -531,6 +682,10 @@ class Controller:
         if mode not in ('shadow', 'off', 'hold', 'policy', 'calibrate', 'servo_debug'):
             raise ValueError('unknown mode')
         with self.lock:
+            if self.stall.phase == 'retreat' and mode not in ('off', 'shadow'):
+                raise ValueError(STALL_RETREAT)
+            if self.stall.phase == 'disarmed' and mode == 'hold':
+                raise ValueError(STALL_DISARMED)
             if mode not in ('off', 'shadow'):
                 self._require_battery()
                 if self.bridge_recovery:
@@ -545,7 +700,11 @@ class Controller:
                 raise ValueError('stand up before switching to walk')
             if mode == 'policy' and self.kick_until:
                 raise ValueError('wait for kick to finish before switching to walk')
+            if mode == 'off' and self.servo_feedback_log:
+                self.servo_feedback_log.request_off(self.feedback, self.mode, time.monotonic(),
+                    self.diagnostics.get('servo_bus_voltage_mv'), self.diagnostic_time, self.rx_time)
             if mode == self.mode and mode != 'calibrate' and not self.fault_hold:
+                self._finish_roller_glide_locked('interrupted')
                 self._cancel_preparation_locked()
                 self.web_time = time.monotonic()
                 return {'mode': self.mode}
@@ -554,7 +713,19 @@ class Controller:
             fb = None
             if mode in ('hold', 'policy'):
                 fb = self._require_feedback(0)
+                if self.stall.phase == 'disarmed' and fb.enabled:
+                    raise ValueError(STALL_DISARMED)
+            if self.stall.phase == 'retreat':
+                self._log_stall_locked('stall_cancelled', time.monotonic(), 'manual stop')
+                self.stall.phase = 'disarmed'
+                self._disarm_now()
+            elif self.stall.phase == 'monitor' and mode in ('policy', 'hold'):
+                self.stall.clear_candidates()
+            elif mode == 'policy' or self.stall.phase != 'disarmed':
+                self.stall.reset()
             previous = self.mode
+            self._roller_stride = None
+            self._finish_roller_glide_locked('interrupted')
             self.generation += 1; self.mode = mode
             self.fault_hold = False
             self.heading.reset()
@@ -592,6 +763,8 @@ class Controller:
         if not isinstance(enabled, bool):
             raise ValueError('roller enabled must be true or false')
         with self.lock:
+            if self.stall.phase == 'retreat':
+                raise ValueError(STALL_RETREAT)
             if enabled != self.roller_mode:
                 self._check_imu_idle_locked()
                 if self.action_preparation:
@@ -608,6 +781,9 @@ class Controller:
                     self.policy.reset_action_filter()
                     self.policy.warm(1)
                 self.roller_mode = enabled
+                self.stall.clear_candidates()  # Start the new mode with fresh alarm evidence.
+                self._roller_stride = None
+                self._finish_roller_glide_locked('interrupted')
                 self.heading.kp = self.heading.SKATE_KP if enabled else self.heading.KP
                 self.heading.reset()
                 # Drop any action computed by the previously selected walk model.
@@ -804,6 +980,9 @@ class Controller:
         return dict(phase=self.sitstand_phase, active=self.sitstand_phase != 'idle',
                     remaining_s=max(0.0, self.sitstand_until-now) if self.sitstand_phase == 'stand' else 0.0,
                     stand_seconds=SITSTAND_STAND_S, model=self.sitstand_policy.file,
+                    stand_action_alpha=SITSTAND_STAND_ALPHAS[0],
+                    stand_action_alpha_head=SITSTAND_STAND_ALPHAS[1],
+                    stand_action_scale=SITSTAND_STAND_ACTION_SCALE,
                     action_scale=self.sitstand_policy.action_scale)
 
     def _stop_kick_locked(self):
@@ -911,7 +1090,7 @@ class Controller:
             self._roulade_timing = dict(state='preparing', startup_ms=None, elapsed_s=0.0)
         return {'ok': True, 'preparing': True, 'model': self.roulade_policy.file, 'seconds': ROULADE_S}
 
-    def command(self, twist=None, head=None, mouth=None, source='web'):
+    def command(self, twist=None, head=None, mouth=None, source='web', roller_release=False):
         def values(seq, limits):
             if len(seq)!=len(limits): raise ValueError('wrong command dimension')
             seq = [float(v) for v in seq]
@@ -919,6 +1098,9 @@ class Controller:
                 raise ValueError('command exceeds bounds')
             return seq
         t = values(twist, [.4,.3,1.0]) if twist is not None else None
+        if type(roller_release) is not bool or (roller_release and (
+                t != [0.] * 3 or source not in ('web', 'cockpit', 'gamepad'))):
+            raise ValueError('Roller release requires a neutral manual drive command.')
         h = values(head, [1.0]*4) if head is not None else None
         m = None
         if mouth is not None:
@@ -926,6 +1108,8 @@ class Controller:
             if not math.isfinite(m) or not MOUTH_MIN_DEG <= m <= MOUTH_MAX_DEG:
                 raise ValueError('command exceeds bounds')
         with self.lock:
+            if self.stall.phase in ('retreat', 'disarmed'):
+                return {'ok': True, 'ignored': STALL_RETREAT if self.stall.phase == 'retreat' else STALL_DISARMED}
             if self.battery_phase != 'normal':
                 return {'ok': True, 'ignored': 'low battery protection'}
             if t is not None and source == self.input_source and source in ('web', 'gamepad'):
@@ -951,11 +1135,13 @@ class Controller:
             if t is not None and self.roller_mode and abs(t[2]) > ROLLER_YAW_LIMIT:
                 raise ValueError(f'roller wz must be between {-ROLLER_YAW_LIMIT} and {ROLLER_YAW_LIMIT}')
             if t is not None and not self.pick_active and self.sitstand_phase == 'idle' and not self.kick_until:
-                self.twist = t
-                self.heading.command(self._heading_motion_locked(time.monotonic()), t)
+                self._roller_command_locked(t, roller_release, source, time.monotonic())
+                self.heading.command(self._heading_motion_locked(time.monotonic()), self.twist)
             if h is not None and not self.pick_active and not self.kick_until: self.head = h
             if m is not None and not self.pick_active and not self.kick_until: self.mouth = m
             self.web_time = time.monotonic()
+            if roller_release or self._roller_pose:
+                return {'ok': True, 'roller_gliding': bool(self._roller_pose and self._roller_pose.phase != 'holding')}
         return {'ok': True}
 
     def cal_heartbeat(self):
@@ -1089,17 +1275,42 @@ class Controller:
             if not self._servo_op('ping', target_id)['ok']:
                 raise ValueError(f'No servo replied at ID {target_id}; ID was not changed')
             if target_id == new_id:
-                return dict(ok=True, op=SERVO_SET_ID, target_id=target_id, new_id=new_id)
-            if self._servo_op('ping', new_id)['ok']:
-                raise ValueError(f'ID {new_id} is already in use; choose another ID')
-            # Keep the checks, write and verification in one serialized operation.
-            reply = self._servo_op(action, target_id, new_id, kp, kd)
-            time.sleep(0.05)
-            if not self._servo_op('ping', new_id)['ok']:
-                raise ValueError(f'ID write sent, but ID {new_id} did not reply. Scan again')
-            if self._servo_op('ping', target_id)['ok']:
-                raise ValueError('Both old and new IDs replied. Connect only one servo and scan again')
-            return dict(reply, new_id=new_id)
+                reply = dict(ok=True, op=SERVO_SET_ID, target_id=target_id)
+            else:
+                if self._servo_op('ping', new_id)['ok']:
+                    raise ValueError(f'ID {new_id} is already in use; choose another ID')
+                reply = self._servo_op(action, target_id, new_id, kp, kd)
+                time.sleep(0.05)
+                if not self._servo_op('ping', new_id)['ok']:
+                    raise ValueError(f'ID write sent, but ID {new_id} did not reply. Scan again')
+                if self._servo_op('ping', target_id)['ok']:
+                    raise ValueError('Both old and new IDs replied. Connect only one servo and scan again')
+            try:
+                self._servo_op('reset_mid', new_id)
+            except ValueError as exc:
+                raise ValueError(f'ID {new_id} is set. Scan again and retry with this ID.') from exc
+            try:
+                with self.lock:
+                    self._require_servo_debug()
+                op = SERVO_INIT_ID_PROTECTION
+                protection = self._exchange_servo(op, new_id, encode_servo(op, new_id, kp=0, kd=0))
+                if not (protection['voltage_protection'] and protection['overcurrent_protection']
+                        and protection['current_raw'] == round(2.0 / PROTECTION_CURRENT_UNIT_A)):
+                    raise ValueError('unexpected protection readback')
+            except (OSError, ValueError) as exc:
+                raise ValueError(f'ID {new_id} is set and the midpoint command was sent. '
+                                 'Protection settings were not confirmed. Keep the servo at its midpoint '
+                                 'and retry using the same ID.') from exc
+            try:
+                kp, kd = RECOMMENDED_GAINS
+                # The write acknowledgement checks both the EEPROM and runtime registers.
+                gains = self._servo_op('set_gains', new_id, kp=kp, kd=kd)
+                if (gains['kp'], gains['kd']) != (kp, kd):
+                    raise ValueError('unexpected gain readback')
+            except (OSError, ValueError) as exc:
+                raise ValueError(f'ID {new_id} is set. Protection verified, but KP/KD were not confirmed. '
+                                 'Scan for the new ID and check its gains.') from exc
+            return dict(reply, new_id=new_id, protection=protection, gains=gains)
 
     def _servo_op(self, action, target_id, new_id=None, kp=5, kd=20, *, protection_enabled=True, current_a=1.0):
         if action in ('set_protection', 'set_protection_current'):
@@ -1164,9 +1375,10 @@ class Controller:
                     if (self.mode != 'servo_debug' or not fb or not fb.servo_debugging
                             or fb.enabled or now - self.rx_time >= .15):
                         raise ValueError('Servo setup is not ready for the position test.')
-                    # Updated firmware gates position writes on every local bus feedback frame.
-                    guarded_move = op == SERVO_TEST_MOVE and self.guarded_servo_test == (target_id, session)
-                    if not guarded_move and not fb.mask & (1 << MOTOR_IDS.index(target_id)):
+                    # START reads the encoder on the MCU before enabling torque.
+                    # Only legacy MOVE sessions need the Linux feedback-mask check.
+                    if (op == SERVO_TEST_MOVE and self.guarded_servo_test != (target_id, session)
+                            and not fb.mask & (1 << MOTOR_IDS.index(target_id))):
                         raise ValueError(f'No servo replied at ID {target_id}.')
                     self.web_time = now
             try:
@@ -1220,6 +1432,7 @@ class Controller:
     def _pause_for_feedback_locked(self, age, *, command_stalled=False):
         if self.fault_hold:
             return
+        self._finish_roller_glide_locked('interrupted')
         self.fault_hold = True
         self.generation += 1  # Drop an ONNX result computed before the pause.
         self.arm_pending = False
@@ -1294,6 +1507,258 @@ class Controller:
         print('[bridge-recovery] Motion Bridge recovered', flush=True)
         return True
 
+    def _log_stall_locked(self, event, now, reason):
+        fb = self.feedback
+        if fb is not None and self.servo_feedback_log:
+            self.servo_feedback_log.record(event, fb, self.mode, now,
+                self.diagnostics.get('servo_bus_voltage_mv'), self.diagnostic_time,
+                servo_ids=[MOTOR_IDS[i] for i in self.stall.indices],
+                alarm_ids=[MOTOR_IDS[i] for i, code in enumerate(fb.servo_errors or ()) if code],
+                sustained_alarm_ids=[MOTOR_IDS[i] for i in self.stall.persistent_alarms],
+                default_error_deg={MOTOR_IDS[i]: round(abs(goal - fb.angles[i]), 2)
+                    for i, goal in enumerate(self.stall.home) if fb.mask & (1 << i)},
+                outside_default_ids=[MOTOR_IDS[i] for i, goal in enumerate(self.stall.home)
+                    if fb.mask & (1 << i) and abs(goal - fb.angles[i]) > self.stall.POSE_TOLERANCE_DEG],
+                elapsed_ms=round((now - self.stall.started) * 1000),
+                policy=self._last_policy_file, recovery_phase=self.recovery.phase,
+                gravity=[float(v) for v in self.filtered['grav']] if self.filtered else None, reason=reason)
+
+    def _disarm_stall_locked(self, now, reason):
+        self._log_stall_locked('stall_disarmed', now, reason)
+        self.stall.phase = 'disarmed'
+        self.mode = 'off'
+        self.generation += 1
+        self.policy_needs_reset = True
+        self._cancel_actions_locked()
+        self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
+        self._motion_needs_neutral.update(('web', 'gamepad'))
+        self.input_source = 'web'
+        self.last_error = STALL_DISARMED
+        self._disarm_now()
+
+    def _stall_activity_locked(self, now):
+        if self.recovery.phase != 'walk':
+            return 'getup'
+        if self.kick_until and now < self.kick_until:
+            return 'dynamic'
+        if self._roulade_on(now) and self.action_preparation is None:
+            return 'dynamic'
+        if self.sitstand_phase == 'stand' and now < self.sitstand_until:
+            return 'dynamic'
+        if self.sitstand_phase == 'sit':
+            return 'sit'
+        if self.pick_active:
+            return 'pick'
+        if self.roller_mode:
+            return 'roller'
+        return 'walk'
+
+    def _step_stall_locked(self, fb, filt, now, age):
+        stall = self.stall
+        if stall.phase == 'disarmed':
+            return False
+        if stall.phase != 'retreat' and not stall.qualified:
+            return False
+        mask_ok = bool(fb and (fb.mask == ALL_MASK if stall.phase != 'retreat' else not stall.invalid))
+        valid = (self.mode == 'policy' and self.battery_phase == 'normal' and fb and fb.enabled
+                 and fb.imu_ok and mask_ok and fb.servo_errors is not None
+                 and age < StallRecovery.MAX_GAP_US / 1e6 and filt and filt['imu_fusion_ready']
+                 and age + elapsed_us(fb.sample_us, fb.imu_us) / 1e6 <= IMU_STALE_S
+                 and not self.fault_hold and not self.bridge_recovery
+                 and not self._command_stalled_locked(now, FEEDBACK_HOLD_S))
+        if (not valid or stall.invalid or (stall.phase == 'retreat' and
+                self._command_tx_at is not None and now - self._command_tx_at > FEEDBACK_HOLD_S)):
+            if self.mode == 'policy' and fb and fb.enabled and stall.qualified:
+                # Other servos can still prove a stall even if one encoder is invalid.
+                # Without a full measured pose there is no safe retreat anchor.
+                stall.indices = stall.qualified
+                if stall.started is None:
+                    stall.started = now
+                if not stall.home:
+                    stall.home = tuple(self.policy.default_deg)
+                self._disarm_stall_locked(now, 'confirmed stall without a valid retreat pose')
+                return True
+            if stall.phase == 'retreat':
+                self._disarm_stall_locked(now, 'feedback, power or command link unavailable')
+                return True
+            stall.clear_candidates()
+            return False
+        if stall.phase == 'monitor':
+            stall.indices = stall.qualified
+            stall.started = now
+            stall.home = tuple(self.policy.default_deg)
+            self._disarm_stall_locked(now, 'stalled again after the default stance recovery')
+            return True
+        if stall.phase == 'idle':
+            reason = stall.trigger_reason or 'sustained overcurrent without motion'
+            stall.start(fb, self.policy.default_deg, now)
+            self._log_stall_locked('stall_retreat', now, reason)
+            self.generation += 1
+            self._cancel_actions_locked()
+            self.arm_pending = False
+            self.twist, self.head, self.mouth = [0.]*3, [0.]*4, 0.
+            self._motion_needs_neutral.update(('web', 'gamepad'))
+            self.input_source = 'web'
+            self.heading.reset()
+            self.last_error = STALL_RETREAT
+        if stall.persistent_alarms:
+            other_fault = any(bits & ~PROTECTION_OVERCURRENT for bits in stall.persistent_alarms.values())
+            reason = ('persistent servo fault during return to default stance' if other_fault else
+                      'overcurrent without measured progress toward default stance')
+            self._disarm_stall_locked(now, reason)
+            return True
+        if now >= stall.deadline:
+            self._disarm_stall_locked(now, 'default stance or stable body attitude not confirmed before deadline')
+            return True
+        if stall.resume_phase and now >= stall.started + stall.duration:
+            self.recovery.phase = stall.resume_phase
+            self.recovery.invalidate()
+            self.policy_needs_reset = True
+            self.last_error = ''
+            self._log_stall_locked('stall_released', now, 'default stance and stable body attitude confirmed')
+            stall.finish_retreat()
+            # Run the selected policy with fresh observations on the next tick.
+        target = stall.target(now)
+        self.last_action = target
+        self._send_motion_locked(fb, HOLD, target)
+        return True
+
+    def _roller_transition_locked(self, phase, reason=None):
+        fb = self.feedback
+        if self.servo_feedback_log and fb:
+            extra = {}
+            if reason == 'protection':
+                extra['pitch_deg'] = None if self.recovery.pitch_deg is None else round(self.recovery.pitch_deg, 2)
+                extra['roll_deg'] = None if self.recovery.roll_deg is None else round(self.recovery.roll_deg, 2)
+                extra['loop_missed'] = self.loop_missed
+            self.servo_feedback_log.record('roller_pose', fb, self.mode, time.monotonic(),
+                self.diagnostics.get('servo_bus_voltage_mv'), self.diagnostic_time,
+                phase=phase, reason=reason, twist=list(self.twist),
+                hips_deg=[round(fb.angles[i], 2) for i in ROLLER_HIPS], **extra)
+
+    def _record_fall_blackbox_locked(self, event, fb, mode, now):
+        p, r, a = self.recovery.pitch_deg, self.recovery.roll_deg, self.recovery.angle_deg
+        if p is None or r is None:
+            axis = 'unknown'
+        elif abs(r) / Recovery.FALL_ROLL_DEG >= abs(p) / Recovery.FALL_DEG:
+            axis = 'roll_right' if r > 0 else 'roll_left'
+        else:
+            axis = 'pitch_fwd' if p > 0 else 'pitch_bwd'
+        loop_missed = getattr(self, 'loop_missed', 0)
+        delta_missed = loop_missed - getattr(self, '_fall_last_loop_missed', 0)
+        self._fall_last_loop_missed = loop_missed
+        recent_infer = list(getattr(self, 'infer_ms', ()))[-25:]
+        recent_rx = list(getattr(self, 'rx_intervals', ()))[-50:]
+        angles = getattr(fb, 'angles', None) if fb is not None else None
+        diagnostics = getattr(self, 'diagnostics', None) or {}
+        voltage_mv = diagnostics.get('servo_bus_voltage_mv')
+        fields = dict(
+            fall_axis=axis,
+            pitch_deg=None if p is None else round(p, 2),
+            roll_deg=None if r is None else round(r, 2),
+            angle_deg=None if a is None else round(a, 2),
+            twist=[round(v, 3) for v in self.twist],
+            roller_vx_cmd=round(getattr(self, '_roller_vx_cmd', 0.0), 3),
+            hips_deg=[round(angles[i], 2) for i in ROLLER_HIPS] if angles is not None else None,
+            neck_pitch_deg=round(angles[10], 2) if angles is not None and len(angles) > 10 else None,
+            roller_mode=getattr(self, 'roller_mode', False),
+            policy=getattr(self, '_last_policy_file', None),
+            loop_missed=loop_missed,
+            loop_missed_delta=delta_missed,
+            infer_ms_recent_max=round(max(recent_infer), 2) if recent_infer else None,
+            rx_ms_recent_max=round(max(recent_rx), 2) if recent_rx else None,
+        )
+        if event == 'fall_detected':
+            self._last_fall_event = dict(fields, mode=mode, voltage_v=round((voltage_mv or 0) / 1000.0, 2))
+            print(f'[fall_blackbox] axis={axis} pitch={fields["pitch_deg"]}° roll={fields["roll_deg"]}° '
+                  f'twist={fields["twist"]} hips={fields["hips_deg"]} neck={fields["neck_pitch_deg"]}° '
+                  f'V={self._last_fall_event["voltage_v"]} missed=+{delta_missed} '
+                  f'infer_max={fields["infer_ms_recent_max"]}ms rx_max={fields["rx_ms_recent_max"]}ms', flush=True)
+        servo_log = getattr(self, 'servo_feedback_log', None)
+        if servo_log and fb:
+            extra = {}
+            frames = getattr(servo_log, 'frames', None)
+            if event == 'fall_detected' and isinstance(frames, (collections.deque, list, tuple)) and frames:
+                extra['frames'] = (tuple(frames), LEG_FEEDBACK_MASK | (1 << 10))
+            servo_log.record(event, fb, mode, now, voltage_mv, getattr(self, 'diagnostic_time', 0.0), **fields, **extra)
+
+    def _finish_roller_glide_locked(self, reason, *, keep_hold=False):
+        if not self._roller_pose:
+            return
+        self._roller_pose = None
+        self._roller_glide_result = reason
+        self._roller_stride = None
+        self.twist = [0.] * 3
+        if reason in ('interrupted', 'protection'):
+            self.policy_needs_reset = True
+        self.generation += 1
+        self._roller_transition_locked('idle', reason)
+
+    def _check_roller_glide_locked(self, now):
+        pose = self._roller_pose
+        if not pose:
+            return
+        fb = self.feedback
+        expired = pose.expired(now)
+        if now - pose.seen >= MANUAL_INPUT_TIMEOUT_S:
+            reason = 'input_timeout'
+        elif expired:
+            reason = expired
+        elif (self.input_source != pose.owner
+              or not self.roller_mode or self.mode != 'policy' or self.arm_pending
+              or self.action_preparation or self.pick_active or self.kick_until
+              or self.sitstand_phase != 'idle' or self._roulade_on(now)):
+            reason = 'interrupted'
+        elif (not fb or not fb.enabled or not fb.imu_ok or now - self.rx_time >= FEEDBACK_HOLD_S
+              or now - self.rx_time + elapsed_us(fb.sample_us, fb.imu_us) / 1e6 > IMU_STALE_S
+              or fb.mask & LEG_FEEDBACK_MASK != LEG_FEEDBACK_MASK or fb.servo_errors is None
+              or any(code & ~PROTECTION_OVERCURRENT for code in fb.servo_errors)
+              or self.fault_hold or self.bridge_recovery or self.battery_phase != 'normal'
+              or self.stall.phase in ('retreat', 'disarmed') or self.recovery.phase != 'walk'
+              or not self.filtered or not self.filtered['imu_fusion_ready']
+              or self.recovery.angle_deg is None or self.recovery.fall_elapsed):
+            reason = 'protection'
+        else:
+            pose.observe(fb, self.recovery.angle_deg <= Recovery.STAND_DEG, self.filtered['gyro_rad'], now)
+            if pose.confirmed:
+                self._finish_roller_glide_locked('stance_confirmed')
+            return
+        self._finish_roller_glide_locked(reason)
+
+    def _roller_command_locked(self, t, roller_release, source, now):
+        pose = self._roller_pose
+        if not pose and roller_release:
+            stride = self._roller_stride
+            if (not self.roller_mode or not self.feedback or not stride or source != stride[0]
+                    or self.twist[0] * stride[2][0] <= 0
+                    or now - stride[1] >= FEEDBACK_HOLD_S or now - self.web_time >= MANUAL_INPUT_TIMEOUT_S):
+                self.twist = [0.] * 3
+                self._roller_stride = None
+                self.generation += 1
+                return
+            self.twist = [0.] * 3
+            self._roller_pose = pose = RollerStopPose(
+                source, self.feedback, self.roller_policy.default_deg, now,
+                forward_stride=stride[2][0] > 0)
+            self._roller_glide_result = None
+            self.generation += 1
+            self._roller_transition_locked('gliding')
+        if pose:
+            if any(t):
+                # Manual joystick/key input always regains control immediately.
+                self._finish_roller_glide_locked('manual_input')
+            elif source == pose.owner and roller_release:
+                # Check the prior heartbeat and phase timeout before allowing renewal.
+                self._check_roller_glide_locked(now)
+                if self._roller_pose is pose:
+                    pose.seen = now
+                return
+            else:
+                self._finish_roller_glide_locked('stopped')
+        self.twist = t
+        if not t[0]:
+            self._roller_stride = None
+
     def step(self):
         step_started = time.monotonic()
         with self.lock:
@@ -1301,6 +1766,9 @@ class Controller:
             self._battery_step_locked(now)
             fb, filt, generation, mode = self.feedback, self.filtered, self.generation, self.mode
             age = now - self.rx_time
+            if self._step_stall_locked(fb, filt, now, age):
+                self._finish_roller_glide_locked('interrupted')
+                return
             if mode in ('hold','policy'):
                 if not fb or age >= FEEDBACK_HOLD_S:
                     self._pause_for_feedback_locked(age)
@@ -1310,8 +1778,20 @@ class Controller:
                 lost = None
                 if fb.enabled and not self.bridge_recovery and self._command_stalled_locked(now, FEEDBACK_HOLD_S):
                     self._begin_bridge_recovery_locked('command', now)
-                if not fb.imu_ok or age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 > IMU_STALE_S:
-                    lost = 'sensor feedback lost; disarmed'
+                imu_age = age + elapsed_us(fb.sample_us, fb.imu_us) / 1e6
+                imu_timed_out = imu_age > IMU_STALE_S
+                if not fb.imu_ok or imu_timed_out:
+                    lost = IMU_DISARM_REASON
+                    if self.servo_feedback_log:
+                        # The MCU also clears imu_ok on stale samples. Keep the flag and
+                        # classify by age first so a known timeout remains distinguishable.
+                        self.servo_feedback_log.record('imu_feedback_disarm', fb, mode, now,
+                            self.diagnostics.get('servo_bus_voltage_mv'), self.diagnostic_time,
+                            reason='imu_timeout' if imu_timed_out else 'imu_invalid',
+                            imu_ok=fb.imu_ok, imu_age_ms=round(imu_age * 1000, 2),
+                            feedback_age_ms=round(age * 1000, 2),
+                            feedback_interval_ms=round(self.rx_intervals[-1], 2) if self.rx_intervals else None,
+                            mcu_period_ms=fb.period_us / 1000)
                 elif self.fault_hold:
                     if not fb.enabled:
                         lost = 'MCU released torque during the feedback pause'
@@ -1328,7 +1808,7 @@ class Controller:
                     generation = self.generation
                     self.recovery.reset(); self.policy_needs_reset = True
                     self._cancel_actions_locked()
-                elif time.monotonic()-self.web_time > 1.0:
+                elif time.monotonic()-self.web_time > MANUAL_INPUT_TIMEOUT_S:
                     # Browser inactivity stops travel without releasing torque.
                     self.twist = [0.0]*3
             elif mode in EXCLUSIVE_MODES:
@@ -1350,9 +1830,11 @@ class Controller:
             if self.bridge_recovery and fb and age < FEEDBACK_HOLD_S:
                 if not self._confirm_bridge_recovery_locked(fb, mode) or self.fault_hold:
                     return
-            valid = bool(fb and age < .15 and fb.imu_ok and filt
+            valid = bool(fb and age < FEEDBACK_HOLD_S and fb.imu_ok and filt
                          and filt['imu_fusion_ready']
                          and age + elapsed_us(fb.sample_us, fb.imu_us)/1e6 <= IMU_STALE_S)
+            if valid and self.last_error == IMU_DISARM_REASON:
+                self.last_error = ''
             now = time.monotonic()
             if self.sitstand_phase == 'stand' and now >= self.sitstand_until:
                 self._stop_sitstand_locked()
@@ -1365,16 +1847,21 @@ class Controller:
                                                now, valid)
                 self.policy_needs_reset |= changed
                 if changed and self.recovery.phase != 'walk':
+                    self._record_fall_blackbox_locked('fall_detected', fb, mode, now)
                     self._cancel_actions_locked()
                     if self.battery_phase == 'warning':
                         self._battery_step_locked(now)
                         return
+                elif changed and self.recovery.phase == 'walk':
+                    self._record_fall_blackbox_locked('fall_recovered', fb, mode, now)
             phase = self.recovery.phase
             if phase == 'walk':
                 self._advance_preparation_locked(now, valid)
             elif self.action_preparation:
                 self._cancel_preparation_locked()
+            self._check_roller_glide_locked(now)
             mode, generation = self.mode, self.generation
+            drive_source = self.input_source
             twist, head, mouth = list(self.twist), list(self.head), self.mouth
             rolling = self._roulade_on(now) and self.action_preparation is None
             if rolling and phase != 'walk':
@@ -1404,6 +1891,26 @@ class Controller:
                 selected = self.policy if phase == 'walk' else self.getup_policy
                 if selected is self.roller_policy:
                     head = [0.0]*4
+                    target_vx = twist[0]
+                    if mode != 'policy' or target_vx == 0.0:
+                        self._roller_vx_cmd = 0.0
+                    else:
+                        prev_vx = 0.0 if self.policy_needs_reset else getattr(self, '_roller_vx_cmd', 0.0)
+                        if prev_vx * target_vx < 0.0:
+                            prev_vx = 0.0
+                        if abs(target_vx) <= abs(prev_vx):
+                            self._roller_vx_cmd = target_vx
+                        else:
+                            max_step = ROLLER_VX_ACCEL_LIMIT * CONTROL_PERIOD
+                            self._roller_vx_cmd = (min(target_vx, prev_vx + max_step) if target_vx > prev_vx
+                                                   else max(target_vx, prev_vx - max_step))
+                    twist[0] = self._roller_vx_cmd
+                else:
+                    self._roller_vx_cmd = 0.0
+            if selected is not self.roller_policy:
+                self._roller_vx_cmd = 0.0
+            standing = selected is self.sitstand_policy and self.sitstand_phase == 'stand'
+            drive_twist = tuple(twist)
             twist[2] = self.heading.command(valid and self._heading_motion_locked(now), twist)
             reset_policy = self.policy_needs_reset
             inferring = mode in ('shadow','policy') and valid
@@ -1416,12 +1923,7 @@ class Controller:
                     self._disarm_now()  # Keep the MCU-side exclusive-mode watchdog alive.
             return
         target = self.policy.default_deg
-        if inferring and phase == 'default_pose':
-            # Switch to getup immediately, but force action/history to zero for 1 s.
-            with self.policy_lock:
-                selected.reset_action_filter()
-                target = selected.action_to_deg([0.0]*14)
-        elif inferring:
+        if inferring:
             if phase == 'getup':
                 twist, head = [0.0]*3, [0.0]*4
             begin = time.monotonic()
@@ -1429,13 +1931,19 @@ class Controller:
                 acquired = time.monotonic()
                 if reset_policy:
                     selected.reset_action_filter()
-                action = selected.infer(filt['grav'], filt['gyro_rad'], filt['angles_deg'], filt['vels_deg'], twist, head)
-                target = selected.action_to_deg(action)
+                observations = (filt['grav'], filt['gyro_rad'], filt['angles_deg'], filt['vels_deg'], twist, head)
+                if standing:
+                    action = selected.infer(*observations, action_alphas=SITSTAND_STAND_ALPHAS)
+                    target = selected.action_to_deg(action, action_scale=SITSTAND_STAND_ACTION_SCALE)
+                else:
+                    action = selected.infer(*observations)
+                    target = selected.action_to_deg(action)
             finish = time.monotonic()
             with self.lock:
                 self.inferred += 1; self.infer_times.append(finish)
                 self.infer_ms.append((finish-begin)*1000)
         with self.lock:
+            self._check_roller_glide_locked(time.monotonic())
             # A stop arriving during ONNX always wins; never send its obsolete action.
             if self.generation != generation:
                 return
@@ -1454,10 +1962,17 @@ class Controller:
                     self.policy_needs_reset = True
             else:
                 target = list(target)
+                if self._roller_pose and selected is self.roller_policy:
+                    self._roller_pose.apply(target, time.monotonic())
                 target[MOUTH_INDEX] = mouth
             if fb is None: return
             self.last_action = list(target)
+            if inferring and command_mode == POLICY:
+                self._last_policy_file = selected.file
             self._send_motion_locked(fb, command_mode, target)
+            if (inferring and command_mode == POLICY and selected is self.roller_policy
+                    and self._roller_pose is None):
+                self._roller_stride = (drive_source, time.monotonic(), drive_twist)
             if inferring and command_mode in (DISARM, POLICY):
                 submitted = time.monotonic()
                 if rolling:
@@ -1502,6 +2017,13 @@ class Controller:
                     pending['warm_passes'] += 1
 
     def run(self):
+        # Pin the 50 Hz balance control thread to core 0 (isolated from voice_process on cores 2..3).
+        try:
+            cpus = sorted(os.sched_getaffinity(0))
+            if len(cpus) >= 2:
+                os.sched_setaffinity(0, {cpus[0]})
+        except (AttributeError, OSError):
+            pass
         deadline = time.monotonic()
         while not self.stop_event.is_set():
             try:
@@ -1516,8 +2038,14 @@ class Controller:
                 missed = int((now-deadline)/CONTROL_PERIOD)+1
                 self.loop_missed += missed; deadline += missed*CONTROL_PERIOD
             else:
-                # Use spare budget to keep inactive ONNX sessions warm.
-                if deadline - now > 0.008:
+                # Use spare budget to keep inactive ONNX sessions warm; throttle during active roller skating
+                # so background dummy passes don't steal L1/L2 cache or push 50 Hz ticks over budget.
+                self._warm_tick += 1
+                roller_busy = self.roller_mode and self.mode == 'policy' and self.action_preparation is None
+                need_warm = (not roller_busy and deadline - now > 0.008) or (
+                    roller_busy and (self._warm_tick % 10 == 0) and deadline - now > 0.012
+                )
+                if need_warm:
                     try:
                         self._keep_warm_idle()
                     except Exception:
@@ -1570,6 +2098,7 @@ class Controller:
                 raw_pos=list(self.raw_pos), encoder_center=SERVO_CENTER_POS,
                 cal_done=list(self.cal_done), cal_hold_pos=CAL_HOLD_POS, raw_mask=self.raw_mask)
             result['control_ready'] = bool(fb and fb.imu_ok and now-self.rx_time < FEEDBACK_HOLD_S
+                                           and self.stall.phase != 'retreat'
                                            and not self.bridge_recovery and self.mode not in EXCLUSIVE_MODES)
             result['servo_scan_version'] = 2
             pending = self.action_preparation
@@ -1590,6 +2119,9 @@ class Controller:
                                                      max_retries=SITTING_CALIBRATION_RETRIES)
             result['heading_hold'] = self.heading.status()
             result['roller'] = dict(enabled=self.roller_mode, model=self.roller_policy.file,
+                                    stop_pose_active=bool(self._roller_pose and self._roller_pose.phase != 'holding'),
+                                    stop_phase=self._roller_pose.phase if self._roller_pose else 'idle',
+                                    glide_result=self._roller_glide_result,
                                     walk_model=self.policy.file, default_deg=self.roller_policy.default_deg,
                                     yaw_limit=ROLLER_YAW_LIMIT,
                                     action_scale=self.roller_policy.action_scale,
@@ -1616,6 +2148,11 @@ class Controller:
             if self.diagnostics.get('imu_period_us'):
                 result['mcu_runtime']['imu_hz'] = 1e6/self.diagnostics['imu_period_us']
             result['recovery'] = self.recovery.status()
+            result['last_fall'] = getattr(self, '_last_fall_event', None)
+            result['stall_recovery'] = dict(phase=self.stall.phase,
+                servo_ids=[MOTOR_IDS[i] for i in self.stall.indices])
+            if self.stall.phase == 'retreat':
+                result['recovery']['phase'] = 'retreat'
             result['recovery']['active'] = self.mode in ('shadow','policy')
             result['pick'] = dict(active=self.pick_active, phi=self.pick_phi,
                                  period_s=PICK_PERIOD_S, mouth_close_phi=PICK_MOUTH_CLOSE_PHI,
@@ -1627,7 +2164,7 @@ class Controller:
             result['sitstand'] = self._sitstand_status_locked(now)
             result['right_kick'] = self._kick_status_locked(now, 'right')
             result['left_kick'] = self._kick_status_locked(now, 'left')
-            if self.mode in ('shadow','policy'):
+            if self.mode in ('shadow','policy') and self.stall.phase != 'retreat':
                 if self.kick_until and self.recovery.phase == 'walk':
                     result['active_model'] = self.kick_policies[self.kick_side].file
                 elif self.sitstand_phase != 'idle' and self.recovery.phase == 'walk':
@@ -1643,6 +2180,11 @@ class Controller:
             else:
                 result['active_model'] = None
             if fb:
+                result['servo_alarms'] = {
+                    str(MOTOR_IDS[index]): dict(code=code, active=bool(
+                        now - self.rx_time < FEEDBACK_HOLD_S and fb.servo_errors and fb.servo_errors[index]))
+                    for index, (code, seen) in self._servo_alarm_seen.items()
+                    if now - seen < SERVO_ALARM_DISPLAY_S}
                 motion_mask = fb.mask
                 if motion_mask != ALL_MASK:
                     for seq, sample_us, received_at, mask in self._servo_feedback_history:

@@ -20,6 +20,7 @@ self.* 内置工具 (对齐 Omni mcp_server.cc, 按 common/user-only 分类):
 self.camera.* 相机工具 (对齐 Omni mcp_server.cc, LLM 调用):
   self.camera.take_photo → 拍照上传服务端 VLM 分析 (耗时数秒, executor 内执行)
   self.camera.preview    → 拍照并展示到屏幕
+  self.camera.set_light / close → Duck USB camera fill light and capture control
   self.camera.get_base64 → 拍照返回压缩 base64 JPEG (user-only, 小程序设备页经
                            网关 HTTP API 调用取图; 不暴露给 AI, 避免 base64 撑爆上下文)
 服务端 MCP initialize 的 capabilities.vision 携带分析地址与 token。
@@ -206,7 +207,7 @@ class McpServer:
 
     def _camera_tools(self) -> list:
         """相机工具 (描述对齐 Omni, LLM 据此决定何时拍照)"""
-        return [
+        tools = [
             {
                 "name": "self.camera.take_photo",
                 "description": "拍照并AI识别分析(看东西/读文字/数数量/描述场景等)\n"
@@ -234,6 +235,16 @@ class McpServer:
             },
         ]
 
+        if hasattr(self.self_provider, "mcp_camera_set_light"):
+            tools.extend([
+                {"name": "self.camera.set_light", "description": "开关补光灯。开灯自动开摄像头，关灯仅熄灯。",
+                 "inputSchema": {"type": "object", "properties": {"enabled": {"type": "boolean"}},
+                                 "required": ["enabled"]}},
+                {"name": "self.camera.close", "description": "关灯并关闭摄像头，结束预览。",
+                 "inputSchema": {"type": "object", "properties": {}, "required": []}},
+            ])
+        return tools
+
     def _handle_self_tool(self, name: str, arguments: dict):
         if name == "self.get_device_status":
             return self.self_provider.mcp_get_device_status()
@@ -249,6 +260,10 @@ class McpServer:
             return self.self_provider.mcp_set_aec(arguments.get("enable", 0))
         if name == "self.screen.get_info":
             return self.self_provider.mcp_screen_get_info()
+        if name == "self.camera.set_light":
+            return self.self_provider.mcp_camera_set_light(arguments.get("enabled"))
+        if name == "self.camera.close":
+            return self.self_provider.mcp_camera_close()
         if name == "self.camera.take_photo":
             return self.self_provider.mcp_take_photo(arguments.get("question", ""))
         if name == "self.camera.preview":

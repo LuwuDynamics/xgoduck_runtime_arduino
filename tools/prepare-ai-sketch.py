@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Resolve pinned MCU dependencies, patch Bridge and compile without uploading.
+"""Verify the bundled reliable Bridge libraries, resolve MCU dependencies and compile.
 
 Run as arduino on the UNO Q host. An optional official Linux ARM64 archive can
 be bundled in tools/offline/ or passed with --toolchain-archive. Arduino CLI
@@ -86,7 +86,7 @@ def prepare_cache(base, info, archive=None):
 
 
 def prepare_dependencies(compile_command):
-    # Resolves libraries and tools without uploading or compiling unpatched RPC.
+    # Resolve the board platform, toolchain and remaining registry libraries.
     subprocess.run([*compile_command, '--only-compilation-database',
                     '--build-path', str(ROOT / '.cache/ai-sketch-deps'), str(ROOT / 'sketch')], check=True)
     subprocess.run([sys.executable, str(ROOT / 'tools/prepare-bridge.py')], check=True)
@@ -116,7 +116,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--toolchain-archive', type=Path, help='Official Linux ARM64 toolchain archive; checksum is verified')
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument('--dependencies-only', action='store_true', help='Resolve pinned dependencies and patch Bridge for App CLI release builds')
+    mode.add_argument('--dependencies-only', action='store_true', help='Resolve pinned dependencies and verify the reliable libraries for App CLI release builds')
     mode.add_argument('--verify-build', type=Path, help='Verify the ELF in an existing sketch build directory')
     args = parser.parse_args()
     if platform.system() != 'Linux' or platform.machine() != 'aarch64' or os.getuid() != 1000:

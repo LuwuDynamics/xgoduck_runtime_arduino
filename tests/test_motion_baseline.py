@@ -42,7 +42,11 @@ class BaselineTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(), expected)
         source = (ROOT / 'sketch/sketch.ino').read_text()
-        for overlay in manifest['sketch']['sitting_calibration_overlays']:
+        for overlay in (manifest['sketch']['id_protection_overlays']
+                        + manifest['sketch']['servo_reply_diagnostic_overlays']
+                        + manifest['sketch']['reliable_transport_overlays']
+                        + manifest['imu_recovery_overlay']['sketch_overlays']
+                        + manifest['sketch']['sitting_calibration_overlays']):
             self.assertEqual(source.count(overlay['integrated']), 1)
             source = source.replace(overlay['integrated'], overlay['upstream'])
         for line in manifest['sketch']['optional_overlay']:
@@ -75,7 +79,7 @@ class BaselineTest(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((ROOT / name).read_bytes()).hexdigest(),
                                  manifest['source']['sha256'][name])
         source_overlays = {}
-        for group in ('speech_mouth_overlay', 'default_pose_overlay'):
+        for group in ('speech_mouth_overlay', 'default_pose_overlay', 'imu_recovery_overlay'):
             for name, overlays in manifest[group]['source_overlays'].items():
                 source_overlays.setdefault(name, []).extend(overlays)
         for name, overlays in source_overlays.items():
@@ -105,7 +109,10 @@ class BaselineTest(unittest.TestCase):
         source = (ROOT / 'sketch/sketch.ino').read_text()
         start = source.index('static void controlTask(')
         task = source[start:source.index('\nstatic void reportTask(', start)]
-        for overlay in provenance['sketch']['sitting_calibration_overlays']:
+        for overlay in (provenance['sketch']['servo_reply_diagnostic_overlays']
+                        + provenance['sketch']['reliable_transport_overlays']
+                        + provenance['imu_recovery_overlay']['sketch_overlays']
+                        + provenance['sketch']['sitting_calibration_overlays']):
             if overlay.get('control_task'):
                 self.assertEqual(task.count(overlay['integrated']), 1)
                 task = task.replace(overlay['integrated'], overlay['upstream'])
@@ -128,10 +135,10 @@ class BaselineTest(unittest.TestCase):
 
     def feedback(self, enabled=True, *, mask=wire.ALL_MASK, servo_debug=False,
                  command_seq=None, command_age_us=0, targets=DEFAULT_DEG,
-                 angles=DEFAULT_DEG, sample_us=None):
+                 angles=DEFAULT_DEG, sample_us=None, imu_ok=True):
         self.seq += 1
         sample = self.seq * 10000 if sample_us is None else sample_us
-        flags = 1 | (2 if enabled else 0) | (16 if servo_debug else 0)
+        flags = int(imu_ok) | (2 if enabled else 0) | (16 if servo_debug else 0)
         raw = wire.STATE.pack(b'DQS1', 1, flags, mask,
             self.seq, sample, sample, self.c.seq if command_seq is None else command_seq,
             command_age_us, 10000, 500, 0, 0, 0,
@@ -143,6 +150,24 @@ class BaselineTest(unittest.TestCase):
         self.feedback(enabled)
         self.c.receive_diagnostics(wire.DIAGNOSTIC_V2.pack(b'DQD2', *([0] * 16), millivolts))
         self.c.step()
+        if self.c.action_preparation:
+            self.c._keep_warm_idle()
+
+    def test_servo_test_start_probes_target_missing_from_latest_frame(self):
+        self.make_motion(enabled=False, synchronized_clock=True)
+        self.c.set_mode('servo_debug')
+        self.feedback(enabled=False, mask=0, servo_debug=True)
+        target_id = 12
+        def notify(name, payload):
+            self.assertEqual(name, 'duck_servo')
+            _, op, sid, _, _, _, _, session = wire.SERVO.unpack(payload)
+            self.assertEqual((op, sid), (wire.SERVO_TEST_START, target_id))
+            self.c.receive_servo_reply(wire.SERVO_REPLY.pack(b'DQS3', op, sid, 1, 0, 2033, session, 0, 0))
+        self.c.bridge.notify.side_effect = notify
+        started = self.c.servo_test('start', target_id)
+        self.assertEqual(started['raw_pos'], 2033)
+        with self.assertRaisesRegex(ValueError, 'No servo replied'):
+            self.c.servo_test('move', target_id, started['session'], 2)
 
     def test_servo_test_stop_cancels_pending_move_and_requires_matching_torque_readback(self):
         self.make_motion(enabled=False, synchronized_clock=True)
@@ -354,6 +379,23 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(self.c.last_error, 'MCU released torque during the feedback pause')
         self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
 
+    def test_imu_reinitialization_keeps_torque_off_after_feedback_recovers(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.bridge.notify.reset_mock()
+        self.feedback(enabled=False, imu_ok=False)
+        self.c.step()
+        for _ in range(6):
+            self.now += .02
+            self.feedback(enabled=False)
+            self.c.step()
+        self.assertEqual(self.c.mode, 'shadow')
+        self.assertFalse(self.c.arm_pending)
+        commands = [wire.COMMAND.unpack(call.args[1])[4]
+                    for call in self.c.bridge.notify.call_args_list if call.args[0] == 'duck_command']
+        self.assertTrue(commands)
+        self.assertEqual(set(commands), {wire.DISARM})
+
     def test_battery_warns_once_then_disarms_and_requires_recovery(self):
         self.make_motion(enabled=True, synchronized_clock=True)
         self.c.set_mode('policy')
@@ -385,7 +427,8 @@ class BaselineTest(unittest.TestCase):
             for _ in range(64):
                 self.battery_tick(5900)
             self.assertEqual(self.c.battery_phase, 'warning')
-            self.assertEqual(self.c.sitstand_phase, 'idle')
+            self.assertEqual(self.c.sitstand_phase, 'sit')
+            self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
             self.c._play_battery_warning(self.c.battery_warning_done)
             self.c.battery_warning.assert_called_once_with()
             self.battery_tick(5900)
@@ -400,6 +443,33 @@ class BaselineTest(unittest.TestCase):
             self.assertEqual(self.c.battery_phase, 'normal')
             self.assertEqual(self.c.mode, 'off')
             audio.assert_called_once()
+
+    def test_short_warning_allows_sit_to_run_before_disarm(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('hold')
+        for _ in range(41):
+            self.battery_tick(5900)
+        self.assertTrue(self.c.battery_warning_done.is_set())
+        self.assertEqual(self.c.action_preparation['name'], 'sit')
+        for _ in range(10):
+            self.battery_tick(5900)
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        self.assertEqual(self.c._last_policy_file, 'xgoduck_sitstand.onnx')
+        for _ in range(8):
+            self.battery_tick(5900)
+        self.assertEqual(self.c.mode, 'off')
+        self.assertEqual(self.c.battery_phase, 'locked')
+
+    def test_feedback_lost_during_battery_sit_disarms_immediately(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        for _ in range(44):
+            self.battery_tick(5900)
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        self.now += .2
+        self.c.step()
+        self.assertEqual(self.c.mode, 'off')
+        self.assertEqual(wire.COMMAND.unpack(self.c.bridge.notify.call_args.args[1])[4], wire.DISARM)
 
     def test_battery_disarms_if_warning_never_finishes(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -587,7 +657,7 @@ class BaselineTest(unittest.TestCase):
         encoder_center = self.c.status()['encoder_center']
         self.c.set_roller_mode(True)
         self.assertEqual(self.c.policy.file, 'xgoduck_roller.onnx')
-        self.assertEqual(self.c.policy.action_scale, .8)
+        self.assertEqual(self.c.policy.action_scale, .6)
         self.assertNotEqual(self.c.policy.default_deg, DEFAULT_DEG)
         self.c.set_roller_mode(False)
         self.assertEqual(self.c.policy.default_deg, DEFAULT_DEG)
@@ -637,12 +707,69 @@ class BaselineTest(unittest.TestCase):
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_sitstand.onnx')
         self.assertEqual(self.c.sitstand_phase, 'sit')
         self.access.web_sitstand('stand')
-        self.finish_preparation()
-        self.now += 1.01
+        policy = self.c.sitstand_policy
+        with patch.object(policy, 'infer', wraps=policy.infer) as infer, \
+                patch.object(policy, 'action_to_deg', wraps=policy.action_to_deg) as target, \
+                patch.object(policy, 'reset_action_filter', wraps=policy.reset_action_filter) as reset:
+            self.finish_preparation()
+            self.assertEqual(infer.call_args.kwargs, {'action_alphas': (0.2, 0.2)})
+            self.assertEqual(target.call_args.kwargs, {'action_scale': 1.1})
+            reset.assert_not_called()
+        deadline = self.c.sitstand_until
+        self.assertAlmostEqual(deadline - self.now, 1.2)
+        self.now = deadline - .01
+        self.feedback()
+        self.c.step()
+        self.assertEqual(self.c.sitstand_phase, 'stand')
+        self.now = deadline + .01
         self.feedback()
         self.c.step()
         self.assertEqual(self.c.sitstand_phase, 'idle')
         self.assertEqual(self.c.status()['active_model'], 'xgoduck_walk.onnx')
+
+    def test_fall_debounce_uses_separate_pitch_and_roll_thresholds(self):
+        upright = [0.0, 0.0, -1.0]
+        for axis, threshold in ((0, 55.0), (1, 35.0)):
+            for sign in (-1, 1):
+                with self.subTest(axis=axis, sign=sign):
+                    recovery = controller.Recovery()
+                    gravity = upright.copy()
+                    gravity[axis] = sign * math.tan(math.radians(threshold - 1))
+                    for frame in range(8):
+                        self.assertFalse(recovery.update(gravity, frame * .02))
+                    gravity[axis] = sign * math.tan(math.radians(threshold + 1))
+                    for frame in range(7):
+                        self.assertFalse(recovery.update(gravity, frame * .02))
+                    self.assertFalse(recovery.update(gravity, .14, valid=False))
+                    for frame in range(7):
+                        self.assertFalse(recovery.update(gravity, .16 + frame * .02))
+                    self.assertTrue(recovery.update(gravity, .30))
+                    self.assertEqual(recovery.phase, 'getup')
+                    for frame in range(49):
+                        self.assertFalse(recovery.update(upright, .32 + frame * .02))
+                    self.assertTrue(recovery.update(upright, 1.30))
+                    self.assertEqual(recovery.phase, 'walk')
+
+    def test_sitstand_fall_runs_getup_model_on_detection_frame(self):
+        self.make_motion(enabled=True, synchronized_clock=True)
+        self.c.set_mode('policy')
+        self.c.step()
+        self.access.web_sitstand('sit')
+        self.finish_preparation()
+        self.assertEqual(self.c.sitstand_phase, 'sit')
+        policy = self.c.getup_policy
+        with patch.object(policy, 'infer', wraps=policy.infer) as infer:
+            for frame in range(8):
+                self.now += .02
+                self.feedback()
+                self.c.filtered['grav'] = [0.0, -math.sin(math.radians(36)), -math.cos(math.radians(36))]
+                self.c.step()
+                if frame < 7:
+                    infer.assert_not_called()
+            infer.assert_called_once()
+        self.assertEqual(self.c.sitstand_phase, 'idle')
+        self.assertEqual(self.c.recovery.phase, 'getup')
+        self.assertEqual(self.c.status()['active_model'], 'xgoduck_getup.onnx')
 
     def test_heading_hold_reaches_both_walking_policies(self):
         self.make_motion(enabled=True, synchronized_clock=True)
@@ -677,6 +804,9 @@ class BaselineTest(unittest.TestCase):
             self.assertEqual(self.c.twist, [0., 0., 0.])
             self.c.step()
             self.assertEqual(self.c.status()['active_model'], f'xgoduck_ballkick_{side}.onnx')
+            kick = self.c.status()[side + '_kick']
+            self.assertEqual((kick['action_alpha'], kick['action_alpha_head'], kick['action_scale']),
+                             (0.2, 0.2, 1.0))
             self.now += .41
             self.feedback()
             self.c.step()

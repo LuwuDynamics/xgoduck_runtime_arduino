@@ -142,18 +142,18 @@ bash tools/install-ai-support.sh
 
 脚本可重复执行；App 目录改变或硬件辅助代码升级后需重跑。**先停止所有 App，通过 Wi-Fi/SSH 执行。** 安装器运行并启用 `xgoduck-ai-usb-startup.service`，需要时重启共享 router，App 启动和 MCU 上传由后续的 Run 完成。
 
-## 5. 设置 Bridge 速率，首次运行一次
+## 5. 配置 Router 并启动
 
-沿用原工程的 STM32 sketch、2 Mbps Bridge、15 舵机和 IMU 接线：
+在当前 App 目录安装与 STM32 配套的可靠协议 Router，然后启动 App。双方从 115200 握手，协商到 2 Mbaud。
 
 ```sh
 sudo bash tools/router-2m.sh
 arduino-app-cli app start "$PWD"
 ```
 
-也可准备后在 App Lab 通过 Network 连接点击 **Run**。上一步的安装脚本已调用 `tools/prepare-ai-sketch.py`：解析 `sketch/sketch.yaml` 的固定依赖、修补 Bridge/RPClite 缓存、仅编译并检查 ELF，无需先 Run 失败一次再 Stop 修缓存。若只需重建 MCU 缓存，以 `arduino` 用户运行 `python3 tools/prepare-ai-sketch.py`。首次准备期间保持扭矩关闭，App 保持停止。库缓存清空后需重新准备；已有正确环境不必每次重启 router。
+也可准备后在 App Lab 通过 Network 连接点击 **Run**。上一步的安装脚本已调用 `tools/prepare-ai-sketch.py`：解析 `sketch/sketch.yaml` 的固定依赖，使用随源码提供的 Bridge 和 RPClite，编译并检查 ELF。若只需重建 MCU 缓存，以 `arduino` 用户运行 `python3 tools/prepare-ai-sketch.py`。首次准备期间保持扭矩关闭，App 保持停止。库缓存清空后需重新准备；已有正确环境不必每次重启 router。
 
-**Run 会启动 App 并上传 STM32 程序。** 源码 ZIP 在这个流程里会编译 sketch。0.3.5 的单舵机安装检查需要更新 STM32 程序，请在舵机卸力后运行。换用其他 Bridge 速率的 App 前，按技术参考调整全局的 2 Mbps Router 设置。 [技术参考](technical_reference.md#running)
+**Run 会启动 App 并上传 STM32 程序。** 源码 ZIP 在这个流程里会编译 sketch。请先扶稳小鸭并卸力。切换到旧版固定 2M 的 Duck 时，从旧 App 目录运行它自己的 `tools/router-2m.sh`，再启动旧 App。 [技术参考](technical_reference.md#running)
 
 USB 探测在 **App 容器创建之前** 完成。开机先开 Host，最多等待 5 秒识别 USB 摄像头或音频接口。检测到音视频设备就保留 Host，否则切回 Device，包括只接了空 Hub 的情况。切换角色前，开机服务暂停 USB 串口监视器、代理及 Arduino router。确定角色后恢复原本运行的 router。当前 UNO Q 内核在 USB/FunctionFS 切换期间可能扰动 UART，重启 router 又会更换容器绑定的 socket、重置 MCU。App 入口只检查当前 USB 角色。驾驶舱手动切换后，单独重启 App 会沿用所选模式，下次整机开机重新探测。
 
@@ -287,7 +287,7 @@ sudo rm -f /etc/systemd/system/arduino-app-cli.service.d/xgoduck-ai.conf
 sudo systemctl daemon-reload
 ```
 
-按旧安装实际使用过的服务，恢复 `sudo systemctl enable --now duck-gamepad.service` 和 `systemctl --user enable --now duck-device-test.service`。如果以前使用开机 USB Device 默认服务，恢复 `sudo systemctl enable duck-usb-device.service`，正常重启一次后生效。然后用 App Lab 或 `arduino-app-cli app start "$duck_previous_app"` 启动旧 App。若原来没有默认 App，可用 `arduino-app-cli properties set default none` 恢复为不自动启动。旧 Duck 同样使用 2 Mbps Bridge，无需反复改变 router；切其他速率应用时再按技术参考处理。
+按旧安装实际使用过的服务，恢复 `sudo systemctl enable --now duck-gamepad.service` 和 `systemctl --user enable --now duck-device-test.service`。如果以前使用开机 USB Device 默认服务，恢复 `sudo systemctl enable duck-usb-device.service`，正常重启一次后生效。然后用 App Lab 或 `arduino-app-cli app start "$duck_previous_app"` 启动旧 App。若原来没有默认 App，可用 `arduino-app-cli properties set default none` 恢复为不自动启动。回退到固定 2M 版本时，务必在启动旧 App 前，从其目录运行 `sudo bash tools/router-2m.sh`，恢复与旧固件匹配的 Router 配置。
 
 如需移除新增的 80 端口入口，删除 `/etc/nginx/sites-enabled/xgoduck-mobile`，运行 `sudo nginx -t && sudo systemctl reload nginx`。原站点配置备份在 `/var/backups/xgoduck-mobile-web/`。只有确定 nginx 没有其他用途时，才停用其服务。
 

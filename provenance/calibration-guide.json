@@ -79,9 +79,9 @@
     34
   ],
   "sha256": {
-    "assets/calibrate.html": "1afa371b9711fe28fe7e4c698da557ae8f438c99d0ef5f5d6f968b2ed4b3e4dd",
-    "assets/calibrate.js": "37e9ba5d5b1c8f214ac025310c899073ab76bfe21059ac0d08a3bce1c4a1e4b1",
-    "assets/calibrate.css": "c07b331280520102e5ad03d2e2f0c7db4944380e3363575c908f82174810b9b9",
+    "assets/calibrate.html": "52a45290c09d7bcd2bfce2253e5df7777e070115ced7f587fd54972675907d3d",
+    "assets/calibrate.js": "0661bb05d560c92d7320b4d7d8ecff40cc2474da2e4ef8546dc452dd82e3e6b5",
+    "assets/calibrate.css": "403fc69cb822e2daf002473237d4198db7d447f75a3db9f6582a5e3b5fde6471",
     "assets/imu-calibration-pose.png": "eb0415f86555cab9fb6f70d017b55aff6ad9dc6ec8e81775bac0a20177ff1da5",
     "assets/calibrate-joints.json": "78059f090b2f869203306a264dc8aef5242c71e4cbacf3a3c1acb929e1730989",
     "assets/cal-photo-head.webp": "f5462e5783a75c89bcfa83109d11d281164de49df29e01a6811064342b591909",
@@ -120,7 +120,7 @@
   },
   "imu_section": {
     "endpoint": "/api/imu-calibration",
-    "position": "Step 2, after unified servo calibration",
+    "position": "Step 3, after separate ID 30 neck centering",
     "workflow": "Start the standing IMU sample with the servos unloaded and display the result from status.",
     "reference_image": "assets/imu-calibration-pose.png"
   },

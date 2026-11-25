@@ -1,9 +1,5 @@
 @media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
-.page-calibrate{max-width:1040px}
-.page-calibrate h1{font-size:30px}
 .page-calibrate #message{margin:14px 0 0}
-#language{padding:8px 12px;background:#0e1924;border-color:#26384b;color:#9cafc3}
-#language:hover{color:#fff;border-color:#3c5b78}
 
 .cal-enlarge{display:block;width:100%;padding:0;border:0;border-radius:0;background:transparent;cursor:zoom-in;line-height:0}
 .cal-enlarge:hover{background:transparent}
@@ -27,11 +23,11 @@
 .cal-action-line{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:14px}
 .cal-primary{background:#1d6a58;border-color:#2c9a80}
 .cal-primary:hover:not(:disabled){background:#25806b}
-.cal-imu{display:grid;gap:14px 20px;align-items:start}
-.cal-imu-reference{width:min(100%,216px)}
-#imu-panel p{margin:0}
-#imu-panel .cal-action-line{margin-top:0}
-#imu-panel #imu-status{margin-top:10px}
+.cal-reference-panel{display:grid;gap:14px 20px;align-items:start}
+.cal-placement-reference{width:min(100%,216px)}
+.cal-reference-panel p{margin:0}
+.cal-reference-panel .cal-action-line{margin-top:0}
+.cal-reference-panel [role=status]{margin-top:10px}
 #imu-progress{width:min(100%,230px);accent-color:#8ce2cc}
 .cal-unified-panel [role=status]{margin:0;color:#9cafc3;font-size:14px}
 .cal-unified-panel [data-state="saved"]{color:#8ce2cc}
@@ -39,6 +35,17 @@
 .cal-finish{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:20px;align-items:start}
 .cal-finish p{margin:0 0 14px}
 .cal-finish .cal-finish-recheck,#pose-status{margin:14px 0 0}
+.cal-finish-recheck a{color:#8ce2cc;text-underline-offset:.16em}
+#single-toggle{padding:0;border:0;background:none;color:#8ce2cc;font:inherit;text-decoration:underline;text-underline-offset:.16em}
+#single-id{max-width:100%;margin:0 0 12px;padding:8px;border:1px solid #3c5b78;border-radius:8px;background:#0e1924;color:inherit;font:inherit}
+#single-pictures{grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr));margin-bottom:12px}
+#single-pictures img{height:clamp(180px,24vw,260px)}
+#single-pictures .cal-enlarge{position:relative}
+.single-photo-dim{position:absolute;inset-block:0;width:50%;background:rgba(11,18,26,.68);pointer-events:none}
+.single-photo-dim.left{left:0}.single-photo-dim.right{right:0}
+#single-pictures .single-zone-photo{display:block;width:fit-content;max-width:100%;margin:auto;position:relative}
+#single-pictures .single-zone-photo img{width:auto;max-width:100%;height:auto;max-height:clamp(180px,24vw,260px)}
+#single-panel [role=status]:not([hidden]){margin-top:10px}
 #pose-status{color:#9cafc3;font-size:14px}
 #pose-status[data-state="saved"]{color:#8ce2cc}
 #pose-status[data-state="error"]{color:#ff9a9a}
@@ -53,8 +60,8 @@
 .cal-picture-dialog img[src*='.svg']{width:680px}
 
 @media(min-width:761px){
-  .cal-imu{grid-template-columns:minmax(0,1fr) 216px;grid-template-rows:auto 1fr}
-  .cal-imu-reference{grid-column:2;grid-row:1 / span 2}
+  .cal-reference-panel{grid-template-columns:minmax(0,1fr) 216px;grid-template-rows:auto 1fr}
+  .cal-placement-reference{grid-column:2;grid-row:1 / span 2}
 }
 
 @media(max-width:760px){

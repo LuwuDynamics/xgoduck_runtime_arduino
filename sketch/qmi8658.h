@@ -26,6 +26,7 @@ struct ImuSample {
 struct ImuSnapshot {
   ImuSample sample;
   uint32_t seq, sampleUs, periodUs, workUs, overruns, errors, initAttempts;
+  uint32_t zeroResets;
 };
 
 static ImuSample imu = {};

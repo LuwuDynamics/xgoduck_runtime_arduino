@@ -102,6 +102,14 @@ def application_type(base, runtime):
         def _screen_resolution(self):
             return 0, 0
 
+        def mcp_camera_set_light(self, enabled):
+            if enabled is True and not self.mcp_camera_available():
+                raise ValueError('摄像头不可用。')
+            return runtime.bench.set_camera_light(enabled)
+
+        def mcp_camera_close(self):
+            return runtime.bench.camera_stop()
+
         def mcp_screen_get_info(self):
             return dict(present=False, width=0, height=0, monochrome=False)
 

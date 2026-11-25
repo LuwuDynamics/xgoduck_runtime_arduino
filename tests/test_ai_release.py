@@ -51,10 +51,11 @@ class ReleaseTest(unittest.TestCase):
         write(self.root, 'version.txt', b'0.3.5\n')
         write(self.root, 'sketch/sketch.ino', b'void setup() {}\n')
         write(self.root, 'sketch/sketch.yaml', b'default_profile: default\n')
-        for filename in ('prepare-ai-sketch.py', 'prepare-bridge.py', 'bridge_patch.py', 'verify-elf.py'):
+        for filename in ('prepare-ai-sketch.py', 'prepare-bridge.py', 'verify-elf.py'):
             write(self.root, 'tools/' + filename, filename.encode())
         write(self.root, 'provenance/toolchain.json', b'{}')
-        write(self.root, 'tools/patches/rpc.h', b'patched transport')
+        self.link_source = 'sketch/libraries/Arduino_RPClite/src/LinkTransport.cpp'
+        write(self.root, self.link_source, b'bundled link transport')
         write(self.root, 'data/voice-state/device-id', b'private state')
         self.firmware = self.root / release_firmware.FIRMWARE
 
@@ -87,14 +88,29 @@ class ReleaseTest(unittest.TestCase):
             release_firmware.ensure_firmware(self.root)
         build.assert_not_called()
 
+    def test_legacy_manifest_still_verifies_with_current_boot_guard(self):
+        (self.root / self.link_source).unlink()
+        write(self.root, 'tools/bridge_patch.py', b'legacy patcher')
+        write(self.root, 'tools/patches/rpc.h', b'legacy transport patch')
+        legacy = ('provenance/toolchain.json', 'sketch/sketch.ino', 'sketch/sketch.yaml',
+                  'tools/prepare-ai-sketch.py', 'tools/prepare-bridge.py', 'tools/verify-elf.py',
+                  'tools/bridge_patch.py', 'tools/patches/rpc.h')
+        write(self.root, release_firmware.FIRMWARE, b'legacy precompiled firmware')
+        manifest = {'firmware_sha256': release_firmware.sha256(self.firmware),
+                    'inputs': {p: release_firmware.sha256(self.root / p) for p in legacy}}
+        write(self.root, release_firmware.MANIFEST, json.dumps(manifest).encode())
+        self.assertTrue(release_firmware.firmware_is_current(self.root, self.firmware))
+
     def test_corrupt_missing_and_stale_firmware_rebuild_and_are_reused(self):
-        for problem in ('corrupt', 'missing', 'source changed'):
+        for problem in ('corrupt', 'missing', 'source changed', 'vendored transport changed'):
             with self.subTest(problem=problem):
                 self.seed_firmware()
                 if problem == 'corrupt':
                     self.firmware.write_bytes(b'corrupt')
                 elif problem == 'missing':
                     self.firmware.unlink()
+                elif problem == 'vendored transport changed':
+                    write(self.root, self.link_source, b'updated transport')
                 else:
                     write(self.root, 'sketch/sketch.ino', b'void setup() { changed(); }\n')
                 with patch.object(release_firmware, 'build_archive', side_effect=make_archive) as build:

@@ -1,10 +1,12 @@
 """Real SDK/MCP and loopback HTTP, using a synthetic image and token fixture."""
+import asyncio
 import io
 import json
 import os
 from pathlib import Path
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 import unittest
@@ -13,6 +15,7 @@ from unittest.mock import Mock, patch
 ROOT = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(ROOT / 'python'), str(ROOT / 'python/vendor/luwu_os/apps/voice_chat')]
 from PIL import Image
+from voice_application import application_type
 from voice_media import vision_type
 from iot.thing import ThingManager
 from mcp_server import McpServer
@@ -81,3 +84,72 @@ class VisionIdentityTest(unittest.TestCase):
         reply = self.call_photo(MAC, 'wrong-test-token')
         self.assertEqual(reply['error']['code'], -32603)
         self.assertIn('设备ID与token不匹配', reply['error']['message'])
+
+    def test_pending_photo_cannot_use_a_frame_from_a_reopened_camera(self):
+        started = threading.Event()
+        bench = Mock(frame_ready=threading.Condition(), frames=0, jpeg=None)
+        bench.camera.poll.return_value = None
+        bench.camera_start.side_effect = started.set
+        vision = vision_type()(MAC, 'client', bench)
+        with ThreadPoolExecutor() as pool:
+            pending = pool.submit(vision.capture)
+            self.assertTrue(started.wait(2))
+            with bench.frame_ready:
+                bench.camera = Mock()
+                bench.camera.poll.return_value = None
+                bench.frames, bench.jpeg = 1, self.jpeg
+                bench.frame_ready.notify_all()
+            with self.assertRaisesRegex(ValueError, 'stopped'):
+                pending.result(2)
+            started.clear()
+            next_photo = pool.submit(vision.capture)
+            self.assertTrue(started.wait(2))
+            with bench.frame_ready:
+                bench.frames += 1
+                bench.frame_ready.notify_all()
+            jpeg, image = next_photo.result(2)
+            self.assertEqual(jpeg, self.jpeg)
+            self.assertEqual(image.size, (2, 2))
+
+
+class CameraControlMcpTest(unittest.TestCase):
+    def setUp(self):
+        self.bench = Mock()
+        self.bench.set_camera_light.side_effect = lambda enabled: {'enabled': enabled}
+        self.bench.camera_stop.return_value = {'running': False}
+        adapter = application_type(object, SimpleNamespace(bench=self.bench))
+        self.app = object.__new__(adapter)
+        self.app.mcp_camera_available = Mock(return_value=True)
+        self.mcp = McpServer(ThingManager(), self_provider=self.app)
+
+    def call(self, name, args):
+        async def dispatch():
+            return await self.mcp.handle_message_async(
+                {'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args}},
+                asyncio.get_running_loop().run_in_executor)
+        return asyncio.run(dispatch())
+
+    def test_public_camera_controls_dispatch_to_shared_media_bench(self):
+        tools = self.mcp.handle_message({'id': 1, 'method': 'tools/list'})['result']['tools']
+        public = {tool['name']: tool['inputSchema'] for tool in tools}
+        self.assertEqual(public['self.camera.set_light']['properties']['enabled']['type'], 'boolean')
+        self.assertEqual(public['self.camera.set_light']['required'], ['enabled'])
+        self.assertEqual(public['self.camera.close']['required'], [])
+        for enabled in (True, False):
+            reply = self.call('self.camera.set_light', {'enabled': enabled})
+            self.assertEqual(json.loads(reply['result']['content'][0]['text']), {'enabled': enabled})
+            self.bench.set_camera_light.assert_called_with(enabled)
+        reply = self.call('self.camera.close', {})
+        self.assertEqual(json.loads(reply['result']['content'][0]['text']), {'running': False})
+        self.bench.camera_stop.assert_called_once_with()
+        self.bench.capture.assert_not_called()
+
+    def test_unavailable_camera_and_unconfirmed_light_are_mcp_errors(self):
+        self.app.mcp_camera_available.return_value = False
+        tools = self.mcp.handle_message({'id': 1, 'method': 'tools/list'})['result']['tools']
+        self.assertNotIn('self.camera.set_light', {t['name'] for t in tools})
+        self.assertIn('不可用', self.call('self.camera.set_light', {'enabled': True})['error']['message'])
+        self.bench.set_camera_light.assert_not_called()
+        self.app.mcp_camera_available.return_value = True
+        self.bench.set_camera_light.side_effect = ValueError('摄像头未出图，无法打开补光灯。')
+        self.assertIn('未出图', self.call('self.camera.set_light', {'enabled': True})['error']['message'])

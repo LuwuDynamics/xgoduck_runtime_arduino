@@ -18,14 +18,25 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 import wave
 from collections import deque
 import doubao
 
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+
 ROOT = Path(__file__).resolve().parent
 MAX_UPLOAD = 12 * 1024 * 1024
 CAMERA_PREVIEW_FPS = 15
+CAMERA_CAPTURE_FPS = 15
+CAMERA_PREVIEW_JPEG_QUALITY = 60
+CAMERA_PREVIEW_REENCODE_MIN_BYTES = 32 * 1024
+CAMERA_LIGHT_RUNNING_CACHE_S = 60.0
+CAMERA_LIGHT_IDLE_CACHE_S = 5.0
+MAX_CAMERA_STREAMS = 4
 
 
 def melody(path):
@@ -78,6 +89,9 @@ class Bench:
         self.frame_times = deque(maxlen=90)
         self.camera = None
         self.jpeg = None
+        self._preview_seq = 0
+        self._preview_jpeg = None
+        self._stream_semaphore = threading.Semaphore(MAX_CAMERA_STREAMS)
         self.frames = 0
         self.last_frame = 0
         self.last_view = 0
@@ -87,6 +101,7 @@ class Bench:
         self.light_device = ''
         self.light_checked = 0
         self.light_requested = None
+        self.light_epoch = 0
         self.audio = None
         self.audio_kind = ''
         self.audio_error = ''
@@ -133,44 +148,82 @@ class Bench:
         return bool(int(match[1]))
 
     def camera_light_status(self):
+        device = self.camera_path() or ''
+        now = time.monotonic()
         with self.lock:
-            device = self.camera_path() or ''
-            if device != self.light_device or time.monotonic() - self.light_checked > 5:
+            running = bool(self.camera and self.camera.poll() is None)
+            ttl = (CAMERA_LIGHT_RUNNING_CACHE_S
+                   if running and self.light.get('enabled') is not None and not self.light.get('error')
+                   else CAMERA_LIGHT_IDLE_CACHE_S)
+            if device == self.light_device and self.light_checked > 0 and now - self.light_checked <= ttl:
+                return dict(self.light)
+            epoch = getattr(self, 'light_epoch', 0)
+        # Never hold Bench.lock across v4l2-ctl subprocess / USB control I/O,
+        # otherwise periodic status polls freeze frame capture and delivery.
+        supported = bool(device) and self.camera_usb_id(device) == ('0c45', '636b')
+        light = dict(supported=supported, enabled=None, error='')
+        if supported:
+            try:
+                light['enabled'] = self.read_camera_light(device)
+            except (OSError, subprocess.SubprocessError, ValueError):
+                light['error'] = '读取补光灯状态失败，请检查摄像头连接。'
+        with self.lock:
+            if getattr(self, 'light_epoch', 0) == epoch:
                 self.light_device, self.light_checked = device, time.monotonic()
-                # This camera repurposes gain as a lamp switch. On other USB
-                # cameras it controls image gain, so never treat it as a lamp.
-                supported = bool(device) and self.camera_usb_id(device) == ('0c45', '636b')
-                self.light = dict(supported=supported, enabled=None, error='')
-                if supported:
-                    try:
-                        self.light['enabled'] = self.read_camera_light(device)
-                    except (OSError, subprocess.SubprocessError, ValueError):
-                        self.light['error'] = '读取补光灯状态失败，请检查摄像头连接。'
+                self.light = light
             return dict(self.light)
 
     def set_camera_light(self, enabled):
         if not isinstance(enabled, bool):
             raise ValueError('补光灯开关必须为 true 或 false。')
-        with self.lock:
-            self.light_checked = 0
-            status = self.camera_light_status()
-            if not status['supported']:
-                raise ValueError('当前摄像头不支持补光灯控制。')
-            self.light['enabled'] = None
-            try:
-                subprocess.run(['v4l2-ctl', '-d', self.light_device,
-                                '--set-ctrl=gain=' + str(int(enabled))],
-                               check=True, capture_output=True, text=True, timeout=3)
-                actual = self.read_camera_light(self.light_device)
-                self.light = dict(supported=True, enabled=actual, error='')
-                self.light_checked = time.monotonic()
-                if actual != enabled:
-                    raise ValueError('补光灯状态没有生效，请重试。')
-                self.light_requested = enabled
-            except (OSError, subprocess.SubprocessError, ValueError) as exc:
-                message = str(exc) if isinstance(exc, ValueError) else '设置补光灯失败，请检查摄像头连接。'
-                self.light['error'] = message
-                raise ValueError(message) from None
+        with self.frame_ready:
+            if enabled:
+                if self.closed:
+                    raise ValueError('Camera service is closing.')
+                if not self.camera_light_status()['supported']:
+                    raise ValueError('当前摄像头不支持补光灯控制。')
+                self.camera_start()
+                proc, epoch = self.camera, self.light_epoch
+
+                def ready():
+                    return (self.light_epoch != epoch or self.camera is not proc or proc.poll() is not None
+                            or (self.jpeg is not None and time.monotonic() - self.last_frame < 5))
+
+                arrived = self.frame_ready.wait_for(ready, timeout=5)
+                if self.light_epoch != epoch or self.camera is not proc:
+                    raise ValueError('开灯请求已取消。')
+                if not arrived or proc.poll() is not None:
+                    raise ValueError('摄像头未出图，无法打开补光灯。')
+                if self.camera_device != os.path.realpath(self.camera_path() or ''):
+                    raise ValueError('摄像头连接已改变，请重试。')
+            else:
+                self.light_epoch += 1
+                self.light_requested = False
+                self.last_view = time.monotonic()
+                self.frame_ready.notify_all()
+            self._write_camera_light(enabled)
+            self.light_requested = enabled
+            return dict(enabled=self.light['enabled'])
+
+    def _write_camera_light(self, enabled):
+        self.light_checked = 0
+        status = self.camera_light_status()
+        if not status['supported']:
+            raise ValueError('当前摄像头不支持补光灯控制。')
+        self.light['enabled'] = None
+        try:
+            subprocess.run(['v4l2-ctl', '-d', self.light_device,
+                            '--set-ctrl=gain=' + str(int(enabled))],
+                           check=True, capture_output=True, text=True, timeout=3)
+            actual = self.read_camera_light(self.light_device)
+            self.light = dict(supported=True, enabled=actual, error='')
+            self.light_checked = time.monotonic()
+            if actual != enabled:
+                raise ValueError('补光灯状态没有生效，请重试。')
+        except (OSError, subprocess.SubprocessError, ValueError) as exc:
+            message = str(exc) if isinstance(exc, ValueError) else '设置补光灯失败，请检查摄像头连接。'
+            self.light['error'] = message
+            raise ValueError(message) from None
 
     @staticmethod
     def audio_card():
@@ -192,6 +245,8 @@ class Bench:
 
     def camera_start(self):
         with self.lock:
+            if self.closed:
+                raise ValueError('Camera service is closing.')
             self.last_view = time.monotonic()
             if self.camera and self.camera.poll() is None:
                 return
@@ -199,6 +254,8 @@ class Bench:
             if not device:
                 raise ValueError('No USB camera found. Check the USB connection and Host mode.')
             self.jpeg = None
+            self._preview_seq = 0
+            self._preview_jpeg = None
             self.frames = 0
             self.frame_times.clear()
             self.last_frame = time.monotonic()
@@ -208,7 +265,7 @@ class Bench:
             try:
                 proc = subprocess.Popen(['v4l2-ctl', '-d', device,
                     '--set-fmt-video=width=640,height=480,pixelformat=MJPG',
-                    '--set-parm=30', '--stream-mmap=4', '--stream-to=-'],
+                    f'--set-parm={CAMERA_CAPTURE_FPS}', '--stream-mmap=2', '--stream-to=-'],
                     stdout=subprocess.PIPE, stderr=log, bufsize=0)
             except Exception:
                 log.close()
@@ -224,32 +281,47 @@ class Bench:
                 buf.extend(chunk)
                 if len(buf) > 8 * 1024 * 1024:
                     raise ValueError('Invalid camera frame format.')
+                # Parse all complete JPEGs in the buffer in one pass and publish
+                # only the newest frame so bursts never queue stale frames.
+                pos = 0
+                last_span = None
+                count = 0
+                trim_to = 0
                 while True:
-                    start = buf.find(b'\xff\xd8')
+                    start = buf.find(b'\xff\xd8', pos)
                     if start < 0:
-                        buf[:] = buf[-1:]
+                        trim_to = max(pos, len(buf) - 1)
                         break
                     end = buf.find(b'\xff\xd9', start + 2)
                     if end < 0:
-                        del buf[:start]
+                        trim_to = start
                         break
-                    jpeg = bytes(buf[start:end + 2])
-                    del buf[:end + 2]
-                    with self.lock:
-                        if self.camera is not proc:
-                            return
-                        if restore_light:
-                            restore_light = False
-                            if self.light_requested is not None:
-                                try:
-                                    self.set_camera_light(self.light_requested)
-                                except ValueError:
-                                    pass  # Lamp errors must not interrupt the preview.
-                        self.jpeg = jpeg
-                        self.frames += 1
-                        self.last_frame = time.monotonic()
-                        self.frame_times.append(self.last_frame)
-                        self.frame_ready.notify_all()
+                    last_span = (start, end + 2)
+                    pos = end + 2
+                    trim_to = pos
+                    count += 1
+                jpeg = bytes(buf[last_span[0]:last_span[1]]) if last_span is not None else None
+                if trim_to:
+                    del buf[:trim_to]
+                if jpeg is None:
+                    continue
+                with self.lock:
+                    if self.camera is not proc:
+                        return
+                    if restore_light:
+                        restore_light = False
+                        if self.light_requested is not None:
+                            try:
+                                self._write_camera_light(self.light_requested)
+                            except ValueError:
+                                pass  # Lamp errors must not interrupt the preview.
+                    self.jpeg = jpeg
+                    self.frames += count
+                    now = time.monotonic()
+                    self.last_frame = now
+                    for _ in range(count):
+                        self.frame_times.append(now)
+                    self.frame_ready.notify_all()
             proc.wait(timeout=2)
             log.seek(0)
             err = log.read().decode(errors='replace')[-500:]
@@ -262,15 +334,81 @@ class Bench:
                     self.camera_error = str(exc)
         finally:
             self.halt(proc)
+            with self.frame_ready:
+                if self.camera is proc:
+                    self.jpeg = None
+                    self._preview_seq = 0
+                    self._preview_jpeg = None
+                    self.frame_ready.notify_all()
             proc.stdout.close()
             log.close()
 
-    def camera_stop(self):
+    def preview_jpeg(self, raw, seq):
+        if not raw or Image is None or len(raw) <= CAMERA_PREVIEW_REENCODE_MIN_BYTES:
+            return raw
         with self.lock:
+            if getattr(self, '_preview_seq', 0) == seq and getattr(self, '_preview_jpeg', None) is not None:
+                return self._preview_jpeg
+        encoded = raw
+        try:
+            with Image.open(io.BytesIO(raw)) as image:
+                if image.mode != 'RGB':
+                    image = image.convert('RGB')
+                out = io.BytesIO()
+                image.save(out, format='JPEG', quality=CAMERA_PREVIEW_JPEG_QUALITY, optimize=False)
+                candidate = out.getvalue()
+                if candidate and len(candidate) < len(raw):
+                    encoded = candidate
+        except (OSError, ValueError):
+            return raw
+        with self.lock:
+            if self.frames == seq:
+                self._preview_seq = seq
+                self._preview_jpeg = encoded
+        return encoded
+
+    def next_frame(self, after=None, timeout=1.5, preview=False):
+        with self.frame_ready:
+            self.last_view = time.monotonic()
+            proc = self.camera
+            if after is not None:
+                if not proc or proc.poll() is not None:
+                    return None, 0, False
+                if not self.jpeg or self.frames == after:
+                    self.frame_ready.wait_for(
+                        lambda: (self.closed or self.camera is not proc or proc.poll() is not None
+                                 or (self.jpeg is not None and self.frames != after)),
+                        timeout=max(0.05, min(2.0, timeout)))
+                    self.last_view = time.monotonic()
+                if self.closed or self.camera is not proc or proc.poll() is not None:
+                    return None, 0, False
+                if not self.jpeg or self.frames == after:
+                    # Camera is alive (starting or no newer frame yet); return 204 instead of 503.
+                    return None, self.frames, True
+            if not self.jpeg:
+                return None, 0, False
+            jpeg, seq = self.jpeg, self.frames
+        if preview:
+            jpeg = self.preview_jpeg(jpeg, seq)
+        return jpeg, seq, True
+
+    def camera_stop(self):
+        with self.frame_ready:
+            self.light_epoch += 1
+            self.light_requested = False
             proc, self.camera = self.camera, None
             self.jpeg = None
+            self._preview_seq = 0
+            self._preview_jpeg = None
             self.frame_ready.notify_all()
-        self.halt(proc)
+            try:
+                if self.camera_light_status()['supported']:
+                    self._write_camera_light(False)
+            except ValueError as exc:
+                raise ValueError(f'摄像头已停止，关灯未确认：{exc}') from exc
+            finally:
+                self.halt(proc)
+            return dict(running=False)
 
     @staticmethod
     def mixer_volume(output):
@@ -280,18 +418,24 @@ class Bench:
         return int(values[0])
 
     def read_volume(self, card):
-        if card != self.volume_card or time.monotonic() - self.volume_checked > 5:
+        now = time.monotonic()
+        with self.lock:
+            if card == self.volume_card and self.volume_checked > 0 and now - self.volume_checked <= 5:
+                return self.volume
+        try:
+            result = subprocess.run(['amixer', '-c', card, 'sget', 'Speaker'],
+                check=True, capture_output=True, text=True, timeout=4)
+            volume = self.mixer_volume(result.stdout)
+            error = ''
+        except (subprocess.SubprocessError, OSError, ValueError):
+            volume = None
+            error = 'Unable to read the USB speaker volume.'
+        with self.lock:
             self.volume_card = card
             self.volume_checked = time.monotonic()
-            try:
-                result = subprocess.run(['amixer', '-c', card, 'sget', 'Speaker'],
-                    check=True, capture_output=True, text=True, timeout=4)
-                self.volume = self.mixer_volume(result.stdout)
-                self.volume_error = ''
-            except (subprocess.SubprocessError, OSError, ValueError):
-                self.volume = None
-                self.volume_error = 'Unable to read the USB speaker volume.'
-        return self.volume
+            self.volume = volume
+            self.volume_error = error
+            return self.volume
 
     def set_volume(self, volume):
         if isinstance(volume, bool) or not isinstance(volume, int) or not 0 <= volume <= 100:
@@ -413,16 +557,19 @@ class Bench:
             self.uploaded = info
 
     def status(self):
+        # Probe slow external tools (v4l2-ctl / amixer) before taking self.lock.
+        available_camera = bool(self.camera_path())
+        light = self.camera_light_status()
+        try:
+            card = self.audio_card()
+        except ValueError:
+            card = None
+        volume = self.read_volume(card) if card is not None else None
         with self.lock:
-            try:
-                card = self.audio_card()
-            except ValueError:
-                card = None
-            volume = self.read_volume(card) if card is not None else None
-            return dict(camera=dict(available=bool(self.camera_path()),
+            return dict(camera=dict(available=available_camera,
                 running=bool(self.camera and self.camera.poll() is None), ready=self.jpeg is not None,
                 device=self.camera_device, frames=self.frames, error=self.camera_error,
-                light=self.camera_light_status(),
+                light=light,
                 preview_fps_limit=CAMERA_PREVIEW_FPS,
                 fps=round((len(self.frame_times)-1)/(self.frame_times[-1]-self.frame_times[0]),1)
                     if len(self.frame_times)>1 and time.monotonic()-self.last_frame<2 else 0),
@@ -433,45 +580,80 @@ class Bench:
                 tts=dict(configured=bool(self.tts_config), speaker=self.tts_config.get('speaker', ''),
                          busy=self.tts_busy, error=self.tts_error, audio=self.tts_audio))
 
+    def check_camera_timeout(self):
+        with self.lock:
+            now = time.monotonic()
+            idle = not self.light_requested and now - self.last_view > 20
+            stalled = now - self.last_frame > 10
+            if self.camera and (idle or stalled):
+                if stalled:
+                    self.camera_error = 'Camera stopped after 10 seconds without a frame.'
+                try:
+                    self.camera_stop()
+                except ValueError as exc:
+                    self.camera_error = str(exc)
+
     def watchdog(self):
         while not self.closed:
             time.sleep(1)
-            with self.lock:
-                stale = self.camera and (time.monotonic() - self.last_view > 20 or time.monotonic() - self.last_frame > 10)
-                if stale and time.monotonic() - self.last_frame > 10:
-                    self.camera_error = 'Camera stopped after 10 seconds without a frame.'
-            if stale:
-                self.camera_stop()
+            self.check_camera_timeout()
 
     def close(self):
-        self.closed = True
-        self.camera_stop()
+        with self.lock:
+            self.closed = True
+            try:
+                self.camera_stop()
+            except ValueError as exc:
+                self.camera_error = str(exc)
         self.audio_stop()
         self.tmp.cleanup()
 
 
 class Handler(BaseHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
     def setup(self):
         super().setup()
         self.connection.settimeout(20)
+        try:
+            self.connection.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
 
-    def send(self, code, data, mime='application/json; charset=utf-8'):
+    def log_request(self, code='-', size='-'):
+        # Keep high-frequency frame pulls and status polls from flooding container logs.
+        if code in (200, 204) and getattr(self, 'path', '').startswith(('/api/camera/frame', '/api/status')):
+            return
+        super().log_request(code, size)
+
+    def log_error(self, format, *args):
+        if args and isinstance(args[0], TimeoutError):
+            return
+        super().log_error(format, *args)
+
+    def send(self, code, data=b'', mime='application/json; charset=utf-8', headers=None):
         if isinstance(data, dict):
             data = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(code)
-        self.send_header('Content-Type', mime)
-        self.send_header('Content-Length', str(len(data)))
+        if code != 204:
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(len(data)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Content-Security-Policy', "frame-ancestors 'none'")
+        if headers:
+            for key, value in headers.items():
+                self.send_header(key, str(value))
         self.end_headers()
-        try:
-            self.wfile.write(data)
-        except (BrokenPipeError, ConnectionResetError):
-            pass
+        if code != 204 and data:
+            try:
+                self.wfile.write(data)
+            except (BrokenPipeError, ConnectionResetError, TimeoutError):
+                pass
 
     def do_GET(self):
-        path = urlsplit(self.path).path
+        parsed = urlsplit(self.path)
+        path = parsed.path
         b = self.server.bench
         if path == '/':
             self.send(200, (ROOT / 'index.html').read_bytes(), 'text/html; charset=utf-8')
@@ -487,10 +669,27 @@ class Handler(BaseHTTPRequestHandler):
                 return
             self.audio_stream(b)
         elif path == '/api/camera/frame':
-            with b.lock:
-                b.last_view = time.monotonic()
-                jpeg = b.jpeg
-            self.send(200, jpeg, 'image/jpeg') if jpeg else self.send(503, {'error': 'Camera frame is not ready.'})
+            params = parse_qs(parsed.query)
+            preview = params.get('preview', ['0'])[0].lower() in ('1', 'true')
+            after = None
+            if 'after' in params:
+                try:
+                    after = max(0, int(params['after'][0]))
+                except ValueError:
+                    after = 0
+            wait_s = 1.5
+            if 'wait' in params:
+                try:
+                    wait_s = max(0.05, min(2.0, int(params['wait'][0]) / 1000.0))
+                except ValueError:
+                    pass
+            jpeg, seq, ready = b.next_frame(after=after, timeout=wait_s, preview=preview)
+            if not ready:
+                self.send(503, {'error': 'Camera frame is not ready.'})
+            elif jpeg is None:
+                self.send(204, b'', headers={'X-Frame-Seq': seq})
+            else:
+                self.send(200, jpeg, 'image/jpeg', headers={'X-Frame-Seq': seq})
         elif path == '/api/recording':
             with b.lock:
                 data = (b.dir / 'recording.wav').read_bytes() if b.recording else None
@@ -519,10 +718,12 @@ class Handler(BaseHTTPRequestHandler):
             if not first:
                 self.send(503, {'error': 'Duck microphone did not produce audio.'})
                 return
+            self.close_connection = True
             self.connection.settimeout(2)
             self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 8192)
             self.send_response(200)
             self.send_header('Content-Type', 'application/octet-stream')
+            self.send_header('Connection', 'close')
             self.send_header('Cache-Control', 'no-store')
             self.send_header('X-Content-Type-Options', 'nosniff')
             self.send_header('X-Accel-Buffering', 'no')
@@ -547,12 +748,19 @@ class Handler(BaseHTTPRequestHandler):
             if not proc or proc.poll() is not None:
                 self.send(503, {'error': 'Start the camera first.'})
                 return
+        semaphore = getattr(b, '_stream_semaphore', None)
+        if semaphore is not None and not semaphore.acquire(blocking=False):
+            self.send(429, {'error': 'Too many media streams. Close another Duck page.'})
+            return
+        self.close_connection = True
         self.connection.settimeout(3)
-        self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 65536)
+        self.connection.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 32768)
         self.send_response(200)
         self.send_header('Content-Type', 'multipart/x-mixed-replace; boundary=duckframe')
+        self.send_header('Connection', 'close')
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate')
         self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Accel-Buffering', 'no')
         self.end_headers()
         last = -1
         next_send = 0.0
@@ -571,12 +779,16 @@ class Handler(BaseHTTPRequestHandler):
                         last = b.frames
                         continue
                     jpeg, last = b.jpeg, b.frames
+                jpeg = b.preview_jpeg(jpeg, last)
                 next_send = time.monotonic() + 1 / CAMERA_PREVIEW_FPS
                 self.wfile.write(b'--duckframe\r\nContent-Type: image/jpeg\r\nContent-Length: '
                                  + str(len(jpeg)).encode() + b'\r\n\r\n' + jpeg + b'\r\n')
                 self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError, TimeoutError):
             pass
+        finally:
+            if semaphore is not None:
+                semaphore.release()
 
     def do_POST(self):
         # Only same-origin script requests may operate hardware; no cross-site forms.
@@ -634,6 +846,7 @@ def main():
     args = parser.parse_args()
     bench = Bench()
     server = ThreadingHTTPServer((args.host, args.port), Handler)
+    server.daemon_threads = True
     server.bench = bench
     def shutdown(*_):
         threading.Thread(target=server.shutdown, daemon=True).start()

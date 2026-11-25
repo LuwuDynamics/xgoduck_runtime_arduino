@@ -61,11 +61,15 @@ class WebControlTest(unittest.TestCase):
                                      command_age_us=10000, imu_us=0, work_us=0,
                                      calibrating=False, servo_debugging=False, targets=[0.] * 15)
         c._servo_feedback_history = collections.deque(maxlen=controller.SERVO_FEEDBACK_GRACE_FRAMES + 1)
+        c.servo_feedback_log = None
+        c._servo_alarm_seen = {}
         c.filtered = dict(imu_fusion_ready=True, imu_fusion_updated=True, grav=[0, 0, -1],
                           gyro_rad=[0.] * 3, angles_deg=[0.] * 15, vels_deg=[0.] * 15)
         c.filter = Mock(command_acc_x_bias_ms2=0.)
         c.twist, c.head, c.mouth = [0.] * 3, [0.] * 4, 0.
         c.recovery = Recovery()
+        c.stall = controller.StallRecovery()
+        c._last_policy_file = None
         c.heading = HeadingHold()
         c._imu_job, c._imu_record = {'active': False}, None
         c.action_preparation = c._action_first_target = None
@@ -75,6 +79,8 @@ class WebControlTest(unittest.TestCase):
         c._roulade_frames = collections.deque(maxlen=128)
         c._roulade_timing = {}
         c.roller_mode = False
+        c._roller_pose = c._roller_glide_result = None
+        c._roller_stride = None
         c.sitstand_phase, c.sitstand_until = 'idle', 0.
         c.kick_until, c.kick_side = 0., None
         c._imu_source_us, c._imu_source_time = None, 0.

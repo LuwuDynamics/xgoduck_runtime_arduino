@@ -1,20 +1,29 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Calibration · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=20261019">
-<link rel="stylesheet" href="calibrate.css?v=20261117-imu-photo">
+<title>Calibration · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=panel-nav">
+<link rel="stylesheet" href="calibrate.css?v=single-servo">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
+<link rel="stylesheet" href="hardware-check.css">
 <main class="page-calibrate">
-<header>
+<header class="panel-header">
   <div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1 id="title">Calibration</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/" data-label="navControl">Control</a><a href="/calibrate.html" aria-current="page" data-label="navCalibration">Calibration</a><a href="/servo.html" data-label="navServo">Servo setup</a></nav>
+    <nav class="nav">
+      <a href="/" data-zh="控制">Control</a>
+      <a href="/calibrate.html" aria-current="page" data-zh="标定">Calibration</a>
+      <a href="/servo.html" data-zh="舵机设置">Servo setup</a>
+      <a id="cockpit-link" href="/mobile.html" target="_blank" rel="noopener noreferrer" data-zh="语音交互驾驶舱">Cockpit</a>
+      <a href="https://github.com/LuwuDynamics/xgoduck_runtime_arduino" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck" target="_blank" rel="noopener noreferrer">Wiki</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer" data-zh="常见问题">FAQ</a>
+    </nav>
     <button id="language" type="button">中文</button>
-    <button class="stop" id="exit">Exit</button>
+    <button class="stop" id="exit" title="Release torque and exit calibration" data-zh-title="卸力并退出标定" data-zh="舵机卸力">Torque off</button>
   </div>
 </header>
 <div class="cal-overview">
   <h2 data-label="unifiedTitle">Unified calibration</h2>
-  <p data-label="unifiedSequence">Servo centers → IMU → Default pose check</p>
+  <p data-label="unifiedSequence">Servo centers → Neck (ID 30) → IMU → Default pose check</p>
 </div>
 <p id="message" role="status">Entering calibration and unloading all servos…</p>
 <section class="cal-unified-panel" aria-labelledby="main-joints-title">
@@ -31,15 +40,37 @@
     <p id="unified-status" role="status" hidden></p>
   </div>
 </section>
-<section class="cal-unified-panel cal-imu" id="imu-panel" aria-labelledby="imu-title">
+<section class="cal-unified-panel cal-reference-panel" id="neck-panel" aria-labelledby="neck-title">
   <div>
     <div class="cal-panel-heading">
       <span class="cal-step" aria-hidden="true">02</span>
+      <h2 id="neck-title" data-label="neckTitle">Calibrate the neck servo (ID 30) separately</h2>
+    </div>
+    <p data-label="neckInstruction">With the servos unloaded, position the neck parallel to the torso as shown. Click Calibrate ID 30, then unload it before calibrating the IMU.</p>
+  </div>
+  <figure class="cal-side-reference cal-placement-reference">
+    <button type="button" class="cal-enlarge" data-picture="cal-30-pose.svg">
+      <img id="neck-photo" src="cal-30-pose.svg" width="340" height="330" loading="lazy" alt="ID 30 neck calibration pose">
+    </button>
+  </figure>
+  <div>
+    <div class="cal-action-line">
+      <button id="neck-start" class="cal-primary" type="button" data-label="neckStart" disabled>Calibrate ID 30</button>
+      <button id="neck-unload" type="button" data-action="unload" data-label="unloadAll" hidden>Unload all</button>
+      <span id="neck-encoder"></span>
+    </div>
+    <p id="neck-status" role="status" hidden></p>
+  </div>
+</section>
+<section class="cal-unified-panel cal-reference-panel" id="imu-panel" aria-labelledby="imu-title">
+  <div>
+    <div class="cal-panel-heading">
+      <span class="cal-step" aria-hidden="true">03</span>
       <h2 id="imu-title" data-label="imuTitle">IMU calibration</h2>
     </div>
-    <p data-label="imuInstructions">Unload the servos and support Duck with the board upright, the battery connector pointing up and the board’s bottom edge against a level table. Start calibration and hold still for about 1.5 seconds.</p>
+    <p data-label="imuInstructions">Unload the servos and support Duck with the board upright, the battery connector pointing up and the board’s bottom edge against a level table. Keep Duck still until calibration finishes.</p>
   </div>
-  <figure class="cal-side-reference cal-imu-reference">
+  <figure class="cal-side-reference cal-placement-reference">
     <button id="imu-photo-button" type="button" class="cal-enlarge" data-picture="imu-calibration-pose.png" aria-label="Enlarge picture · IMU placement reference">
       <img id="imu-photo" src="imu-calibration-pose.png" width="910" height="1155" loading="lazy" alt="Duck supported with its board upright and the bottom edge against a level table">
     </button>
@@ -57,17 +88,19 @@
 <section id="finish" class="cal-finish" aria-labelledby="finish-title">
   <div>
     <div class="cal-panel-heading">
-      <span class="cal-step" aria-hidden="true">03</span>
+      <span class="cal-step" aria-hidden="true">04</span>
       <h2 id="finish-title" data-label="finishTitle">Check the default pose</h2>
     </div>
     <p data-label="finishText">When calibration is complete, support Duck on a level surface, click Default pose and compare its stance with the photo.</p>
     <div class="buttons">
-      <button id="pose-start" class="cal-primary" type="button" data-label="poseStart" disabled>Default pose</button>
+      <button id="pose-start" data-hardware-arm class="cal-primary" type="button" data-label="poseStart" disabled>Default pose</button>
       <button type="button" data-action="unload" data-label="unloadAll">Unload all</button>
       <button type="button" data-action="exit" data-label="exit">Exit</button>
     </div>
     <p id="pose-status" role="status" hidden></p>
-    <p class="cal-finish-recheck" data-label="finishMismatch">If the pose differs, support Duck and click Unload all before rechecking the servo centers.</p>
+    <p class="cal-finish-recheck"><span data-label="finishMismatch">If the pose differs from the photo, support Duck and click Unload all.</span> <a href="#main-joints-title" data-label="finishRecheckCenters">Recheck the servo centers</a></p>
+    <p class="cal-finish-recheck"><span data-label="finishCheckInstallation">If the centers are correct, a servo may be installed at the wrong joint.</span> <a href="/servo.html#servo-workspace" data-label="finishOpenServoSetup">Open Servo setup</a><span data-label="finishJogCheck">, select an ID on the 3D model, and click Start test. Move the slider slightly and check that the moving joint matches the highlighted one. When done, click Stop and unload.</span></p>
+    <p class="cal-finish-recheck"><span data-label="finishSingle">If the servos are installed correctly and the pose is still off, use the guide below to recalibrate the affected joint.</span> <button id="single-toggle" type="button" aria-expanded="false" aria-controls="single-panel" data-label="singleTitle">Single-servo calibration</button></p>
   </div>
   <figure class="cal-side-reference cal-finish-reference">
     <button type="button" class="cal-enlarge" data-picture="cal-default-pose.jpg">
@@ -76,11 +109,31 @@
     <figcaption data-label="posePhotoCaption">Default pose · roller feet on the left, standard feet on the right</figcaption>
   </figure>
 </section>
+<section id="single-panel" class="cal-unified-panel" aria-labelledby="single-title" hidden>
+  <h2 id="single-title" tabindex="-1" data-label="singleTitle">Single-servo calibration</h2>
+  <p data-label="singleIntro">Support Duck. Find the selected servo in the photo and position its unloaded joint by hand to match the diagram. After setting its center, you can move on to the next unloaded joint.</p>
+  <p id="single-loading" role="status"></p>
+  <div id="single-guide" hidden>
+    <label for="single-id" data-label="singleSelect">Servo</label>
+    <select id="single-id"></select>
+    <div id="single-pictures" class="cal-reference-photos"></div>
+    <p id="single-pose"></p>
+    <p class="hint" data-label="singleLegend">Orange marks the joint. Align it with the green dashed line. Red shows a misaligned position.</p>
+    <div class="cal-action-line">
+      <button id="single-start" class="cal-primary" type="button" disabled>Set center</button>
+      <button id="single-unload" type="button" data-action="unload" data-label="unloadAll">Unload all</button>
+      <span id="single-encoder"></span>
+    </div>
+    <p id="single-status" role="status" hidden></p>
+  </div>
+</section>
 </main>
 <dialog id="picture-dialog" class="cal-picture-dialog" aria-label="Calibration picture">
   <button id="picture-close" type="button">Close picture</button>
   <img id="picture-image" alt="">
 </dialog>
 <noscript><p>Enable JavaScript to use calibration. / 请启用 JavaScript 后再进行标定。</p></noscript>
-<script src="calibrate.js?v=20261117-servo-retry"></script>
+<script src="panel-language.js?v=panel-nav"></script>
+<script src="calibrate.js?v=sequential-centers"></script>
+<script src="hardware-check.js"></script>
 </html>

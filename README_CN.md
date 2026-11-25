@@ -40,7 +40,7 @@
 
 完成 UNO Q 的初始设置，通过 Wi-Fi SSH 登录官方 Debian 13 ARM64 系统。参考首装环境预留至少 **2.5 GiB** 可用空间。下载 ZIP 和校验文件，校验后通过 SCP 传到 UNO Q，在板上解压到新目录。若已接舵机，先扶稳小鸭并确认卸力。停止正在运行的 App，以 `arduino` 用户按包内 `INSTALL.txt` 执行 `bash install.sh`。脚本会配置 2 Mbps Bridge、设置开机自启并启动 App。完成后直接做第 4 步的验收。参考系统上，包传到板子后即可断开公网完成安装。账号绑定和云端语音需要互联网。
 
-全量包是应用及依赖安装包，不会重刷系统。解压目录与 App 安装目录不同：0.3.6 固定安装到 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-6-unoq`。该目录已存在时，只有其中的 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全相同，安装器才会复用；单独安装过同版本 `.ard` 或同版本重新打包后，也可能不满足这一条件。保留已核实可用的安装，或按明确的重装要求处理旧目录及数据后再安装。不要手工伪造收据或直接覆盖目录。[全量包说明](docs/full-install.txt)
+全量包是应用及依赖安装包，不会重刷系统。解压目录与 App 安装目录不同：0.3.7 固定安装到 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-7-unoq`。该目录已存在时，只有其中的 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全相同，安装器才会复用；单独安装过同版本 `.ard` 或同版本重新打包后，也可能不满足这一条件。保留已核实可用的安装，或按明确的重装要求处理旧目录及数据后再安装。不要手工伪造收据或直接覆盖目录。[全量包说明](docs/full-install.txt)
 
 需要迁回旧配置时，先按更新流程保存同一只鸭子的持久数据。全量安装器结束后，停止新 App 和 `xgoduck-ai-hardware.service`，迁回配置并保留权限及归属，然后启动硬件服务和新 App，再进行验收。[数据迁移和回退](docs/deployment.md#更新与回退)
 
@@ -78,7 +78,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
      arduino-app-cli app start "$PWD"
    ```
 
-   安装脚本配置硬件支持、驾驶舱和开机自启。第二条命令设置共享 Router 的串口速率为 **2 Mbps**。启动会上传配套的 STM32 固件，源码 ZIP 还需要编译，`.ard` 使用随包固件。已完成配置时也可在 App Lab 点击 **Run**。
+   安装脚本配置硬件支持、驾驶舱和开机自启。第二条命令配置与该包固件配套的共享 Router。当前开发版从 115200 波特率握手，使用可靠协议协商至 **2 Mbaud**。启动会上传配套的 STM32 固件，源码 ZIP 还需要编译，`.ard` 使用随包固件。已完成配置时也可在 App Lab 点击 **Run**。
 
 **验收**时在浏览器打开 `http://<板子IP>/` 和 `http://<板子IP>:9527/`，核对 App 版本和默认启动项。依赖准备及首次启动完成后，保持舵机卸力，执行一次整机重启；重新连接 Wi-Fi SSH，等待网页/API 就绪，确认默认 App 自动运行且版本正确。已接线的板子检查舵机与 IMU 反馈；已有标定和配置应保留。未接线、未标定时记录待完成项。
 
@@ -166,7 +166,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    核对 sketch/sketch.yaml、provenance/toolchain.json 和 python/requirements.txt。以 arduino 用户执行
    arduino-cli core list。若安装的 arduino:zephyr 缺失或版本不符，按 sketch/sketch.yaml 安装并复查。
    0.3.6 对应 arduino-cli core install arduino:zephyr@1.0.0，
-   使用 Arduino_RouterBridge 0.4.3、Arduino_RPClite 0.3.1 和 Linux ARM64
+   按该包的 sketch.yaml 使用配套的 RouterBridge 和 RPClite。若列出本地目录，使用 Arduino CLI 1.3.0 或更高版本读取随包库。使用 Linux ARM64
    arm-zephyr-eabi 1.0.1。上传时也要用对应 core。工具链下载失败时，用电脑从 provenance/toolchain.json
    的官方 URL 下载，校验大小和 SHA-256，SCP 到板上，再在 App 目录执行
    python3 tools/prepare-ai-sketch.py --toolchain-archive <板上的官方压缩包路径>。
@@ -183,8 +183,10 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    或 python3 tools/configure-ai.py --region global。
    对 .ard 和源码 ZIP，在实际 App 目录迁移数据后，保持联网，依次执行 bash tools/install-ai-support.sh、
    sudo bash tools/router-2m.sh、arduino-app-cli app start "$PWD"。每条成功后再继续。启动会上传 STM32 程序。
-   参考全量包的环境为 Router 0.11.0、App CLI 0.14.1、Arduino CLI 1.5.1、ARM64 Python 基础镜像
-   0.13.1。核对包内要求，复用兼容的现有组件。确认 Router ExecStart 使用 2000000，默认 App 指向新目录。
+   参考全量包预装系统 Router 0.11.0、App CLI 0.14.1、Arduino CLI 1.5.1 和 ARM64 Python 基础镜像
+   0.13.1。可靠协议包的安装脚本另外启动包内指定版本的 Router。核对包内要求，复用兼容的现有组件。确认默认 App 指向新目录。对于可靠协议包，核对 Router 的 --serial-protocol auto 和
+   --serial-max-baudrate 2000000；App 启动后用 sudo stty -F /dev/ttyHS1 speed 确认实际为 2000000。
+   对于旧版固定 2M 包，使用旧包自己的 Router 脚本。
 
 8. 验收时保持舵机卸力。检查驾驶舱、9527 控制页和 /api/version，确认实际运行版本。
    首次启动及依赖准备完成后，执行 sudo systemctl reboot。重新连接 Wi-Fi SSH，等待网页/API 就绪，
@@ -201,7 +203,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    若语音日志提示 libopus.so.0 权限错误，检查新 App 的 native 库和目录对容器运行用户是否可读及可遍历。
    启动失败先查 App、Router 和硬件服务日志。若需回退，停止新 App，按 docs/deployment.md 从旧目录
    恢复硬件服务和默认项，再启动旧 App，保留备份。汇报所用安装包、校验结果、版本、实际目录和验收结果。
-   安装成功后提醒我按 README 完成第 5～8 步。依次设置舵机编号、组装、统一标定 15 个舵机（含 30 号）、
+   安装成功后提醒我按 README 完成第 5～8 步。依次设置舵机编号、组装、统一标定 15 个舵机、单独标定 30 号颈部舵机、
    标定 IMU，再检查默认姿势，最后绑定账号并选择智能体。已完成的步骤跳过，告诉我下一项。
 ```
 
@@ -231,9 +233,10 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 打开 `http://<板子IP>:9527/`，确认 **15/15** 个舵机在线。扶稳小鸭后点顶部 **标定**，等页面确认舵机已卸力。
 
-1. **统一标定舵机。** 按四张图摆好小鸭，避开线束。点 **标定 15 个舵机**，等页面确认中位已保存。30 号颈部舵机一并标定。
-2. **标定 IMU。** 保持舵机卸力，让 UNO Q 竖直、电池接口朝上、板子下边缘贴住水平桌面。点 **标定 IMU**，静止约 **1.5 秒**，等页面显示已保存。[IMU 标定细节](docs/imu-calibration.md)
-3. **检查默认姿势。** 把小鸭放到平坦处扶稳，点标定页底部的 **默认姿势**。等舵机上力，再对照实拍检查头颈、腿和脚的位置。如果姿势不对，先扶稳并点 **全部卸力**，再复查摆位和舵机标定。
+1. **统一标定舵机。** 按四张图摆好小鸭，避开线束。点 **标定 15 个舵机**，等页面确认中位已保存。
+2. **单独标定颈部。** 让脖子与躯干平行，点 **标定 30 号舵机**。看到中位已保存后，点 **全部卸力**。
+3. **标定 IMU。** 保持舵机卸力，让 UNO Q 竖直、电池接口朝上、板子下边缘贴住水平桌面。点一次 **标定 IMU**，保持静止直到页面显示已保存。若读数有波动，页面会显示自动重试的进度。[IMU 标定细节](docs/imu-calibration.md)
+4. **检查默认姿势。** 把小鸭放到平坦处扶稳，点标定页底部的 **默认姿势**。等舵机上力，再对照实拍检查头颈、腿和脚的位置。如果姿势不对，先扶稳并点 **全部卸力**，再复查摆位和舵机标定。
 
 <img src="docs/images/default-pose-reference.jpg" alt="小鸭默认站姿实拍：左为轮脚，右为普通脚掌" width="900">
 
@@ -284,7 +287,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 | ① | 联网成功 | [试听第一段鸭叫](assets/startup-network.wav?raw=true) |
 | ② | 语音服务已连接，聊天就绪 | [试听第二段鸭叫](assets/startup-voice.wav?raw=true) |
 
-如果还未绑定，联网鸭叫之后会播报三遍「请在浏览器打开［当前 IP 地址］，完成 AI 绑定」。开机连上 Wi-Fi 后，UNO Q 的板载点阵会显示 IP 的最后一段约 1 分钟，例如 `192.168.31.20` 显示 `20`。
+如果还未绑定，联网鸭叫之后会播报三遍「请在浏览器打开［当前 IP 地址］，完成 AI 绑定」。开机连上 Wi-Fi 后，UNO Q 的板载点阵将完整 IP（如 `192.168.31.8`）连同分隔点一起向右循环滚动，末位数字最先从左侧进入，30 秒后熄灭。
 
 听到语音服务就绪的鸭叫后，说 **AI 语音交互绑定 → 开机自启与唤醒** 中显示的唤醒词。听到唤醒鸭叫后就可以说话。启动音示例可在当前手机或电脑上试听，实际启动音由小鸭扬声器播放。
 
@@ -297,14 +300,14 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 - 国内版说「小鸭小鸭」，国际版说「Hey Ducky」唤醒聊天。在平台中管理智能体，在驾驶舱「设置 → 扬声器」调整音量。
 - **音视频：**驾驶舱可开启/关闭摄像头、控制补光灯、保存照片和实时监听麦克风。
 - 开机先开启 USB Host，最多等待 5 秒识别 USB 摄像头或音频设备。识别到就保留 Host，否则切回 Device，方便用 USB 连接电脑。开机后才插入外设时，先让小鸭停止运动，再通过 Wi-Fi 打开驾驶舱，用顶部的 **USB Host** 开关手动开启。切换会中断当前 USB 连接。
-- ToF 正常测距时显示 8×8 实时距离，默认在 15 cm 内减速、10 cm 停止。未接 ToF 或 ToF 已离线时，可以重新发出前进指令，此时没有测距避障。传感器仍显示测距中但读数过期或无效时，暂停前进。[避障说明](docs/forward-avoidance.md)
+- ToF 正常测距时显示 8×8 实时距离，面板的「前向避障」默认关闭。开启后，普通速度前进时在 15 cm 内减速，10 cm 及以内停止前进。未接 ToF、传感器离线或没有有效的前方读数时，仍可前进。[避障说明](docs/forward-avoidance.md)
 
 ## 常见问题
 
 ### 1. 小鸭走不稳或发抖
 
-1. 先停止移动，扶稳小鸭并卸力。在舵机设置的单舵机安装检查中核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
-2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)统一标定全部 15 个舵机，再标定 IMU、检查默认姿势。
+1. 先停止移动，扶稳小鸭并卸力。在舵机设置的「单舵机运动控制」中核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
+2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)统一标定全部 15 个舵机，单独标定 30 号颈部舵机，再标定 IMU、检查默认姿势。
 3. 打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对保存值和运行值。断电重启后，舵机会加载保存值。
 
 本项目基于 Pollen Robotics 的 [Microduck](https://github.com/pollen-robotics/microduck)。[硬件](https://github.com/LuwuDynamics/xgoduck_hardware) · [训练代码](https://github.com/LuwuDynamics/xgoduck_rl)

@@ -115,7 +115,6 @@ class ImuCalibrationTest(unittest.TestCase):
             file.write_text(legacy)
             app = AppController(Mock(), data_dir=directory)
             app.set_mode('calibrate')
-            rows = iter(samples())
             self.supply_feedback(app, samples()[0])
             with patch('controller.threading.Thread') as worker:
                 self.assertTrue(app.start_imu_calibration()['active'])
@@ -123,12 +122,8 @@ class ImuCalibrationTest(unittest.TestCase):
                     app.cal_center(0)
             job = worker.call_args.kwargs
 
-            def next_sample(_interval):
-                self.supply_feedback(app, next(rows))
-                return False
-
-            with patch.object(app.stop_event, 'wait', side_effect=next_sample):
-                job['target'](*job['args'])
+            steady = samples()[0][1:]
+            self.run_worker(app, job, lambda retry, frame: steady)
             self.assertEqual(app.status()['imu_calibration']['state'], 'saved')
             self.assertEqual(app.filter.correct_imu([1., 2., -9.], [.8, -.5, 1.2])[0],
                              [0., 0., -9.8])
@@ -139,6 +134,118 @@ class ImuCalibrationTest(unittest.TestCase):
                         if call.args[0] == 'duck_command']
             self.assertTrue(commands)
             self.assertEqual(set(commands), {DISARM})
+
+    def test_single_spike_discards_the_whole_window_and_saves_only_the_fresh_one(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'imu-calibration.json'
+            previous = estimate(samples())
+            save(file, previous)
+            app = AppController(Mock(), data_dir=directory)
+            self.supply_feedback(app, (0., [0., 0., -30.], [0.]*3))  # Click-time transient.
+            job = self.start_job(app)
+
+            def reading(retry, frame):
+                if retry == 0:
+                    return [2., 0., -9.8], [5. if frame == 70 else 0., 0., 0.]
+                if frame == 1:
+                    self.assertEqual(load(file), previous)
+                    self.assertEqual(app._imu_record, previous)
+                return [-1., 0., -9.8], [1., 2., 3.]
+
+            with patch('controller.estimate_imu', wraps=estimate) as estimator, \
+                    patch('controller.save_imu', wraps=save) as persist, patch('builtins.print') as log:
+                rounds = self.run_worker(app, job, reading)
+            self.assertEqual([s['retry'] for s in rounds], [0, 1])
+            self.assertTrue(all(s['phase'] == 'settling' and s['samples'] == 0 and s['progress'] == 0
+                                for s in rounds))
+            first, second = [call.args[0] for call in estimator.call_args_list]
+            self.assertGreater(first[0][0], .5)
+            self.assertGreater(second[0][0] - first[-1][0], .5)
+            for rows in (first, second):
+                self.assertGreaterEqual(rows[-1][0] - rows[0][0], 1.5)
+                self.assertEqual(len(set(row[0] for row in rows)), len(rows))
+            for metric in ('acc_std_ms2=', 'gyro_std_dps=', 'acc_peak_ms2=', 'gyro_peak_dps=', 'exceeded=gyro_peak_dps'):
+                self.assertIn(metric, log.call_args.args[0])
+            persist.assert_called_once()
+            self.assertEqual(app.status()['imu_calibration']['state'], 'saved')
+            self.assertEqual(load(file)['acc_offset_ms2'], [1., 0., 0.])
+            self.assertEqual(load(file)['gyro_zero_dps'], [1., 2., 3.])
+            self.assertEqual(load(file.with_suffix('.previous.json')), previous)
+
+    def test_tenth_retry_can_pass_and_exhaustion_keeps_previous_calibration(self):
+        for last_passes in (True, False):
+            with self.subTest(last_passes=last_passes), tempfile.TemporaryDirectory() as directory:
+                file = Path(directory) / 'imu-calibration.json'
+                previous = estimate(samples())
+                save(file, previous)
+                before = file.read_bytes()
+                app = AppController(Mock(), data_dir=directory)
+                self.supply_feedback(app, samples()[0])
+                job = self.start_job(app)
+
+                def reading(retry, frame):
+                    spike = frame == 60 and (retry < 10 or not last_passes)
+                    return [0., 0., -9.8], [6. if spike else 0., 0., 0.]
+
+                with patch('controller.save_imu', wraps=save) as persist, patch('builtins.print'):
+                    rounds = self.run_worker(app, job, reading)
+                self.assertEqual([s['retry'] for s in rounds], list(range(11)))
+                status = app.status()['imu_calibration']
+                self.assertFalse(status['active'])
+                self.assertEqual(status['retry'], status['max_retries'])
+                if last_passes:
+                    persist.assert_called_once()
+                    self.assertEqual(status['state'], 'saved')
+                else:
+                    persist.assert_not_called()
+                    self.assertEqual(status['state'], 'error')
+                    self.assertIn('after 10 automatic retries', status['message'])
+                    self.assertEqual(file.read_bytes(), before)
+                    self.assertEqual(app._imu_record, previous)
+
+    def test_pose_sensor_and_feedback_failures_do_not_retry(self):
+        cases = [
+            ('upright', lambda n: ([9.8, 0., 0.], [0.]*3)),
+            ('zero offset is too large', lambda n: ([0., 0., -9.8], [25., 0., 0.])),
+            ('IMU contains nonfinite', lambda n: ([0., 0., -9.8], [float('nan'), 0., 0.])),
+            ('interrupted', lambda n: None if 40 <= n <= 51 else ([0., 0., -9.8], [0.]*3)),
+            ('MCU feedback is stale', lambda n: None),
+        ]
+        for reason, reading in cases:
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as directory:
+                app = AppController(Mock(), data_dir=directory)
+                self.supply_feedback(app, samples()[0])
+                job = self.start_job(app)
+                rounds = self.run_worker(app, job, lambda retry, frame: reading(frame))
+                self.assertEqual(len(rounds), 1)
+                status = app.status()['imu_calibration']
+                self.assertEqual(status['state'], 'error')
+                self.assertIn(reason, status['message'])
+                self.assertFalse((Path(directory) / 'imu-calibration.json').exists())
+
+    def test_exiting_during_a_retry_does_not_overwrite_a_new_job(self):
+        with tempfile.TemporaryDirectory() as directory:
+            file = Path(directory) / 'imu-calibration.json'
+            save(file, estimate(samples()))
+            before = file.read_bytes()
+            app = AppController(Mock(), data_dir=directory)
+            app.set_mode('calibrate')
+            self.supply_feedback(app, samples()[0])
+            job = self.start_job(app)
+
+            def reading(retry, frame):
+                if retry == 1 and frame == 2:
+                    app.set_mode('shadow')
+                    self.assertEqual(app.status()['imu_calibration']['state'], 'cancelled')
+                    self.start_job(app)
+                return [0., 0., -9.8], [6. if frame == 60 else 0., 0., 0.]
+
+            with patch('builtins.print'):
+                self.run_worker(app, job, reading)
+            status = app.status()['imu_calibration']
+            self.assertTrue(status['active'])
+            self.assertEqual((status['retry'], status['samples']), (0, 0))
+            self.assertEqual(file.read_bytes(), before)
 
     def test_exiting_calibration_prevents_a_pending_sample_from_saving(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -155,6 +262,41 @@ class ImuCalibrationTest(unittest.TestCase):
             job['target'](*job['args'])
             self.assertEqual(app.status()['imu_calibration']['state'], 'cancelled')
             self.assertEqual(file.read_bytes(), before)
+
+    def start_job(self, app):
+        with patch('controller.threading.Thread') as worker:
+            first = app.start_imu_calibration()
+            self.assertEqual(app.start_imu_calibration(), first)
+            worker.assert_called_once()
+        return worker.call_args.kwargs
+
+    def run_worker(self, app, job, reading):
+        # Advance the host clock on each wait and supply distinct MCU readings at 100 Hz.
+        start = time.monotonic()
+        elapsed_ms = frame = 0
+        rounds = []
+
+        def advance(delay):
+            nonlocal elapsed_ms, frame
+            elapsed_ms += round(delay * 1000)
+            if delay == .5:
+                rounds.append(app._imu_status_locked())
+                self.assertLessEqual(len(rounds), 11)
+                frame = 0
+                data = ([0., 0., -30.], [100., 0., 0.])  # Settling samples must be discarded.
+            elif elapsed_ms % 10 == 0:
+                frame += 1
+                data = reading(len(rounds) - 1, frame)
+            else:
+                return False
+            if data is not None:
+                self.supply_feedback(app, (elapsed_ms / 1000, *data))
+            return False
+
+        with patch('controller.time.monotonic', side_effect=lambda: start + elapsed_ms / 1000), \
+                patch.object(app.stop_event, 'wait', side_effect=advance):
+            job['target'](*job['args'])
+        return rounds
 
     @staticmethod
     def supply_feedback(app, row):

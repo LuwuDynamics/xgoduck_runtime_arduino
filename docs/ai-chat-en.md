@@ -111,19 +111,19 @@ The images are the existing Luwu-OS AI Chat Pro assets; [source and hashes](../p
    bash tools/install-ai-support.sh
    ```
 
-   The installer first resolves the pinned MCU build dependencies as `arduino`, patches the Bridge cache, compiles and verifies the ELF without uploading. It then uses sudo for system packages and the host helper. It creates `data/native/`, installs root-owned helper code in `/usr/local/lib/xgoduck-ai-support/`, enables `xgoduck-ai-hardware.service`, and sets this directory as the official default App. It runs and enables `xgoduck-ai-usb-startup.service` ahead of App CLI on boot. It disables the old user media service to avoid audio/port conflicts, retaining existing Doubao settings. **Stop all Apps and install over Wi-Fi/SSH.** USB detection may restart the shared router. The later Run step starts the App and handles MCU upload. Rerun the installer after changing App paths or updating helper code.
+   The installer first resolves the pinned MCU build dependencies as `arduino`, checks the bundled Bridge libraries, then compiles and verifies the ELF before upload. It then uses sudo for system packages and the host helper. It creates `data/native/`, installs root-owned helper code in `/usr/local/lib/xgoduck-ai-support/`, enables `xgoduck-ai-hardware.service`, and sets this directory as the official default App. It runs and enables `xgoduck-ai-usb-startup.service` ahead of App CLI on boot. It disables the old user media service to avoid audio/port conflicts, retaining existing Doubao settings. **Stop all Apps and install over Wi-Fi/SSH.** USB detection may restart the shared router. The later Run step starts the App and handles MCU upload. Rerun the installer after changing App paths or updating helper code.
 
    The installer disables the previous gamepad and USB role services, including `xgoduck-ai-usb-host.service`. Their unit files and the old App are retained for rollback.
 
    Host setup also installs and enables the nginx mobile entrance. Open `http://<board-ip>/` directly; no explicit port or page suffix is needed. On an existing installation, run `sudo bash tools/install-mobile-web.sh` independently while the App continues running.
-6. Set the original 2 Mbps Bridge rate and start the App:
+6. Install the matching reliable Router and start the App. It negotiates from 115200 baud to 2 Mbaud.
 
    ```sh
    sudo bash tools/router-2m.sh
    arduino-app-cli app start "$PWD"
    ```
 
-   You can also click Run over App Lab Network after preparing Bridge. The installer already ran `tools/prepare-ai-sketch.py`, which resolves libraries, patches Bridge/RPClite and performs a compile-only ELF check. There is no need to Run, fail, Stop and repair the cache manually. To rebuild only the MCU cache, run `python3 tools/prepare-ai-sketch.py` as `arduino`. Keep the App stopped and torque off during setup. Router speed is a system-wide setting; see the [technical reference](technical_reference.md#running) before using an App with another Bridge baud rate.
+   You can also click Run over App Lab Network after preparing Bridge. The installer already ran `tools/prepare-ai-sketch.py`, which resolves the dependencies in `sketch/sketch.yaml`, uses the bundled Bridge and RPClite sources, compiles the sketch and checks its ELF. To rebuild only the MCU cache, run `python3 tools/prepare-ai-sketch.py` as `arduino`. Keep the App stopped and torque off during setup. Router speed is a system-wide setting; see the [technical reference](technical_reference.md#running) before using an App with another Bridge baud rate.
 
 Keep the board online until both processes are running. **Run starts the App and uploads the STM32 sketch.** The source ZIP builds the sketch as part of this path. The single-servo installation check in 0.3.5 requires the updated sketch. Release servo torque before running the update. The default App starts automatically on subsequent boots. Verify a normal reboot, then a cold boot without Wi-Fi.
 
@@ -261,7 +261,7 @@ sudo rm -f /etc/systemd/system/arduino-app-cli.service.d/xgoduck-ai.conf
 sudo systemctl daemon-reload
 ```
 
-Re-enable only the services used by the old installation: `sudo systemctl enable --now duck-gamepad.service` and/or `systemctl --user enable --now duck-device-test.service`. If it previously used the USB Device boot default, restore `sudo systemctl enable duck-usb-device.service` and reboot once. Start the old App with App Lab or `arduino-app-cli app start "$duck_previous_app"`. If no default App was previously set, use `arduino-app-cli properties set default none` instead. Both Apps and their data remain intact. The old Duck also uses 2 Mbps Bridge; change router speed only when switching to an App that requires another baud rate.
+Re-enable only the services used by the old installation: `sudo systemctl enable --now duck-gamepad.service` and/or `systemctl --user enable --now duck-device-test.service`. If it previously used the USB Device boot default, restore `sudo systemctl enable duck-usb-device.service` and reboot once. Start the old App with App Lab or `arduino-app-cli app start "$duck_previous_app"`. If no default App was previously set, use `arduino-app-cli properties set default none` instead. Both Apps and their data remain intact. When returning to a fixed-baud Duck, run `sudo bash tools/router-2m.sh` from its directory before starting the old App.
 
 To remove the added port-80 entrance, delete `/etc/nginx/sites-enabled/xgoduck-mobile`, then run `sudo nginx -t && sudo systemctl reload nginx`. Previous site configuration is backed up under `/var/backups/xgoduck-mobile-web/`. Disable nginx itself only if it is not used by another site.
 

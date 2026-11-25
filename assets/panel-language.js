@@ -1,5 +1,9 @@
 /* Switch the current panel without reloading or touching device state. */
 (() => {
+  const cockpitURL = new URL('/', location.href);
+  cockpitURL.port = '';
+  document.getElementById('cockpit-link').setAttribute('href', cockpitURL.href);
+
   const systemChinese = () => /^zh(?:[-_]|$)/i.test(navigator.languages?.[0] || navigator.language || 'en');
   let chinese = systemChinese();
   const t = (en, zh) => chinese ? zh : en;
