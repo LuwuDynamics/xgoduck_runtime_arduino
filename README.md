@@ -273,95 +273,20 @@ Project repository: https://github.com/LuwuDynamics/xgoduck_runtime_arduino
 
 ## 5. Configure and number the servos
 
-[Follow the official guide to configure and number the servos](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+Connect one servo at a time. Set its ID for the intended joint, verify it and label the servo. [Servo setup guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-05?model=duck)
 
 ## 6. Assemble XGO Duck
 
-[Follow the official illustrated assembly guide](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
-
-[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
-
-<img src="docs/images/wiring/overview-en.png" alt="XGO Duck physical wiring diagram for the UNO Q, carrier, camera, ToF module, speakers and fill light" width="960">
+Match each servo ID and orientation to the assembly diagrams, then assemble the body and connect the audio and video hardware. [Assembly and wiring guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-06?model=duck)
 
 ## 7. IMU and servo calibration
 
-Open `http://<board-ip>:9527/` and check that all **15/15** servos are online. Support Duck before opening **Calibration**. Wait for the page to confirm that the servos are unloaded.
-
-1. **Calibrate all 15 servos.** Position Duck as shown in the four photos, keeping cables clear of the joints. Click **Calibrate all 15 servos** and wait for confirmation.
-2. **Calibrate the neck separately.** Position the neck parallel to the torso and click **Calibrate ID 30**. When the center is saved, click **Unload all**.
-3. **Calibrate the IMU.** With the servos unloaded, hold the UNO Q upright with its battery connector pointing up and its bottom edge against a level table. Click **Calibrate IMU** once and hold still until the page confirms the save. The page shows any automatic retries. [IMU calibration details](docs/imu-calibration.md)
-4. **Check the default pose.** Support Duck on a level surface and click **Default pose** at the bottom of **Calibration**. Once the servos engage, compare its neck, legs and feet with the photo. If the pose differs, support Duck and click **Unload all** before rechecking its placement and servo calibration.
-
-<img src="docs/images/default-pose-reference.jpg" alt="Default standing pose with roller feet on the left and standard feet on the right" width="900">
-
-[Calibration controls and status messages](docs/calibration-guide.md)
+Follow the calibration page to calibrate the servos and IMU. Check the default pose before taking the first steps. [Calibration and first walk guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-07?model=duck)
 
 ## 8. Bind an account and select an agent
 
-1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
+Choose your service region, bind Duck to your account and select an agent. Try the wake word for your region to start a conversation. [Account binding and voice setup guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-ai-voice?model=duck)
 
-   <img src="docs/images/cockpit-live-en.png" alt="Cockpit with live camera video, ToF readings, and Link AI in the top bar" width="1000">
-
-2. Open the platform where you want to bind Duck. To choose the region in advance, open **Link AI** in the cockpit and tap **China** or **International**. This saves the choice and reconnects voice.
-
-   | Device region | Wake word | Binding and agent platform |
-   | --- | --- | --- |
-   | `global` International | **Hey Ducky** | [agent.luwudynamics.ai](https://agent.luwudynamics.ai/) |
-   | `cn` China | **小鸭小鸭** (xiǎo yā, xiǎo yā) | [agent.xgorobot.com/devices](https://agent.xgorobot.com/devices) |
-
-3. Sign in, open **Devices → Add device**, follow the Bluetooth prompts, and select the device beginning with `XGO-Duck`. Complete Wi-Fi setup and account binding, then select an agent.
-4. Return to **Link AI** to check the device server, binding and voice connection. Once voice is online, say the wake word shown for the selected region.
-
-<img src="docs/images/ai-binding-en.jpg" alt="Link AI shows Hey Ducky for the selected international region and 小鸭小鸭 for China" width="760">
-
-Web Bluetooth requires a compatible Chrome / Edge browser. On iPhone / iPad, add the device using the matching Mini Program or App:
-
-| International App | China WeChat Mini Program |
-| --- | --- |
-| <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="150"> | <img src="docs/images/qr_miniprogram.png" alt="China WeChat Mini Program QR" width="150"> |
-| [Open the App download page](https://agent.luwudynamics.ai/download) | Scan with WeChat |
-
-China and international accounts and bindings are separate. If no region is saved, Duck checks both services after connecting to Wi-Fi. It uses the service where it is bound, choosing China when both have a binding. A saved region takes precedence. Switching servers preserves conversation language, volume and motion settings. Bind separately when switching to another service for the first time. If the device belongs to another account, unbind it from that account first.
-
-If voice stays offline after binding, copy this prompt to an AI assistant.
-
-```text
-Board IP: [fill in]. My service region: [China cn / International global].
-Read the cockpit binding status and /api/voice/status on port 9527. Check the region and voice connection.
-Tell me whether setup is waiting for Wi-Fi, binding or the voice service, and guide me to the next step.
-I will sign in, grant Bluetooth access, bind Duck and change regions myself.
-```
-
-### Startup sounds
-
-Later power-ups detect USB audio and video and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
-
-| Order | Meaning | Example |
-| --- | --- | --- |
-| 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
-| 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
-
-If Duck is unpaired, it says “Please open [current IP address] in your browser to complete AI pairing” three times after the network sound. Once Duck has a Wi-Fi IP address at startup, the UNO Q LED matrix scrolls the full address (for example, `192.168.31.8`) from left to right. The last digit enters first, and the dots move with the digits. The display turns off after 30 seconds.
-
-After the voice service sound, say the wake word shown under **Link AI → Automatic startup & wake**. Speak after Duck’s wake-up call. You can play the startup examples there on your phone or computer. The actual startup sounds play through Duck’s speaker.
-
-## Everyday use
-
-- **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
-- **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
-- On a phone, the driving view shows both joysticks in portrait and landscape. Use **More** for additional actions and duck calls, or **View → Show all** for device settings.
-- On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
-- Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
-- **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
-- On power-up, Duck tries USB Host for up to 5 seconds of device detection. It keeps Host if a USB camera or audio device is detected and switches to Device otherwise. For accessories plugged in after boot, use the **USB Host** switch at the top of the cockpit over Wi-Fi after stopping Duck. Switching interrupts the current USB connection.
-- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward obstacle avoidance is off by default. Turn it on in the ToF panel to slow forward travel within 15 cm and stop at 10 cm at ordinary speeds. Forward travel remains available if the sensor is absent, offline, or has no fresh valid front reading. [Avoidance settings](docs/forward-avoidance.md)
-
-## FAQ
-
-### 1. Duck shakes or walks unsteadily
-
-1. Stop moving, support Duck, and release servo torque. Use **Servo setup → Single-servo motion control** to verify IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.
-2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to calibrate all 15 servos, set ID 30 separately, then calibrate the IMU, and check the default pose.
-3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
+---
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)
