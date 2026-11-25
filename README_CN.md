@@ -8,6 +8,15 @@
 
 下面按官方开发者指南的七步顺序配置，使用本仓库的 XGO Duck AI 安装包和启动命令。
 
+**下面这段提示词可以让 AI 代你完成第 1～4 步。** 安装验证通过后，直接从第 5 步继续。
+
+请先用**能传文件的手机 USB 数据线**把 UNO Q 接到电脑。仅充电的线无法传输数据。接好后，把下面这段复制给能操作本机终端的 AI。
+
+```text
+我的 UNO Q 已通过 USB 接到电脑。请按下面网页的安装说明，帮我安装最新版 XGO Duck AI。
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino#ai-assisted-install
+```
+
 ## 1. 设置并连接 Wi-Fi
 
 用 USB 数据线把 UNO Q 连到电脑，在 Arduino App Lab 完成首次设置。选择键盘布局、设置设备名、连接 Wi-Fi 并设置板端 Linux 登录密码。等待检查和更新完成，断开 USB 后按指南接好扩展板，再重开 App Lab 并连接开发板。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/index.html)
@@ -16,17 +25,7 @@
 
 在 Arduino App Lab 右下角点击 Wi-Fi 图标，打开 **Network Info**，记下板子的 IP 地址。后续安装时，电脑和板子需要连接到同一局域网。
 
-拿到 IP 后，可把下面这段交给有终端权限的 AI，检查后续安装需要的 SSH 连接。
-
-```text
-板子 IP 是 [填写]。请从我的电脑验证能否通过 Wi-Fi SSH 登录 arduino 用户。
-登录后检查 Debian 版本、CPU 架构、可用空间和 Arduino App CLI 是否可用。
-密码由我在终端提示中输入。
-```
-
 ## 3. 导入 XGO Duck AI App
-
-> **想让 AI 代装？** 完成第 1～2 步后，直接使用[第 3～4 步的 AI 代装提示词](#ai-assisted-install)。
 
 | 安装包 | 什么时候用 | 包内有什么 |
 | --- | --- | --- |
@@ -86,19 +85,31 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 <a name="ai-assisted-install"></a>
 
-### 让 AI 代装第 3～4 步
+### 用 AI 配网、安装和验收（第 1～4 步）
 
 源码 ZIP 的安装流程已在 Codex、DeepSeek Harness 和 Cursor 中跑通，首装通常预留 30～60 分钟，实际取决于下载速度。全量包提前准备了依赖，板端耗时主要取决于传输、解压和本地安装。
 
-复制下面的提示词，填入 **板子 IP、SSH 用户名和密码**，交给能执行终端命令的 AI。若已配置 SSH 密钥，也可直接使用密钥登录。
+下面是 AI 执行第 1～4 步时使用的详细说明。需要密码时，请在电脑上弹出的窗口输入。如果已有板子 IP、想指定版本或已有安装包，可以在发给 AI 的消息里补充。
 
 ```text
-请在我的 Arduino UNO Q 上完成 XGO Duck AI 的安装、启动和验收。
-板子 IP：[填写]。SSH 用户名：[填写，通常是 arduino]。SSH 密码：[填写板子的 Linux 登录密码]。
-安装方式：[首次安装 / 更新 / 自动判断]。目标版本：[最新 AI 版 / 指定版本，例如 0.3.6]。
-服务区域：[自动识别或保留现有 / 国内 cn / 国际 global]。本地已下载的安装包路径：[可选]。
+请帮我的 Arduino UNO Q 连上 Wi-Fi，安装或更新 XGO Duck AI，并完成启动和验收。
+自动判断是首装还是更新，默认安装最新 AI 版。服务区域首装用自动设置，更新沿用已有设置。
+如果我指定了板子 IP、版本、区域或本地安装包，请使用我提供的信息。
+项目仓库：https://github.com/LuwuDynamics/xgoduck_runtime_arduino
 
-1. 通过 Wi-Fi SSH 登录目标板。密码只用于登录或 sudo，避免写入文件、命令历史或日志。
+1. 默认登录用户为 arduino。如果我提供了 IP，先从电脑尝试 SSH 登录，可使用已有密钥。
+   登录成功就继续检查板子。需要查 IP 或配网时，用 USB 数据线和 adb devices -l 找到 UNO Q；
+   若有多块候选板，让我选序列号。通过 ADB 检查板子的 Wi-Fi 连接，已联网就读取无线网卡的 IPv4 地址。
+   需要配网时，显示电脑当前连接的 Wi-Fi 名称，让我确认或改选。读不到名称时让我填写。
+   密码由我在可操作的本机窗口隐藏输入（Windows 用 PowerShell，Mac 用“终端”）。
+   Windows 经我确认后，若有权限，可在本机复用所选网络已保存的密码，取不到再让我输入；
+   Mac 让我输入该网络的密码。开放网络跳过 Wi-Fi 密码。通过 ADB 用板上的 NetworkManager 配网，
+   确认连上所选网络并取得无线 IPv4 地址。密码仅在本机交互程序中处理，避免出现在聊天、命令参数、历史或日志里。
+   如果无法弹出本机窗口，给我一条在本机终端启动相同交互流程的命令，完成输入后继续。
+   新板若尚未设置 arduino 密码，让我设置并再次输入确认；已设置过的板子沿用原密码或已有 SSH 密钥。
+   如板子尚未开启 SSH，通过 ADB 执行 arduino-app-cli system network-mode enable。
+   从电脑实际登录 arduino@板子IP 后，沿用该 SSH 连接继续安装。
+   后续需要 sudo 或重新认证时，也在本机窗口输入。
    核对 UNO Q、官方 Debian 13 ARM64、可用空间、arduino 用户（UID 1000）、App CLI 和 daemon 版本。
    用 arduino-app-cli app list 查看已装 App，用 app details <App ID> 核对实际目录，用 app ps 查看运行状态，
    用 arduino-app-cli properties get default 查看开机默认 App。旧版 CLI 的状态查询以帮助为准。
@@ -106,12 +117,14 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    核实魔搭全量包的实际版本，并用该版本做下面的检查，说明尚未确认它是否为最新。若我指定 master 腿姿，
    复用已有 App 前要用目标构建的 build-manifest.json 核对实际目录中 python/rl_core.py 的 SHA-256，两种构建都可能显示 0.3.6。
    已有 App 运行时，只读检查驾驶舱、/api/version 和 /api/status。若运行的是目标版本及所需构建，且状态正常，
-   告诉我“已是目标版本，跳过安装”，到此结束。若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
+   告诉我已是目标版本，给出实际版本、板子 IP、驾驶舱和 9527 控制页的完整地址，到此结束。
+   若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
    需要安装时保持 Wi-Fi SSH，USB 探测可能中断 USB/ADB。
 
 2. 首次安装和跨版本更新默认都用目标版本的全量 ZIP（第 4 项）。优先复用电脑上已通过校验的包。
    - 需要下载全量包时，在实际下载的电脑上沿用当前代理设置，用下面的命令读取公网出口的国家/地区代码。
      curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     Windows PowerShell 可用 curl.exe -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | Select-String '^loc='
      CN 优先魔搭，其他已识别的地区优先 GitHub。查询失败或代理分流导致出口不明时，并行短测下面两个
      .sha256 链接，选先返回有效校验文件的来源。板子的局域网 IP 和语音服务区域不参与选源。
      魔搭全量 ZIP 和校验文件
@@ -203,6 +216,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    若语音日志提示 libopus.so.0 权限错误，检查新 App 的 native 库和目录对容器运行用户是否可读及可遍历。
    启动失败先查 App、Router 和硬件服务日志。若需回退，停止新 App，按 docs/deployment.md 从旧目录
    恢复硬件服务和默认项，再启动旧 App，保留备份。汇报所用安装包、校验结果、版本、实际目录和验收结果。
+   给出重启后确认的板子 IP、驾驶舱地址 http://<板子IP>/ 和控制页地址 http://<板子IP>:9527/，用实际 IP 替换占位符。
    安装成功后提醒我按 README 完成第 5～8 步。依次设置舵机编号、组装、统一标定 15 个舵机、单独标定 30 号颈部舵机、
    标定 IMU，再检查默认姿势，最后绑定账号并选择智能体。已完成的步骤跳过，告诉我下一项。
 ```

@@ -8,6 +8,15 @@ Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data
 
 The first seven steps follow the official developer guide, with this repository’s XGO Duck AI packages and startup commands.
 
+**Use the prompt below to have AI complete steps 1–4 for you.** Once the assistant verifies the installation, go straight to step 5.
+
+Connect the UNO Q to your computer with **a phone USB cable that can transfer files**. A charge-only cable cannot carry data. Once connected, copy the following into an AI assistant with access to your computer’s terminal.
+
+```text
+My UNO Q is connected to my computer by USB. Please use this guide to install the latest XGO Duck AI app.
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino#ai-assisted-install
+```
+
 ## 1. Set up Wi-Fi
 
 Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)
@@ -16,17 +25,7 @@ Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, ch
 
 In Arduino App Lab, click the Wi-Fi icon in the lower-right corner, open **Network Info**, and note the board’s IP address. Connect your computer and the board to the same local network for installation.
 
-Once you know the IP, you can give this prompt to an AI assistant with terminal access to check SSH.
-
-```text
-My board IP is [fill in]. Check whether my computer can reach the board over Wi-Fi SSH as arduino.
-After login, check the Debian version, CPU architecture, free disk space and Arduino App CLI.
-I will enter the password at the terminal prompt.
-```
-
 ## 3. Import XGO Duck AI
-
-> **Want AI to handle the installation?** Complete steps 1–2, then use the [AI prompt for steps 3–4](#ai-assisted-install).
 
 | Package | When to use it | What it includes |
 | --- | --- | --- |
@@ -86,21 +85,38 @@ A first installation may not have an account binding or a USB microphone and spe
 
 <a name="ai-assisted-install"></a>
 
-### Let AI handle steps 3–4
+### Set up Wi-Fi, install and verify with AI (steps 1–4)
 
 The source ZIP installation workflow has been tested with Codex, DeepSeek Harness and Cursor. Allow 30–60 minutes for a first source install, depending on download speed. The full package includes dependencies, so board setup time mostly depends on transfer, extraction and local installation.
 
-Copy the prompt and fill in the **board IP, SSH username and password** for an assistant with terminal access. If you already use an SSH key, the assistant can sign in with it.
+These are the instructions the AI assistant follows for steps 1–4. Enter passwords in the local window when prompted. If you know the board’s IP, want a specific version or already have a package, include that information in your message to the assistant.
 
 ```text
-Install, start and verify XGO Duck AI on my Arduino UNO Q.
-Board IP: [fill in]. SSH username: [fill in, usually arduino]. SSH password: [board's Linux login password].
-Installation: [first install / update / detect]. Version: [latest XGO Duck AI / specific, e.g. 0.3.6].
-Service region: [auto-detect or keep existing / China cn / International global].
-Path to any package I already downloaded: [optional].
+Connect my Arduino UNO Q to Wi-Fi, install or update XGO Duck AI, then start and verify it.
+Detect whether this is a first install or an update. Use the latest AI release by default.
+Use automatic region selection on a new board and keep the existing region on updates.
+Use any board IP, version, region or local package path I supply.
+Project repository: https://github.com/LuwuDynamics/xgoduck_runtime_arduino
 
-1. Sign in over Wi-Fi SSH. Use the password only for SSH or sudo and keep it out of files, shell history
-   and logs. Confirm UNO Q, official Debian 13 ARM64, free space, the arduino account (UID 1000), and
+1. Use the arduino account. If I supplied an IP, try SSH from my computer first, using an existing
+   key if available. Once logged in, continue with the board checks. If you need to find the IP
+   or set up Wi-Fi, connect over USB and find the UNO Q with adb devices -l. If several boards
+   match, let me choose the serial number. Check Wi-Fi over ADB. If connected, read the wireless IPv4 address.
+   If Wi-Fi setup is needed, show my computer’s current network name and let me confirm or choose
+   another. Ask me for the name if it cannot be read. Open an interactive window on my computer
+   for hidden password entry (PowerShell on Windows, Terminal on Mac). On Windows, after I confirm
+   the network, reuse its saved password locally if permissions allow. Prompt me if it is unavailable.
+   On Mac, prompt me for the Wi-Fi password. Skip the Wi-Fi password for open networks.
+   Connect using the board’s NetworkManager over ADB. Verify the selected network and its wireless IPv4
+   address. Handle passwords in the local interactive process and keep them out of chat, command arguments,
+   shell history and logs. If you cannot open a visible window, give me one command to start the same
+   interactive setup in my terminal, then continue after I enter the credentials.
+   If the arduino account on a new board needs a password, ask me to set one and enter it again
+   to confirm. On a configured board, use the existing password or SSH key. If SSH needs enabling,
+   run arduino-app-cli system network-mode enable over ADB. Log in from my computer as arduino
+   at the board’s IP and continue installation over that SSH connection. Use the local window
+   for any later sudo or login prompts.
+   Confirm UNO Q, official Debian 13 ARM64, free space, the arduino account (UID 1000), and
    the App CLI and daemon versions. Use arduino-app-cli app list for installed Apps,
    app details <App ID> for the actual path, app ps for running status, and
    arduino-app-cli properties get default for the startup App.
@@ -110,7 +126,8 @@ Path to any package I already downloaded: [optional].
    release is unconfirmed. If I requested the master walking pose, compare the installed python/rl_core.py
    SHA-256 with the target build-manifest.json before reusing an App. Both builds can report 0.3.6.
    If an App is running, check the cockpit, /api/version and /api/status without changing its state.
-   If the requested version and build are running normally, report that installation was skipped and finish here.
+   If the requested version and build are running normally, tell me the board is already up to date.
+   Give me the running version, board IP, cockpit URL and port 9527 control URL, then finish here.
    If the target version is installed but unhealthy, inspect its App and service logs before deciding how to repair it.
    For an installation, keep Wi-Fi SSH available. USB detection can interrupt USB/ADB.
 
@@ -119,6 +136,7 @@ Path to any package I already downloaded: [optional].
    - When a download is needed, check the public IP region on the computer that will download the full ZIP,
      using the same proxy settings as the download. Read only the loc field with this command.
      curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     In Windows PowerShell, use curl.exe -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | Select-String '^loc='
      For CN, try ModelScope first. For other known regions, try GitHub first. If the lookup fails or a
      split proxy makes the region unclear, briefly probe both .sha256 links in parallel and use the first
      valid checksum response. The board's LAN address and voice service region do not determine the download source.
@@ -236,6 +254,8 @@ Path to any package I already downloaded: [optional].
    To roll back, stop the new App, follow docs/deployment.md to restore hardware support and the default
    App from the old directory, then run the old version and keep the backup. Report the chosen package,
    checksum, running version, path and checks.
+   Report the IP confirmed after reboot and the two working URLs, http://<board-ip>/ and
+   http://<board-ip>:9527/, with the board’s actual IP.
    Once installed, send me back to README steps 5–8: number the servos, assemble Duck, calibrate all
    15 servo centers together, set ID 30 separately, calibrate the IMU, then check Default pose, bind an
    account and select an agent. Point me to the next unfinished step.
