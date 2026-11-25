@@ -48,35 +48,43 @@
     "integration": "Stable control/calibration/servo web files and MCU protocol. Retain AI source ownership and independent ToF task. AppController blocks arming for nondefault legacy software zeros until all hardware centers are acknowledged. Chat/media/dual-mic/wake/mouth remain."
   },
   "sha256": {
-    "assets/app.js": "be90649c01fc2fe8720e9afa933c54d3cdaf51197f087f7b948fe2b1666e51b7",
-    "assets/calibrate.html": "1afa371b9711fe28fe7e4c698da557ae8f438c99d0ef5f5d6f968b2ed4b3e4dd",
-    "assets/calibrate.js": "37e9ba5d5b1c8f214ac025310c899073ab76bfe21059ac0d08a3bce1c4a1e4b1",
+    "assets/app.js": "981a7abb815ee8a43b12a7567969062ccbc59688679ae4e611c4c43c626e6f5f",
+    "assets/calibrate.html": "52a45290c09d7bcd2bfce2253e5df7777e070115ced7f587fd54972675907d3d",
+    "assets/calibrate.js": "0661bb05d560c92d7320b4d7d8ecff40cc2474da2e4ef8546dc452dd82e3e6b5",
     "assets/imu-calibration-pose.png": "eb0415f86555cab9fb6f70d017b55aff6ad9dc6ec8e81775bac0a20177ff1da5",
-    "assets/index.html": "7adb8ca1b0f69a73f97aea2ebd96f98e8a6d4f5f1408ee80e8def05e4aac907c",
+    "assets/index.html": "0df7b90bae0d80cd2ceabd9fb1bb95a07e6b3619b85238011aebcd52c1d265f3",
+    "assets/hardware-check.css": "a994a58b22656fd03df5e6330d5b2ec4b1b21b79147e72c730692b22c8447346",
+    "assets/hardware-check.js": "dd7421ef413e8b6d5570576b07da79c9702ff54a9b95a18973118d4cb7d3cb0d",
+    "assets/hardware-contact.webp": "73a7982b80718b1669111245395655a117406f5444c49d15c4dab146116d2f28",
+    "assets/hardware-insulation.webp": "183a029e543bb76d17e4b46227d8f50fd4405058b519a7faebe47f06bbebc12c",
+    "assets/hardware-rear-cover.webp": "6f36f8e7e253c41b03f0a1c1edb8aa3d588ed4e810cf906ef458d4839808964f",
     "assets/remote-control-notice.css": "887295a9125a3365e865756877c7b791b535550b06c7030a69a5388306d9efb3",
     "assets/remote-control-notice.js": "ab58980e8d5c40c91190267ca9acfaac943c0b5d919b412b2ac5fb485ae10ff4",
-    "assets/servo.css": "bf0bc647bb12f451c2a57f603a312dbc7e59cd04456713cf518c0d97806d566a",
-    "assets/servo.html": "e0db49cd58cf91fa9256a20468f1016e486254703337705e87065e100b8b354a",
-    "assets/servo.js": "8b6d4b34852efbfff9f9fbf48245e39b236b26ebb52463838772f4f987d8f422",
-    "assets/style.css": "0a12d244d08622ebed3ee3a1dcd410bf7068c6c15f9d409e128e798ecac37f26",
+    "assets/servo.css": "543cecb7055fefb9a0a2bf7015968d27aad7a6f0243db9896bdde0e7ef913d33",
+    "assets/servo.html": "786317801c5aea9f1cd333970d96095561781913c4e44df15bc4794185643b12",
+    "assets/servo.js": "8389189d89e6e8aeb118443ec8163bd811073eeb17b0d699d79db41619a957c8",
+    "assets/servo-wiring.jpg": "c8e21fde7bcee0137ae90dadd3e1b40abde46d84b23f6a6d6915125d3f376249",
+    "assets/servo-model.json": "7662f317407c28ef9810f568d944ced79a55c733cd41536dc3af6a5b29998f54",
+    "assets/servo-model.js": "dc8c9776c68838e6a2d271105d070e345c3da54fb9b8427301ee5ec5a2e2169f",
+    "assets/style.css": "f2229ad54972015dcb4a0aecbcaa4547758de052c7b62ade32f8b5fb1b09bca2",
     "python/bridge_recovery.py": "b4761fcb0cf9438727c035a8e95bfa1db684073f8566fb287c2f63871146008d",
-    "python/controller.py": "71af0b749cdeb39b573617cb286ee97a8666c3d9373aecca2e720f9b871c5ce7",
+    "python/controller.py": "d705a6b480022bc572bde2b670002f201a28371164c92fe9b8f6863dfa9629d5",
     "python/duck_thing.py": "0bb7e95da09c603b5e9a652e8d3c168932a8e07b75567e31c95b1be16dff67eb",
-    "python/forward_avoidance.py": "585e44926c1d023f048d0b4f8dbf3a883882cdfb3406409c5085207a51feff3c",
-    "python/gamepad.py": "defce4fc29d7eb564136797c2ddfcade9169540391591df352406093548f256c",
+    "python/forward_avoidance.py": "44d1a1583023370b86e95e4309a43129a740b7f8f46a70b3938455759c5516da",
+    "python/gamepad.py": "933239b59d8c4b4753b04c857f2fab0de3ef7e1936a1ff49d8ab332519ad1b80",
     "python/heading.py": "322f28038ae4e70fa5b585cef5b9617c50dfc6fa93f68d8550ed0eac59a036cb",
-    "python/main.py": "afa896c0416fcbce4261699d4c7ce49eb8b150cfacdd7bfeb10b3856db7744cb",
-    "python/motion_access.py": "b221a4756374ad653e50b6a7e564bff4cbad3fe6b8d37df42fdf5d8b0a769f06",
-    "python/motion_calibration.py": "4dbb8b0cba6958e3594f024eac463c4c49cb571e1a3725301018f86a607f31d0",
+    "python/main.py": "59ab3f97e8b4413d689c607e53db82292f2473ad1dfc0a8911627253db54c176",
+    "python/motion_access.py": "8d8ff2c9c93f808ed369f955d1f0c87910047c213e45ebb58a24b8c6783168bb",
+    "python/motion_calibration.py": "85b572e0e3f12d6492171db45b63900bf54e12f3b6139dd996c010a5e8ec8a22",
     "python/policy.py": "abf17f3ff60098d8d651ab73b64c885876990ba03317c0c50949d16f7a937b7f",
     "python/proc.py": "b4d038bb5c9844284fbc6ad500ad907e619e39488ec3714f6c2cddfba7fdf488",
     "python/recovery.py": "acdd1201616d42c57073d69a1186df948994e98c0c7cd9e4998a5fb6184b8d7c",
     "python/rl_core.py": "11aac0dfba063e9c7d4041e240d0de82ef0b67c2894ca23d3fb35d11416e6270",
     "python/runtime_gains.py": "9dbaf0550e8e515bf99a3dc94d086350d8a2c9c759b160723aea1da627a3c7a7",
     "python/speech_mouth.py": "e6be97d6e42b059eaca551ea9530fcafc96dd6f15c81bed83a3386bbebc25259",
-    "python/standing_imu.py": "0bbfc08e7f80e8110154aedf36fac79c470440c7e02b35c00f3905e385b75286",
+    "python/standing_imu.py": "a334deb3a80f7ad6e22740fe5a195835cbd6e19f0e6afce15399b10888a354cc",
     "python/voice_region.py": "fc0c6c829e1f521203078f991953270df3e6cc67a00377cbf82de0dd04a18a41",
-    "python/wire.py": "c662d7aa561bbe908d26079646652dfd95eff92fcb51b7a9edc4ca81e4956d89",
+    "python/wire.py": "8cf613bda6caa75f009c0d2fe5a32afd7edc7ba7ff8c8b901e13025a65a3b352",
     "python/xgoduck_ballkick_left.onnx": "3476e99a4d400dad9ff8a61167dc3bd9556b953cbbfcaffdda24e5d744c32873",
     "python/xgoduck_ballkick_right.onnx": "ddba8e793d5f2c8a47d25756fa4bc0f6d39cf46686ff3929a404ca46c7f7fb46",
     "python/xgoduck_getup.onnx": "87bd91c6b87b9beaf9dee255a10cc815a766c19c66c4a7f89e42f51d7de203a3",
@@ -84,25 +92,26 @@
     "python/xgoduck_roller.onnx": "6eed2d1514296294e2183125267801e59ee2d7fa62480780f9d3fd9999873884",
     "python/xgoduck_roulade.onnx": "4244090442d4025817d3c041174206ab4f91bc07294ef5fbc4e5643ffdb76e1a",
     "python/xgoduck_sitstand.onnx": "d0d98b675841be8d6eb0bf3b3155c61687390adb7f234f7f0bae063c771b5d59",
-    "python/xgoduck_walk.onnx": "5f4e969538a9212280278ff335884be46fe33d7e9d93e85237b19f6485d2d59d",
+    "python/xgoduck_walk.onnx": "1fc079512fe3fe23e274e7a9d8c9ad007e88439f0385ecf20c9596e57886249f",
     "sketch/duck_config.h": "d533b5033f286848dfd5ce99b551ef2d0f53c38b956331729c7e6c7027756f4f",
-    "sketch/protocol.h": "890de77104f9cf43c0d074e6b34161eb428c2afc6e10b67fdeef6368aaa06be5",
-    "sketch/qmi8658.h": "7eb3429dd50f77f12c45485af1d9beac204ceb8cf7b9eacaa4e5cd68fbc16dc9",
-    "sketch/scs_bus.h": "3c07b39036408c27c10447b01fcb56c36233033d6199de9da8455164335fba05",
-    "sketch/ip_matrix.h": "7fe4723ea7cbc8e1a4441dfd245766a4507a9e0ec789781fdc1f80fc19a65c96",
-    "sketch/sketch.ino": "9adc09dde7d81a67dc349f7069229b2e86f91421897f55ad701aa0bd7bcb0c69",
-    "sketch/sketch.yaml": "46f0c79abfd9e04755661d3a878d9688cbd51fa35bb958ddf62c92209bf6d2ef",
+    "sketch/protocol.h": "ca75cc02ea0cec1eb006be7f8e425eb5ce9c226c60ef93ccc5c020906b68379c",
+    "sketch/qmi8658.h": "af855b95b34edfa10962b3855a52e1ff071c06e51af8ed5ea768662346e39c73",
+    "sketch/scs_bus.h": "7713b8b5182cd858c5cd4cf4846c8ae6b5346302a086bbd431e1312433b5145e",
+    "sketch/ip_matrix.h": "d961cab6bc9d085dbedcd2d664296d348d1fcc13e70df780b4b27252ccb887e2",
+    "sketch/sketch.ino": "b4be7771e8fa32dfaa8bba022d8b6d1bee51c92b6f0b0edc5035df3fb5ad5080",
+    "sketch/sketch.yaml": "a1c693c8aa7108bb9f25999edfa6a22343d84dc00de911ba4f394056fce4f924",
     "sketch/tof_sensor.h": "72f4463bdfd8da5d307281fa988cd4a6f0d8e6b90f7bda8643ff947ace106303",
     "sketch/uart_fifo.h": "90ed76314fe73c522bb0c1984f12168ef89349458cb0e2d861a05e6b4ecb5fd8",
-    "tools/bridge_patch.py": "a07d6e63ea15d3de21351e342b4f46d3af678ca90dc9f1723ee2cf853dbddde0",
-    "tools/prepare-bridge.py": "3e6e9290a8f7281480a2d0a4271f4970dd1d0c4ea640b4c86c8968f9a63e1ea2",
-    "assets/panel-language.js": "ec9aca56887d6255f3332d4a9487ffa400cccb8b2282c6440b1e26081ebbdeef",
+    "tools/prepare-bridge.py": "2f225f785df03f98ae399b66aff7c7a3d4a13a91b836b71691498edd4da04e15",
+    "assets/panel-language.js": "4bb7c54107d415583c3e7793834afbae4d35fdb6aeb04567c377c363a9539bcd",
     "assets/xgo-favicon.png": "a625472972c22b00cdd4bd4c73ff8721ec8618e1d7b14a1a3274b49a388114cb",
-    "assets/calibrate.css": "c07b331280520102e5ad03d2e2f0c7db4944380e3363575c908f82174810b9b9",
+    "assets/calibrate.css": "403fc69cb822e2daf002473237d4198db7d447f75a3db9f6582a5e3b5fde6471",
     "assets/cal-unified-1.png": "af942be9ea6890f013e07096406adf7f43039a64857a6ebb786e6151eef4cca9",
     "assets/cal-unified-2.png": "0cf86b5f19f9fc8f573def8d1f769f930a73b66d08d5535f2b02920568231e81",
     "assets/cal-unified-3.png": "dddb7e312aff1febcd1810474771547fa66e2f995f8a025c2d2a7ac330500513",
-    "assets/cal-unified-4.png": "e0a1812aba5126aa26784332adbf50a8644804aeae5656dc848ff3548fbc767c"
+    "assets/cal-unified-4.png": "e0a1812aba5126aa26784332adbf50a8644804aeae5656dc848ff3548fbc767c",
+    "python/servo_feedback_log.py": "4f4981376fcaedf58d6e5682f31876a6666b6b53a523707f716ed1132deacb0b",
+    "python/stall_recovery.py": "c6e558c2ad64dd2182c61a538912feba2163b2efd6eb93f0bc1afe7a6895ae9a"
   },
   "stable_exact_files": [
     "assets/imu-calibration-pose.png",
@@ -111,13 +120,8 @@
     "python/xgoduck_ballkick_left.onnx",
     "python/xgoduck_ballkick_right.onnx",
     "python/xgoduck_pick.onnx",
-    "python/xgoduck_roller.onnx",
     "python/xgoduck_roulade.onnx",
-    "sketch/qmi8658.h",
-    "sketch/sketch.yaml",
-    "sketch/uart_fifo.h",
-    "tools/bridge_patch.py",
-    "tools/prepare-bridge.py"
+    "sketch/uart_fifo.h"
   ],
   "stable_controller_methods": {
     "receive_boot_pd": "840b81ddf3eb689dcc99cd5b46b32cfb7a48af16f87fb16482f0adf70fa0a027",
@@ -125,7 +129,6 @@
     "receive_cal_reply": "a6db3b0414e68c50f056f675fa804b152c78441370fa533efc6de8a4a6049c99",
     "_require_feedback": "955cbde1afe477c319a8c232bc30c951a6dabf194acbc8c889d70f23ca990934",
     "_disarm_now": "7661a978f0e0473291b665001b09b55896fa27429c49839c30a9d7f803baefac",
-    "set_roller_mode": "bb5e34187cd0f07cd1cb651c92b45a4b0f240a67409d3db6add81620b05bb274",
     "_models": "2ed0147f74f6779ddd2a56db41a9731e97f4cd8a34131843d769c17990cdf503",
     "_standard_models": "ecee73819a3fc1c9d55a3f887f74c4f4f8f280a286f71588559fb73853333111",
     "_apply_alphas_locked": "64aecf266dcd4f6ccc4a2cc3e854a1fb49722230f42a7c3ae1bde2a20042c43c",
@@ -140,10 +143,8 @@
     "_kick_status_locked": "07e434e3527a25a79e0088b29fa665223c6914263823f3b4a95265dbb698be5a",
     "cal_heartbeat": "a1acb51cf8cf2f833c9b22d90813b79e0b79648735b9824a8705e3d924f604fc",
     "_require_servo_debug": "507f1f355b9da3f778869c3284e029850184f0c9985c1155ee7bb287cf993e36",
-    "servo_op": "5439aa02274209578e698c299195250591115815f8a10b29ee8372b0411dd3c4",
     "_servo_op": "96046a768d08511954a7e11666029a3bb585d1bd221043dfa5eb7c33dc965c53",
     "_keep_warm_idle": "011e535f5ca5b5b8ac44eea1920b79f0e367d5f9ae56e45f7abdb6da14976c45",
-    "run": "1f2a791e0c3232e4287407d3b0d875a62945ae315960cbac63b47968f7f7eba9",
     "stop": "132671f5008caa07136e5c4230ed7fe29134ec842108fac713248fdd1d4a9b04",
     "receive_voltage": "7bcbd72a5dbaafcf2712d953b12deca0d3981976b0ac9cc14af4fa64e6ccf802",
     "_heading_motion_locked": "15d5839715947f1a09fdb2424d647af238778edc13262d7d8e373216a1e4498e",
@@ -153,12 +154,12 @@
     "_cancel_preparation_locked": "641e9c99d8ff10ef622f239f86d6b2eb312909f4d84bf0281b8eab233a3e44be",
     "_cancel_actions_locked": "fe5a352cdae93e281bba697f560c55a73ceb03e54c284899b0d81cf911274428",
     "_record_roulade_frame_locked": "4a02c1d88c32896321cbb28e44d4beb3e922da252b3f577c1dcbe2032d90b971",
-    "_expire_roulade_locked": "44f1794515933a72820d6ab4248b77dd02b083077144687f35d09629c21a6821",
-    "start_imu_calibration": "f4a2635237cbceb2b755b91d435180b2d6b771e8cf73cd2bcc313d148908283c"
+    "_expire_roulade_locked": "44f1794515933a72820d6ab4248b77dd02b083077144687f35d09629c21a6821"
   },
   "controller_adaptations": {
+    "servo_op": "After confirming the assigned ID, set the current position as the hardware midpoint. Verify voltage and 2 A overcurrent protection, then write KP=5 and KD=10 and verify both saved and runtime gains on that servo.",
     "__init__": "Retain AI control ownership, feedback pause and battery state, and track failed IMU loads.",
-    "receive": "Track recent servo reply masks for the motion readiness check and clear them on MCU sequence reset.",
+    "receive": "Track recent servo reply masks for the motion readiness check and clear them on MCU sequence reset. Feed activity-aware stall/thermal/hardware-fault observation into StallRecovery.",
     "receive_servo_reply": "Match servo test replies to the requesting session as well as the operation and servo ID.",
     "_wait_servo_reply": "Allow STOP to interrupt a pending angle update and require STM32 to verify torque off.",
     "command": "Reject inactive inputs and ignore targets during a feedback pause. Require neutral manual controls before resuming travel.",
@@ -170,17 +171,20 @@
     "start_pick": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
     "start_roulade": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
     "cal_center": "Integrate servo-bus voltage telemetry and the low-voltage protection sequence.",
-    "step": "Keep battery warnings and hold last targets during a feedback pause. Cancel interrupted actions and preserve seated posture. Confirm a retained-target or disarm command after a Bridge recovery before resuming, and never arm automatically after MCU torque release.",
-    "_sample_imu_calibration": "Clear the AI arming interlock after a successful calibration.",
+    "step": "Keep battery warnings and hold last targets during a feedback pause. Cancel interrupted actions and preserve seated posture. Confirm a retained-target or disarm command after a Bridge recovery before resuming, and never arm automatically after MCU torque release. A normal roller release commands zero twist and monitors closed-loop policy deceleration without overriding leg targets, finishing cleanly on confirmed narrow stance or timeout while allowing immediate manual takeover.",
+    "start_imu_calibration": "Start one settling and sampling job. Assess orientation over a complete window.",
+    "_sample_imu_calibration": "Retry motion-rejected windows up to ten times. Save the first passing window and clear the AI arming interlock.",
     "reset_imu_calibration": "Clear the AI arming interlock when a saved calibration is explicitly disabled.",
-    "_sitstand_status_locked": "Report the stand-only action alphas and scale alongside the sit/stand model and timing."
+    "_sitstand_status_locked": "Report the stand-only action alphas and scale alongside the sit/stand model and timing.",
+    "set_roller_mode": "Keep the current home pose and policy fixed during a measured stall retreat.",
+    "run": "Pin the 50 Hz balance control thread to CPU core 0 (isolated from voice_process on cores 2..3 at nice=19) and throttle background inactive-session warmup during active roller skating."
   },
   "preserved_sha256": {
     "assets/app-version.css": "cad7571420502b29b7f05706b493633b2c96d2ee89ec678cec8d659cda6e9a84",
     "assets/app-version.js": "29d82533841c21eee4b7bac3aef6038d926a03f2c3779af5fda5411d8e394294",
-    "assets/mobile-i18n.js": "5be0af24a1ddc9e236db7ec8c70590867e722d505a306203b9877a6f640d29bc",
-    "assets/mobile-tof.css": "723c3d367c00e75b08859384c405c0c70006317873ace20edd4ac25877eabb7a",
-    "assets/mobile-tof.js": "59400378ffd881938606bf14f4ae43d6d355daa24daab32e5aaecaadacfeb0dd",
+    "assets/mobile-i18n.js": "b912ef2d09cdb67a9b24bd7f7875ab986b853952b7f69781cd67b351f9d544b4",
+    "assets/mobile-tof.css": "4bd3284979dc3d348dca7fe031244703819b379db390900629a5b526370a165d",
+    "assets/mobile-tof.js": "d89e7999967554529a92b32aff6d6b476e3c0a468dededf934199a37a6677b93",
     "python/tof_status.py": "9088d2aa027528d608de1513cc889a2ce92ad954342221739b9780aabb2d6fb9",
     "assets/audio.html": "a63053a9105807807e448093e34f8c920bb305738d84a480b5d77045adc31f15",
     "assets/camera.js": "55178712a1d151347873f45802a75276b6913d7a079a05cf26f1cb837b30d5e9",
@@ -189,16 +193,16 @@
     "assets/gamepad.js": "f54d87b99588bb666fda7c7cdd198e0762cff3d9c801e744f2a58ef114a36f91",
     "assets/gamepad-i18n.js": "bcce01de9277c721ba48722528c15abf1d0073f002a4f2cbfc1965a25db241b3",
     "assets/media-audio.js": "bb4cb14b4a14da30b9c944f4ffbf2e38532353c3d653ffabbeb51f349e0ea57a",
-    "assets/media-camera.js": "4ac86f9095fc1f69a61e9ea2dcf0c3b3dc8a1a14736329de04b868b1758ce9b4",
+    "assets/media-camera.js": "b4cb248ab6050dcc4ea793164d128ea27ce0c9cf2444149bab8884fb984fbc09",
     "assets/media.css": "744d80290bf3d404520fc865d4b8f0bd318b0a730e2dc3f3c4b0202900076198",
     "assets/mobile-audio.js": "ac7dd88237acc35c2c7868516c5ee278d83b9b8df5b2c08957ccab7569e11bb6",
     "assets/mobile-fullscreen.js": "3aaa6b6176ada05132428a10ab6eedc3e71a4937b3a9d7d88d261cbc2f8a4328",
     "assets/mobile-icon.svg": "722df2455afe3e2ee47743e8ab371b5138299574c41aec5e56f103f3df081727",
     "assets/mobile-pcm.js": "2521318e650247b2a7b43f8a99569cb45ff5cba1efb00276fc985e35cf0fa2de",
-    "assets/mobile.css": "99c4f33c7bac70778991a172142faaaa837a5afc33310b2f0241b7d1f7c040ec",
-    "assets/mobile.html": "c65988996c1f961e3f4a1e0a0da62c6935394780b7a80d4735c7fd834be5fa2f",
-    "assets/mobile.js": "5968d138e182fc4db8bd7368f24459ec6c613c2f01776d7ed67d3c88b34bb362",
-    "assets/mobile-motion.js": "4ac5ef6ba9dc70a7bcc994c7b8c93ab986e8bf6992f44b21245336438f60414b",
+    "assets/mobile.css": "bb87d82746c429d631a5d9b61658956d8e988c22473e65695c85ed57b58a7e1e",
+    "assets/mobile.html": "588c9429ead10ad053b0c50363a37830ce7e621a1f970681233f003ebf0608da",
+    "assets/mobile.js": "54c5aa28af1974d51ba3b34e840d42c3be6e8753dda3feff8ca8d70eb520e104",
+    "assets/mobile-motion.js": "ddbb3bf67532a31dd5f134fafc32e52298908bd18636a63c907f16aca817c62e",
     "assets/mobile.webmanifest": "2194fa670294844db7bd82cd5d8f3c3dc222633642caa3fc31e7f34c854f4c9f",
     "assets/usb-role.js": "431f8e1a3e6dd1b933969e30592a79b83a5f4ff7f972fca10e762490d71938ab",
     "python/app_paths.py": "9f854ee38ff303c435b337585a951f68bc811b393744fc1924cdf4ba121c763b",
@@ -210,7 +214,7 @@
     "python/connection_sounds.py": "30f21109490e3fc21b7f3b2cf06ae620bfa58085a0bae562b71c3f379aef5b6a",
     "python/duck_sound.py": "507548a507a5741140e8cfc34fa85d65bd201ee4973e653c50554c7275e2b056",
     "python/local_ipc.py": "f258dda240f282f07ca4c6b82465b630cec2ab719c275626cd25209cde52e8e9",
-    "python/media_proxy.py": "f09760e035a775c0c58a479f80feba5aa46166bbe2c71441639325b7dc2f08c4",
+    "python/media_proxy.py": "147bfbc74f41d5c6aa4a6f3ea8d3b8e76c197ad597a53bd2cc79ee4ecea1bd02",
     "python/models/hey_ducky.onnx": "3da1728a623e61328b0aa1725891815e51d7e9185449dd97f7554a0faca1f0b1",
     "python/models/xiaoya.onnx": "8747846722a5ed2981ddb3b8c42e056f30618e369f8b5b357d2ac548d4102728",
     "python/motion_feedback.py": "4b174ac6389bae8e69b9624fd32d1b786a8ae959cbc53c6180fb64d808b06c5c",
@@ -227,7 +231,7 @@
     "python/vendor/luwu_os/apps/voice_chat/iot/__init__.py": "2742573ca565f9ee2f3c87ac354bc71fbf5574ea3aa329508dd68a0e9cccc4e4",
     "python/vendor/luwu_os/apps/voice_chat/iot/robot_dog.py": "35580e390bef935a6f0b7b96a5f0a2515577cb9ebb3f43da22f119ca7dd7e1ed",
     "python/vendor/luwu_os/apps/voice_chat/iot/thing.py": "f2e8ab73d97ef8286b2bf0385495788bc05db5776b069f7bb45f68ecd0d66bc0",
-    "python/vendor/luwu_os/apps/voice_chat/mcp_server.py": "5dc1648910fd3fa5e5ca767c1e84deb3f029b6fd5c089faa4dabbe3dc76f6158",
+    "python/vendor/luwu_os/apps/voice_chat/mcp_server.py": "1787d2c8d39046d72b906c8c4c54c741a1df64784624a18cb8b928f3cb94d9d2",
     "python/vendor/luwu_os/apps/voice_chat/mqtt_udp_protocol.py": "369e66c3252d4f17231b6e872003c260cfe03a817b0e5d7c87d66c9731d901f6",
     "python/vendor/luwu_os/apps/voice_chat/ota.py": "042d3f9be170d10e61648472a01bb5d87ca0c835efd1fd32ce2558d77c5ea21b",
     "python/vendor/luwu_os/apps/voice_chat/sound_labels.csv": "7adeee160d8231e254d122cdb4948c3d89de4daeb6a99e1cdc0c7f2d56fbd116",
@@ -245,11 +249,11 @@
     "python/vendor/microduck_voice/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
     "python/vendor/microduck_voice/NOTICE.md": "8b600d72ccaca4acf005e07394aff20e736f44f3eea55299b93bb6f766163f96",
     "python/vendor/microduck_voice/__init__.py": "59e18e22c2c5da037ff0d2a8d06468c8f48dc514433fc67a23c117232465292c",
-    "python/voice_application.py": "39f32836433e001f13252b7d4b1e2783a020ee9ee7696912a5aba8f7fa5dc856",
+    "python/voice_application.py": "9810675667a2777ac5b0d0076341874646234fdbc6395ac792849ea2cf516b5c",
     "python/voice_config.py": "26390b182b5572db8606a44f4e08939a41a4f6f3bf884a33093d931bec6f1834",
-    "python/voice_media.py": "f4f937dec11dd1d5a1f62e1723ada7618482b25fb87bd6db6a2f06434288a466",
-    "python/voice_process.py": "41ffbf002e35a382cb721944e84abdda359b4c74192697333bc33b29c1fb1a01",
-    "python/voice_supervisor.py": "fe38af4572b30e11af3ce0fc0e1189cf6937b8422b96a338c6a6207761dc368c",
+    "python/voice_media.py": "c7af4c96d3cd512ddfcfc640f991eb01227763211be3b5d562e409ce7560ca9d",
+    "python/voice_process.py": "df03334df8803b0d7080adcd2f6067053c03a52dba1d34fe8df1830abd371ab2",
+    "python/voice_supervisor.py": "ec6dc17de15e1c076fb10241f50198340aeffd7865b5cc599a74f03e261f44a2",
     "sketch/src/vl53l5cx/LICENSE.md": "ef6aa872e1cec61f008808bc061d047bfdd83cbcf3da59c232c8a65f70303f63",
     "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.cpp": "9c7668b87766eac634d1b008e46e4528726144ffa26923838799ad3af17b43f0",
     "sketch/src/vl53l5cx/SparkFun_VL53L5CX_IO.h": "c3b6111d6922bba301c80a4426db47b7ee71ff1a1db110283201062c6427ec70",
@@ -423,6 +427,128 @@
         "upstream": "                         (uint32_t)(start - sampledImu.sampleUs) <= IMU_STALE_US;\n\n    CalPacket calPkt;\n    ServoPacket servoPkt;\n    bool gotCal = false, gotServo = false;\n",
         "control_task": true
       }
+    ],
+    "reliable_transport_overlays": [
+      {
+        "integrated": "#include \"tof_sensor.h\"\n#include \"ip_matrix.h\"\n\n// The UNO Q core reinitializes this UART on each negotiated speed change.\nvoid duckEnableRouterFifo() {\n  enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(ARDUINO_ROUTER_PHANDLE)));\n}\n\nMotor motors[NUM_MOTORS];\n",
+        "upstream": "#include \"tof_sensor.h\"\n#include \"ip_matrix.h\"\n\nMotor motors[NUM_MOTORS];\n"
+      },
+      {
+        "integrated": "static atomic_t bridgeReady = ATOMIC_INIT(0), bridgeStage = ATOMIC_INIT(0);\nstatic atomic_t bridgeAttempts = ATOMIC_INIT(0), bridgeFailures = ATOMIC_INIT(0);\nstatic atomic_t registeredSession = ATOMIC_INIT(-1);\nstatic atomic_t notifyDrops = ATOMIC_INIT(0), bridgeReconnects = ATOMIC_INIT(0);\nstatic atomic_t bridgeReadyUs = ATOMIC_INIT(0);\n",
+        "upstream": "static atomic_t bridgeReady = ATOMIC_INIT(0), bridgeStage = ATOMIC_INIT(0);\nstatic atomic_t bridgeAttempts = ATOMIC_INIT(0), bridgeFailures = ATOMIC_INIT(0);\nstatic atomic_t notifyDrops = ATOMIC_INIT(0), bridgeReconnects = ATOMIC_INIT(0);\nstatic atomic_t bridgeReadyUs = ATOMIC_INIT(0);\n"
+      },
+      {
+        "integrated": "}\n\n// session() is an atomic counter, so the control thread never waits for serial I/O.\nstatic bool bridgeSessionReady() {\n  return atomic_get(&bridgeReady) && Bridge.getLinkTransport()->session() ==\n                                     (uint32_t)atomic_get(&registeredSession);\n}\n\nstatic void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {\n  CommandPacket cmd;\n",
+        "upstream": "}\n\nstatic void receiveCommand(MsgPack::bin_t<uint8_t> bytes) {\n  CommandPacket cmd;\n"
+      },
+      {
+        "integrated": "  }\n  k_mutex_lock(&commandMu, K_FOREVER);\n  if (valid && cmd.mode != DISARM && !bridgeSessionReady()) valid = false;\n  if (valid) { latest = cmd; pending = true; atomic_set(&lastHostRxUs, micros()); }\n  else ++invalidCommands;\n",
+        "upstream": "  }\n  k_mutex_lock(&commandMu, K_FOREVER);\n  if (valid && cmd.mode != DISARM && !atomic_get(&bridgeReady)) valid = false;\n  if (valid) { latest = cmd; pending = true; atomic_set(&lastHostRxUs, micros()); }\n  else ++invalidCommands;\n"
+      },
+      {
+        "integrated": "    const uint32_t hostCheckUs = micros();\n    if (hostMode != HOST_NORMAL &&\n        (!bridgeSessionReady() ||\n         (uint32_t)(hostCheckUs - hostRxUs) > HOST_HEARTBEAT_US)) {\n      // Exclusive modes retain their separate loss-of-host protection.\n",
+        "upstream": "    const uint32_t hostCheckUs = micros();\n    if (hostMode != HOST_NORMAL &&\n        (!atomic_get(&bridgeReady) ||\n         (uint32_t)(hostCheckUs - hostRxUs) > HOST_HEARTBEAT_US)) {\n      // Exclusive modes retain their separate loss-of-host protection.\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    const bool busTaken = hostMode != HOST_NORMAL;\n    if (got && !busTaken) {\n      const bool fresh = cmd.mode == DISARM || (bridgeSessionReady() && (uint32_t)(start - cmd.sourceUs) <= MAX_SOURCE_AGE_US);\n      const bool ordered = !haveCommand || cmd.mode == DISARM || (int32_t)(cmd.seq - acceptedSeq) > 0;\n      if (fresh && ordered) {\n",
+        "upstream": "    const bool busTaken = hostMode != HOST_NORMAL;\n    if (got && !busTaken) {\n      const bool fresh = cmd.mode == DISARM || (uint32_t)(start - cmd.sourceUs) <= MAX_SOURCE_AGE_US;\n      const bool ordered = !haveCommand || cmd.mode == DISARM || (int32_t)(cmd.seq - acceptedSeq) > 0;\n      if (fresh && ordered) {\n",
+        "control_task": true
+      },
+      {
+        "integrated": "      enabled = false;\n      timedOut = false;\n    } else if (enabled && (!imuFresh || !bridgeSessionReady())) {\n      enabled = false; timedOut = true;\n    }\n",
+        "upstream": "      enabled = false;\n      timedOut = false;\n    } else if (enabled && (!imuFresh || !atomic_get(&bridgeReady))) {\n      enabled = false; timedOut = true;\n    }\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    rawEveryTick = rawSnapshotEveryTick;\n    k_mutex_unlock(&stateMu);\n    if (!bridgeSessionReady()) continue;\n    if (!Bridge.tryNotify(\"duck_state\", bytes)) { atomic_inc(&notifyDrops); continue; }\n    const bool wantRaw = rawEveryTick || ((reports % 20) == 0);\n",
+        "upstream": "    rawEveryTick = rawSnapshotEveryTick;\n    k_mutex_unlock(&stateMu);\n    if (!atomic_get(&bridgeReady)) continue;\n    if (!Bridge.tryNotify(\"duck_state\", bytes)) { atomic_inc(&notifyDrops); continue; }\n    const bool wantRaw = rawEveryTick || ((reports % 20) == 0);\n"
+      },
+      {
+        "integrated": "}\n\n// Reassert the MCU routes with the reliable Router, which accepts a repeat bind from the owner.\nstatic bool routeRegistered(const char *name) {\n  bool registered = false;\n  const MsgPack::str_t route(name);\n  auto &&rpc = Bridge.call(BIND_METHOD, route);\n  return rpc.result(registered) && registered;\n}\n\nstatic void bridgeTask(void*, void*, void*) {\n  atomic_set(&bridgeStage, 1);\n  atomic_inc(&bridgeAttempts);\n  Bridge.begin(BRIDGE_MAX_BAUD, BridgeProtocol::Reliable);\n  auto *link = Bridge.getLinkTransport();\n  atomic_set(&bridgeStage, 2);\n  auto provideRoute = [](const char *name, auto handler) {\n    while (!Bridge.provide(name, handler)) {\n      atomic_inc(&bridgeFailures);\n      k_msleep(250);\n    }\n  };\n  provideRoute(\"duck_command\", receiveCommand);\n  provideRoute(\"duck_cal\", receiveCal);\n  provideRoute(\"duck_servo\", receiveServo);\n  provideRoute(\"duck_tof\", readTof);\n  provideRoute(\"duck_show_ip\", receiveStartupIp);\n\n  // RouterBridge owns UART setup, retries and session resets. Only bind each handler\n  // once: a new session restores its registrations in the library update thread.\n  for (;;) {\n    uint32_t session = link->session();\n    const bool routesReady = link->connected() &&\n        routeRegistered(\"duck_command\") && routeRegistered(\"duck_cal\") &&\n        routeRegistered(\"duck_servo\") && routeRegistered(\"duck_tof\") &&\n        routeRegistered(\"duck_show_ip\") && link->session() == session;\n    if (routesReady) {\n      atomic_set(&registeredSession, session);\n      if (!atomic_get(&bridgeReady)) atomic_set(&bridgeReadyUs, micros());\n      atomic_set(&bridgeStage, 3);\n      atomic_set(&bridgeReady, 1);\n    }\n    if (!routesReady || link->session() != session) {\n      atomic_inc(&bridgeFailures);\n    }\n    // Invalidate queued motion promptly on a session change, even between probes.\n    for (int i = 0; routesReady && i < 20; ++i) {\n      if (!link->connected() || link->session() != session) break;\n      k_msleep(50);\n    }\n    if (!routesReady || !link->connected() || link->session() != session) {\n      if (atomic_get(&bridgeReady)) atomic_inc(&bridgeReconnects);\n      atomic_clear(&bridgeReady);\n      atomic_set(&bridgeStage, 4);\n      k_mutex_lock(&commandMu, K_FOREVER);\n      if (latest.mode != DISARM) pending = false;\n      k_mutex_unlock(&commandMu);\n      k_msleep(250);\n    }\n  }\n}\n",
+        "upstream": "}\n\n// Router 0.11.0 answers a repeated `$/register` from the route's owner with success.\n// Routers 0.5.4-0.10.x answer RouteAlreadyExists (code 5) while the route is intact.\n// Either way this connection already owns the route; timeouts and other errors do not.\nstatic bool routeRegistered(const char *name) {\n  constexpr int ROUTE_EXISTS = 5;\n  bool registered = false;\n  const MsgPack::str_t route(name);\n  auto &&rpc = Bridge.call(BIND_METHOD, route);\n  return (rpc.result(registered) && registered) || rpc.getErrorCode() == ROUTE_EXISTS;\n}\n\nstatic void bridgeTask(void*, void*, void*) {\n  uint32_t backoffMs = 250;\n  for (;;) {\n    atomic_clear(&bridgeReady);\n    atomic_set(&bridgeStage, 1);\n    atomic_inc(&bridgeAttempts);\n    // setup() already initialized this UART and enabled its hardware FIFO.\n    bool ready = Bridge.begin(BRIDGE_BAUD, true);\n    if (ready) {\n      atomic_set(&bridgeStage, 2);\n      ready = Bridge.provide(\"duck_command\", receiveCommand) &&\n              Bridge.provide(\"duck_cal\", receiveCal) &&\n              Bridge.provide(\"duck_servo\", receiveServo) &&\n              Bridge.provide(\"duck_tof\", readTof) &&\n              Bridge.provide(\"duck_show_ip\", receiveStartupIp);\n    }\n    if (!ready) {\n      atomic_inc(&bridgeFailures);\n      atomic_set(&bridgeStage, 4);\n      Bridge.invalidate();\n      k_msleep(backoffMs);\n      backoffMs = backoffMs < 2000 ? backoffMs * 2 : 2000;\n      continue;\n    }\n    atomic_set(&bridgeReadyUs, micros());\n    atomic_set(&bridgeStage, 3);\n    atomic_set(&bridgeReady, 1);\n    backoffMs = 250;\n    for (;;) {\n      k_msleep(1000);\n      MsgPack::str_t version;\n      if (!Bridge.getRouterVersion(version)) break;\n      // A serial reconnect drops Router registrations while version still works.\n      // Re-assert every route: \"already registered\" counts, local handlers stay bound.\n      if (!(routeRegistered(\"duck_command\") && routeRegistered(\"duck_cal\") &&\n            routeRegistered(\"duck_servo\") && routeRegistered(\"duck_tof\") &&\n            routeRegistered(\"duck_show_ip\"))) break;\n    }\n    atomic_clear(&bridgeReady);\n    atomic_inc(&bridgeFailures);\n    atomic_inc(&bridgeReconnects);\n    atomic_set(&bridgeStage, 4);\n    k_mutex_lock(&commandMu, K_FOREVER);\n    pending = false;\n    k_mutex_unlock(&commandMu);\n    Bridge.invalidate();\n    k_msleep(backoffMs);\n  }\n}\n"
+      },
+      {
+        "integrated": "                  imuTask, nullptr, nullptr, nullptr, 4, 0, K_NO_WAIT);\n  k_thread_name_set(&imuThread, \"duck_imu100\");\n  k_thread_create(&bridgeThread, bridgeStack, K_THREAD_STACK_SIZEOF(bridgeStack),\n                  bridgeTask, nullptr, nullptr, nullptr, 6, 0, K_NO_WAIT);\n",
+        "upstream": "                  imuTask, nullptr, nullptr, nullptr, 4, 0, K_NO_WAIT);\n  k_thread_name_set(&imuThread, \"duck_imu100\");\n  ARDUINO_ROUTER_SERIAL.begin(BRIDGE_BAUD);\n  enableUartFifo(reinterpret_cast<USART_TypeDef*>(DT_REG_ADDR(ARDUINO_ROUTER_PHANDLE)));\n  k_thread_create(&bridgeThread, bridgeStack, K_THREAD_STACK_SIZEOF(bridgeStack),\n                  bridgeTask, nullptr, nullptr, nullptr, 6, 0, K_NO_WAIT);\n"
+      }
+    ],
+    "servo_reply_diagnostic_overlays": [
+      {
+        "integrated": "  if (pkt.op == SERVO_TEST_START) {\n    uint16_t position = 0;\n    if (servoTest.session ||\n        !readServoPresent(pkt.targetId, position, true, SETUP_READ_ATTEMPTS)) return false;\n    stoppedServoTest = {};\n    reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;\n",
+        "upstream": "  if (pkt.op == SERVO_TEST_START) {\n    uint16_t position = 0;\n    if (servoTest.session || !readServoPresent(pkt.targetId, position, true)) return false;\n    stoppedServoTest = {};\n    reply.testFeedbackLimit = SERVO_TEST_MAX_MISSED_FRAMES;\n"
+      },
+      {
+        "integrated": "      uint8_t flags = 0;\n      uint16_t current = 0;\n      const unsigned attempts = hostMode == HOST_SERVO_DEBUG && pkt.op == SERVO_READ_PROTECTION\n                                  ? SETUP_READ_ATTEMPTS : 1;\n      reply.ok = readServoProtection(pkt.targetId, flags, current, attempts);\n      if (reply.ok && pkt.op == SERVO_SET_PROTECTION_SWITCH) {\n        const uint8_t wanted = (flags & ~pkt.protectionMask) | pkt.protectionFlags;\n",
+        "upstream": "      uint8_t flags = 0;\n      uint16_t current = 0;\n      reply.ok = readServoProtection(pkt.targetId, flags, current);\n      if (reply.ok && pkt.op == SERVO_SET_PROTECTION_SWITCH) {\n        const uint8_t wanted = (flags & ~pkt.protectionMask) | pkt.protectionFlags;\n"
+      },
+      {
+        "integrated": "      uint16_t pos = 0;\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoPresent(pkt.targetId, pos, false, SETUP_READ_ATTEMPTS) &&\n                 readServoGains(pkt.targetId, kp, kd, ADDR_PERM_KP_KD, SETUP_READ_ATTEMPTS);\n      reply.rawPos = pos;\n      reply.kp = kp; reply.kd = kd;\n",
+        "upstream": "      uint16_t pos = 0;\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoPresent(pkt.targetId, pos) && readServoGains(pkt.targetId, kp, kd);\n      reply.rawPos = pos;\n      reply.kp = kp; reply.kd = kd;\n"
+      },
+      {
+        "integrated": "      if (hostMode == HOST_CAL) { reply.ok = 0; break; }\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoGains(pkt.targetId, kp, kd, ADDR_TEMP_KP,\n                                hostMode == HOST_SERVO_DEBUG ? SETUP_READ_ATTEMPTS : 1);\n      reply.kp = kp; reply.kd = kd;\n      break;\n",
+        "upstream": "      if (hostMode == HOST_CAL) { reply.ok = 0; break; }\n      uint8_t kp = 0, kd = 0;\n      reply.ok = readServoGains(pkt.targetId, kp, kd, ADDR_TEMP_KP);\n      reply.kp = kp; reply.kd = kd;\n      break;\n"
+      },
+      {
+        "integrated": "    uint16_t position = 0;\n    if (servoTest.session || !readServoPresent(pkt.targetId, position, true)) return false;\n    stoppedServoTest = {};\n",
+        "upstream": "    uint16_t position = 0;\n    if (servoTest.session || !readServoPresent(pkt.targetId, position) || position > POS_MAX) return false;\n    stoppedServoTest = {};\n",
+        "control_task": false
+      },
+      {
+        "integrated": "    k_mutex_lock(&stateMu, K_FOREVER);\n    size_t detailSize = 0;\n    if (sendReplyDetail) {\n      detailSize = replyDetailSnapshot.invalidPositionMask ? sizeof(ServoReplyDetail)\n                                                           : offsetof(ServoReplyDetail, invalidPositionMask);\n    }\n    bytes.resize(sizeof(snapshot) + detailSize);\n    memcpy(bytes.data(), &snapshot, sizeof(snapshot));\n    if (detailSize) memcpy(bytes.data() + sizeof(snapshot), &replyDetailSnapshot, detailSize);\n    raw = rawSnapshot; diagnostic = diagnosticSnapshot;\n",
+        "upstream": "    k_mutex_lock(&stateMu, K_FOREVER);\n    bytes.resize(sizeof(snapshot) + (sendReplyDetail ? sizeof(ServoReplyDetail) : 0));\n    memcpy(bytes.data(), &snapshot, sizeof(snapshot));\n    if (sendReplyDetail) memcpy(bytes.data() + sizeof(snapshot), &replyDetailSnapshot, sizeof(ServoReplyDetail));\n    raw = rawSnapshot; diagnostic = diagnosticSnapshot;\n",
+        "control_task": false
+      },
+      {
+        "integrated": "static StatePacket snapshot = {};\nstatic ServoReplyDetail replyDetailSnapshot = {};\nstatic bool sendReplyDetail = false;\nstatic RawPacket rawSnapshot = {};\n",
+        "upstream": "static StatePacket snapshot = {};\nstatic RawPacket rawSnapshot = {};\n",
+        "control_task": false
+      },
+      {
+        "integrated": "    drainServoRx();\n    beginStateRead();\n    memset(servoVoltage, 0, sizeof(servoVoltage));\n",
+        "upstream": "    drainServoRx();\n    servoRxMask = 0;\n    memset(servoVoltage, 0, sizeof(servoVoltage));\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    const uint32_t servoWaitUs = micros() - readStart;\n    collectingStateReplies = false;\n    checkServoTestFeedback(servoRxMask);\n",
+        "upstream": "    const uint32_t servoWaitUs = micros() - readStart;\n    checkServoTestFeedback(servoRxMask);\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    StatePacket s = {};\n    memcpy(s.magic, \"DQS2\", 4); s.version = 2;\n    s.flags = (publishImuOk ? 1 : 0) | (enabled ? 2 : 0) | (timedOut ? 4 : 0) |\n",
+        "upstream": "    StatePacket s = {};\n    memcpy(s.magic, \"DQS1\", 4); s.version = 1;\n    s.flags = (publishImuOk ? 1 : 0) | (enabled ? 2 : 0) | (timedOut ? 4 : 0) |\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    s.reportDrops = reportDrops; snapshot = s;\n    replyDetailSnapshot = servoReplyDetail;\n    sendReplyDetail = abnormalStateReply || s.servoMask != 0x7FFFu;\n    rawSnapshot = raw; rawSnapshotEveryTick = rawNotifyEveryTick;\n",
+        "upstream": "    s.reportDrops = reportDrops; snapshot = s;\n    rawSnapshot = raw; rawSnapshotEveryTick = rawNotifyEveryTick;\n",
+        "control_task": true
+      },
+      {
+        "integrated": "  unsigned reports = 0;\n  bytes.reserve(sizeof(StatePacket) + sizeof(ServoReplyDetail));\n  for (;;) {\n",
+        "upstream": "  unsigned reports = 0;\n  bytes.resize(sizeof(StatePacket));\n  for (;;) {\n",
+        "control_task": false
+      },
+      {
+        "integrated": "    k_mutex_lock(&stateMu, K_FOREVER);\n    bytes.resize(sizeof(snapshot) + (sendReplyDetail ? sizeof(ServoReplyDetail) : 0));\n    memcpy(bytes.data(), &snapshot, sizeof(snapshot));\n    if (sendReplyDetail) memcpy(bytes.data() + sizeof(snapshot), &replyDetailSnapshot, sizeof(ServoReplyDetail));\n    raw = rawSnapshot; diagnostic = diagnosticSnapshot;\n",
+        "upstream": "    k_mutex_lock(&stateMu, K_FOREVER);\n    memcpy(bytes.data(), &snapshot, sizeof(snapshot));\n    raw = rawSnapshot; diagnostic = diagnosticSnapshot;\n",
+        "control_task": false
+      }
+    ],
+    "id_protection_overlays": [
+      {
+        "upstream": "    memcpy(&pkt, bytes.data(), sizeof(pkt));\n    valid = memcmp(pkt.magic, \"DQV2\", 4) == 0 && pkt.op <= SERVO_SET_PROTECTION_SWITCH &&\n            pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;\n",
+        "integrated": "    memcpy(&pkt, bytes.data(), sizeof(pkt));\n    valid = memcmp(pkt.magic, \"DQV2\", 4) == 0 && pkt.op <= SERVO_INIT_ID_PROTECTION &&\n            pkt.op != 4 && pkt.op != SERVO_APPLY_RUN_GAINS;\n"
+      },
+      {
+        "upstream": "    if (pkt.op == SERVO_SET_ID) valid = valid && pkt.newId <= 253;\n    if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;\n",
+        "integrated": "    if (pkt.op == SERVO_SET_ID) valid = valid && pkt.newId <= 253;\n    if (pkt.op == SERVO_INIT_ID_PROTECTION) valid = valid && !pkt.newId && !pkt.kp && !pkt.kd;\n    if (!atomic_get(&bridgeReady) && pkt.op != SERVO_EXIT) valid = false;\n"
+      },
+      {
+        "upstream": "      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtectionCurrent(pkt.protectionCurrent);\n      reply.protectionCurrent = pkt.protectionCurrent;\n      break;\n    case SERVO_READ_PROTECTION:\n",
+        "integrated": "      if (hostMode != HOST_SERVO_DEBUG) { reply.ok = 0; break; }\n      servoSetProtectionCurrent(pkt.targetId, pkt.protectionCurrent);\n      reply.protectionCurrent = pkt.protectionCurrent;\n      break;\n    case SERVO_INIT_ID_PROTECTION: {\n      uint8_t flags = 0;\n      uint16_t current = 0;\n      reply.ok = hostMode == HOST_SERVO_DEBUG && !torqueEnabled &&\n                 initServoIdProtection(pkt.targetId, flags, current);\n      reply.protectionFlags = flags;\n      reply.protectionCurrent = current;\n      break;\n    }\n    case SERVO_READ_PROTECTION:\n"
+      }
     ]
   },
   "mcu_compatibility": {
@@ -577,7 +703,7 @@
     "scope": "Explain one-time setup, boot autostart, ordered network/voice duck sounds and the xiao-ya wake phrase in both READMEs and the AI binding dialog. Browser-local sound examples use the actual connection cue kinds and software gain. Previews never command Duck or write its configuration, and stop on close, hide, page exit or a new selection. Runtime autostart, actual connection sound playback, motion, models, calibration and MCU are unchanged."
   },
   "battery_overlay": {
-    "description": "Sample the median servo supply voltage and publish it in DQD2 diagnostics. Linux also accepts legacy DQD1 packets. Below 6.0 V for five consecutive seconds, stop travel, play the configured language announcement, then disarm with a bounded wait. The cockpit highlights low voltage during protection while the current reading is below 6.0 V. Protection releases after two consecutive seconds at or above 7.6 V.",
+    "description": "Sample the median servo supply voltage and publish it in DQD2 diagnostics. Linux also accepts legacy DQD1 packets. Below 6.0 V for five consecutive seconds, stop travel and play the configured language announcement. With healthy feedback and torque already enabled, run the normal sit policy for at least 1.5 seconds before release, subject to the 12-second protection deadline. Disarm immediately when sitting is unavailable or feedback is lost. The cockpit highlights low voltage during protection while the current reading is below 6.0 V. Protection releases after two consecutive seconds at or above 7.6 V.",
     "audio": {
       "model": "qwen-audio-3.1-tts-flash",
       "voice": "XGO Duck custom voice",
@@ -611,7 +737,7 @@
   "calibration_guide_overlay": {
     "guide": "docs/calibration-guide.md",
     "provenance": "provenance/calibration-guide.json",
-    "scope": "Unified servo calibration using four reference photos, then standing IMU calibration and the existing default-pose check. The single-servo installation check still uses its 15 URDF diagrams.",
+    "scope": "Unified servo calibration using four reference photos, followed by separate ID 30 neck centering, standing IMU calibration and the existing default-pose check. The single-servo installation check still uses its 15 URDF diagrams.",
     "files": [
       "assets/calibrate.html",
       "assets/calibrate.js",
@@ -717,6 +843,46 @@
       ]
     }
   },
+  "imu_recovery_overlay": {
+    "scope": "STM32 invalidates ten consecutive all-zero IMU samples, reinitializes the sensor, and keeps torque off after recovery.",
+    "sketch_overlays": [
+      {
+        "integrated": "static bool imuAxesAreZero(const ImuSample &sample) {\n  for (unsigned axis = 0; axis < 3; ++axis) {\n    if (sample.accRaw[axis] != 0 || sample.gyroRaw[axis] != 0) return false;\n  }\n  return true;\n}\n\nstatic void imuTask(void*, void*, void*) {\n  ImuSnapshot out = {};\n  uint32_t deadline = micros(), previousSampleUs = 0, nextInitUs = 0;\n  constexpr unsigned ZERO_FRAME_LIMIT = 10, RECOVERY_GOOD_FRAMES = 3;\n  unsigned failedReads = 0, zeroFrames = 0, goodFramesNeeded = 0;\n",
+        "upstream": "static void imuTask(void*, void*, void*) {\n  ImuSnapshot out = {};\n  uint32_t deadline = micros(), previousSampleUs = 0, nextInitUs = 0;\n  unsigned failedReads = 0;\n"
+      },
+      {
+        "integrated": "      failedReads = zeroFrames = 0;\n      deadline = micros();\n",
+        "upstream": "      failedReads = 0;\n      deadline = micros();\n"
+      },
+      {
+        "integrated": "    if (configured) {\n      const bool readOk = updateImu();\n      if (readOk && !imuAxesAreZero(imu)) {\n        failedReads = zeroFrames = 0;\n        if (goodFramesNeeded) --goodFramesNeeded;\n        if (!goodFramesNeeded) {\n          out.sample = imu;\n          out.sampleUs = micros();\n          out.periodUs = previousSampleUs ? out.sampleUs - previousSampleUs : TICK_US;\n          previousSampleUs = out.sampleUs;\n          ++out.seq;\n        }\n      } else {\n        ++out.errors;\n        if (goodFramesNeeded) goodFramesNeeded = RECOVERY_GOOD_FRAMES;\n        if (readOk) {\n          // Keep the last good sample and its original timestamp until the fault is confirmed.\n          ++zeroFrames;\n          failedReads = 0;\n        } else {\n          ++failedReads;\n          zeroFrames = 0;\n          out.sample.ok = 0;\n        }\n        if (zeroFrames == ZERO_FRAME_LIMIT || failedReads == 3) {\n          if (zeroFrames == ZERO_FRAME_LIMIT) ++out.zeroResets;\n          out.sample.ok = 0;\n          goodFramesNeeded = RECOVERY_GOOD_FRAMES;\n",
+        "upstream": "    if (configured && updateImu()) {\n      out.sample = imu;\n      out.sampleUs = micros();\n      out.periodUs = previousSampleUs ? out.sampleUs - previousSampleUs : TICK_US;\n      previousSampleUs = out.sampleUs;\n      ++out.seq;\n      failedReads = 0;\n    } else {\n      out.sample.ok = 0;\n      if (configured) {\n        ++out.errors;\n        if (++failedReads >= 3) {\n"
+      },
+      {
+        "integrated": "  uint32_t servoWrites = 0, servoReads = 0, seenZeroResets = 0;\n  bool enabled = false, timedOut = false, haveCommand = false;\n  bool imuNeedsDisarm = false;\n",
+        "upstream": "  uint32_t servoWrites = 0, servoReads = 0;\n  bool enabled = false, timedOut = false, haveCommand = false;\n",
+        "control_task": true
+      },
+      {
+        "integrated": "    if (sampledImu.zeroResets != seenZeroResets) {\n      seenZeroResets = sampledImu.zeroResets;\n      imuNeedsDisarm = true;\n      enabled = false;\n      timedOut = true;\n      // Also unload individual joints held by calibration or an installation test.\n      hostMode = HOST_NORMAL;\n      rawNotifyEveryTick = false;\n      calBatch = {};\n      calIndex = servoMidId = 0xFF;\n      servoTest = {};\n      k_mutex_lock(&motorsMu, K_FOREVER);\n      calHeldMask = 0;\n      k_mutex_unlock(&motorsMu);\n      setTorqueEnable(false);\n    }\n    if (imuNeedsDisarm && gotCal && calPkt.command.op == CAL_CENTER_ONE) {\n      publishCalReply(calPkt.command.seq, calPkt.command.index, false);\n      gotCal = false;\n    }\n    if (imuNeedsDisarm && gotServo && servoPkt.op == SERVO_TEST_START) {\n      ServoReplyPacket reply = {};\n      memcpy(reply.magic, \"DQS3\", 4);\n      reply.op = servoPkt.op;\n      reply.targetId = servoPkt.targetId;\n      reply.testSession = servoPkt.testSession;\n      publishServoReply(reply);\n      gotServo = false;\n    }\n",
+        "upstream": "",
+        "control_task": true
+      },
+      {
+        "integrated": "    bool got = pending;\n    if (got) { cmd = latest; pending = false; }\n    const uint32_t bad = invalidCommands;\n    k_mutex_unlock(&commandMu);\n    if (imuNeedsDisarm && got) {\n      // Observe a fresh unloaded host command after valid IMU samples return.\n      // An ARM retry from before the fault must never re-enable the servos.\n      if (cmd.mode == DISARM && imuFresh && (uint32_t)(start - cmd.sourceUs) <= MAX_SOURCE_AGE_US) {\n        imuNeedsDisarm = false;\n      } else if (cmd.mode == ARM) {\n        got = false;\n      }\n    }\n",
+        "upstream": "    const bool got = pending;\n    if (got) { cmd = latest; pending = false; }\n    const uint32_t bad = invalidCommands;\n    k_mutex_unlock(&commandMu);\n",
+        "control_task": true
+      }
+    ],
+    "source_overlays": {
+      "sketch/qmi8658.h": [
+        {
+          "integrated": "  uint32_t zeroResets;\n",
+          "upstream": ""
+        }
+      ]
+    }
+  },
   "motion_optimization_overlay": {
     "base_commit": "3f9db11c376030d234c5b1299862211e87b590f1",
     "scope": "Update the walking, get-up and sit/stand models and standing settings, kick action smoothing and scale, and directional fall thresholds with immediate get-up.",
@@ -730,6 +896,10 @@
     },
     "previous_controller_method_sha256": {
       "_sitstand_status_locked": "debac25c43db92c744c64bf4f4058e412816fb17660ad4b6442761d948d2116c"
+    },
+    "model_sources": {
+      "python/xgoduck_walk.onnx": "6168aedfdba33c8fe57045f54bc46836c44a572c",
+      "python/xgoduck_getup.onnx": "be5504c6c6939f7da399d37dae3191b4780e6774"
     }
   }
 }

@@ -78,7 +78,7 @@ Download and verify `xgoduck_ai.zip`. In App Lab, select **Apps → ＋ → Impo
      arduino-app-cli app start "$PWD"
    ```
 
-   The first script sets up hardware support, the cockpit and autostart. The second sets the shared Router serial link to **2 Mbps**. Startup uploads the matching STM32 firmware. The source ZIP builds it on the board, and the `.ard` uses its bundled firmware. Once configured, you can also start the App with **Run** in App Lab.
+   The first script sets up hardware support, the cockpit and autostart. The second configures the shared Router for the firmware in that package. The development build starts the handshake at 115200 baud and negotiates **2 Mbaud** over the reliable protocol. Startup uploads the matching STM32 firmware. The source ZIP builds it on the board, and the `.ard` uses its bundled firmware. Once configured, you can also start the App with **Run** in App Lab.
 
 **Verify the installation.** Open `http://<board-ip>/` and `http://<board-ip>:9527/` and check the running version and default App. After dependency preparation and the first startup finish, keep servo torque off and reboot the board once. Reconnect over Wi-Fi SSH, wait for the web pages/API, and confirm that the default App starts automatically with the correct version. Check servo and IMU feedback for connected hardware and preserve existing calibration and settings. Record unwired or uncalibrated hardware as unfinished setup.
 
@@ -185,8 +185,8 @@ Path to any package I already downloaded: [optional].
    if supported, or guide me through the App Lab import. Locate the imported directory.
    Read sketch/sketch.yaml, provenance/toolchain.json and python/requirements.txt. Run arduino-cli core list
    as arduino, install the core pinned in sketch/sketch.yaml if it is missing or differs, and verify it.
-   For 0.3.6, use arduino-cli core install arduino:zephyr@1.0.0. The sketch uses
-   Arduino_RouterBridge 0.4.3, Arduino_RPClite 0.3.1 and the Linux ARM64
+   For 0.3.6, use arduino-cli core install arduino:zephyr@1.0.0. Use the RouterBridge and RPClite dependencies listed in the package’s sketch.yaml.
+   Local directory entries require Arduino CLI 1.3.0 or later and select the bundled libraries. Use the Linux ARM64
    arm-zephyr-eabi 1.0.1 toolchain. The upload also needs the matching core. If the toolchain download
    fails, download the official archive from provenance/toolchain.json on my computer, verify its size
    and SHA-256 and transfer it with SCP. From the App directory, run
@@ -208,9 +208,12 @@ Path to any package I already downloaded: [optional].
    For the .ard and source ZIP, keep internet access and use the actual new App directory after
    migrating data. Run bash tools/install-ai-support.sh, then sudo bash tools/router-2m.sh, then
    arduino-app-cli app start "$PWD". Continue after each command succeeds. Startup uploads the STM32
-   firmware. Reference versions from the full bundle are Router 0.11.0, App CLI 0.14.1, Arduino CLI
-   1.5.1 and ARM64 Python base image 0.13.1. Check the selected package and reuse compatible components.
-   Confirm Router ExecStart uses 2000000 and the default App points to the new directory.
+   firmware. The reference full bundle installs system Router 0.11.0, App CLI 0.14.1, Arduino CLI
+   1.5.1 and ARM64 Python base image 0.13.1. Reliable-protocol packages run their own bundled Router binary.
+   Check the selected package and reuse compatible components.
+   Confirm the default App points to the new directory. For a reliable-protocol package, check that
+   the Router runs with --serial-protocol auto and --serial-max-baudrate 2000000. After App startup,
+   sudo stty -F /dev/ttyHS1 speed should report 2000000. For an older fixed-baud Duck, run its own Router script.
 
 8. Keep the servos unloaded during verification. Check the cockpit, the port 9527 control page and
    /api/version. After preparation and the first startup finish, run sudo systemctl reboot. Reconnect
@@ -234,7 +237,7 @@ Path to any package I already downloaded: [optional].
    App from the old directory, then run the old version and keep the backup. Report the chosen package,
    checksum, running version, path and checks.
    Once installed, send me back to README steps 5–8: number the servos, assemble Duck, calibrate all
-   15 servo centers together (including ID 30), calibrate the IMU, then check Default pose, bind an
+   15 servo centers together, set ID 30 separately, calibrate the IMU, then check Default pose, bind an
    account and select an agent. Point me to the next unfinished step.
 ```
 
@@ -264,9 +267,10 @@ Path to any package I already downloaded: [optional].
 
 Open `http://<board-ip>:9527/` and check that all **15/15** servos are online. Support Duck before opening **Calibration**. Wait for the page to confirm that the servos are unloaded.
 
-1. **Calibrate all 15 servos.** Position Duck as shown in the four photos, keeping cables clear of the joints. Click **Calibrate all 15 servos** and wait for confirmation. This includes the neck servo (ID 30).
-2. **Calibrate the IMU.** With the servos unloaded, hold the UNO Q upright with its battery connector pointing up and its bottom edge against a level table. Click **Calibrate IMU** and hold still for about **1.5 seconds**. [IMU calibration details](docs/imu-calibration.md)
-3. **Check the default pose.** Support Duck on a level surface and click **Default pose** at the bottom of **Calibration**. Once the servos engage, compare its neck, legs and feet with the photo. If the pose differs, support Duck and click **Unload all** before rechecking its placement and servo calibration.
+1. **Calibrate all 15 servos.** Position Duck as shown in the four photos, keeping cables clear of the joints. Click **Calibrate all 15 servos** and wait for confirmation.
+2. **Calibrate the neck separately.** Position the neck parallel to the torso and click **Calibrate ID 30**. When the center is saved, click **Unload all**.
+3. **Calibrate the IMU.** With the servos unloaded, hold the UNO Q upright with its battery connector pointing up and its bottom edge against a level table. Click **Calibrate IMU** once and hold still until the page confirms the save. The page shows any automatic retries. [IMU calibration details](docs/imu-calibration.md)
+4. **Check the default pose.** Support Duck on a level surface and click **Default pose** at the bottom of **Calibration**. Once the servos engage, compare its neck, legs and feet with the photo. If the pose differs, support Duck and click **Unload all** before rechecking its placement and servo calibration.
 
 <img src="docs/images/default-pose-reference.jpg" alt="Default standing pose with roller feet on the left and standard feet on the right" width="900">
 
@@ -317,7 +321,7 @@ Later power-ups detect USB audio and video and start the cockpit, chat and motio
 | 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
 | 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
 
-If Duck is unpaired, it says “Please open [current IP address] in your browser to complete AI pairing” three times after the network sound. Once Duck has a Wi-Fi IP address at startup, the UNO Q LED matrix shows its last segment for about one minute. For example, `192.168.31.20` appears as `20`.
+If Duck is unpaired, it says “Please open [current IP address] in your browser to complete AI pairing” three times after the network sound. Once Duck has a Wi-Fi IP address at startup, the UNO Q LED matrix scrolls the full address (for example, `192.168.31.8`) from left to right. The last digit enters first, and the dots move with the digits. The display turns off after 30 seconds.
 
 After the voice service sound, say the wake word shown under **Link AI → Automatic startup & wake**. Speak after Duck’s wake-up call. You can play the startup examples there on your phone or computer. The actual startup sounds play through Duck’s speaker.
 
@@ -330,14 +334,14 @@ After the voice service sound, say the wake word shown under **Link AI → Autom
 - Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
 - **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
 - On power-up, Duck tries USB Host for up to 5 seconds of device detection. It keeps Host if a USB camera or audio device is detected and switches to Device otherwise. For accessories plugged in after boot, use the **USB Host** switch at the top of the cockpit over Wi-Fi after stopping Duck. Switching interrupts the current USB connection.
-- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward travel slows within 15 cm and stops at 10 cm by default. If ToF is absent or offline, you can issue a new forward command without distance-based avoidance. Stale or invalid readings while the sensor reports ranging still pause forward travel. [Avoidance settings](docs/forward-avoidance.md)
+- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward obstacle avoidance is off by default. Turn it on in the ToF panel to slow forward travel within 15 cm and stop at 10 cm at ordinary speeds. Forward travel remains available if the sensor is absent, offline, or has no fresh valid front reading. [Avoidance settings](docs/forward-avoidance.md)
 
 ## FAQ
 
 ### 1. Duck shakes or walks unsteadily
 
-1. Stop moving, support Duck, and release servo torque. Use **Servo setup → Single-servo installation check** to verify IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.
-2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to calibrate all 15 servos, then the IMU, and check the default pose.
+1. Stop moving, support Duck, and release servo torque. Use **Servo setup → Single-servo motion control** to verify IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.
+2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to calibrate all 15 servos, set ID 30 separately, then calibrate the IMU, and check the default pose.
 3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

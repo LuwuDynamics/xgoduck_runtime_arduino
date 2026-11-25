@@ -20,11 +20,12 @@
   let rollerBusy = false, rollerRevision = 0;
   const deadzone = value => Math.abs(value) <= .15 ? 0 : value;
 
-  async function send(kind, twist) {
+  async function send(kind, twist, rollerRelease = false) {
     const drive = kind === 'begin' || kind === 'drive';
     const response = await fetch('/api/cockpit/motion', {
       method:'POST', headers:{'Content-Type':'application/json', 'X-Duck-Cockpit':'1'},
-      body:JSON.stringify({controller_id:controllerId, sequence:++sequence, kind, twist}),
+      body:JSON.stringify({controller_id:controllerId, sequence:++sequence, kind, twist,
+        roller_release:rollerRelease || undefined}),
       signal:AbortSignal.timeout(drive ? 350 : 3000),
       keepalive:kind === 'release' || kind === 'torque_off'
     });
@@ -44,6 +45,7 @@
 
   function release() {
     const active = gesture !== null;
+    clearInterval(gesture?.timer);
     gesture = null;
     heldKeys.clear();
     sticks.forEach(resetStick);
@@ -148,20 +150,47 @@
   }
   rollerSwitch.addEventListener('click', switchRoller);
 
+  function startGesture(source) {
+    if (!gesture) {
+      gesture = {twist:[0,0,0], started:false, busy:false,
+        timer:setInterval(drive, robot?.roller?.enabled ? 50 : 75)};
+    }
+    gesture.source = source;
+  }
+
+  function centerControls() {
+    if (gesture && robot?.roller?.enabled && (gesture.twist[0] || gesture.finishing) && !gesture.paused && !gesture.forwardBlocked) {
+      gesture.source = null;
+      drive();
+    } else {
+      release();
+    }
+  }
+
   async function drive() {
     const current = gesture;
-    if (!current || current.busy) return;
+    if (!current) return;
+    if (current.busy) return;
     current.busy = true;
     const [move,turn] = sticks, roller = robot?.roller?.enabled === true;
-    const target = [deadzone(move.y) * .15, roller ? 0 : -deadzone(move.x) * .3,
-      -deadzone(turn.x) * (roller ? .25 : 1)];
-    current.twist = target.map((value, i) => value === 0 ? 0 : current.twist[i] + .35 * (value - current.twist[i]));
+    const target = [deadzone(move.y) * (roller ? .4 : .15), roller ? 0 : -deadzone(move.x) * .3,
+      -deadzone(turn.x) * (roller ? .45 : 1)];
+    const rollerRelease = !current.source || (roller && current.started && !target.some(Boolean)
+      && Boolean(current.twist[0] || current.finishing));
+    current.twist = target.map((value, i) => {
+      if (!roller) return value === 0 ? 0 : current.twist[i] + .35 * (value - current.twist[i]);
+      const next = .75 * current.twist[i] + .25 * value;
+      return value === 0 && Math.abs(next) < .001 ? 0 : next;
+    });
     try {
-      const data = await send(current.started ? 'drive' : 'begin', current.twist);
+      if (rollerRelease && !current.started) {release(); return;}
+      const data = await send(current.started ? 'drive' : 'begin', rollerRelease ? [0,0,0] : current.twist, rollerRelease);
       if (gesture !== current) return;
       current.started = true;
+      current.finishing = data.roller_gliding === true;
       current.paused = data.paused === true;
       current.forwardBlocked = data.forward_blocked === true;
+      if (!current.source && (current.paused || current.forwardBlocked || (rollerRelease && !data.roller_gliding))) release();
       render();
     } catch (error) {
       if (gesture === current) {
@@ -186,10 +215,10 @@
 
   function move(stick, event) {
     const bounds = stick.pad.getBoundingClientRect();
-    const travel = (bounds.width - stick.knob.offsetWidth) / 2;
-    const verticalOnly = stick === sticks[0] && robot?.roller?.enabled === true;
-    const x = verticalOnly ? 0 : (event.clientX - bounds.left - bounds.width / 2) / travel;
-    const y = stick === sticks[0] ? (bounds.top + bounds.height / 2 - event.clientY) / travel : 0;
+    const roller = robot?.roller?.enabled === true;
+    const travel = ((roller ? stick.pad.clientWidth : bounds.width) - stick.knob.offsetWidth) / 2;
+    const x = (event.clientX - bounds.left - bounds.width / 2) / travel;
+    const y = roller || stick === sticks[0] ? (bounds.top + bounds.height / 2 - event.clientY) / travel : 0;
     positionStick(stick, x, y, travel);
   }
 
@@ -202,7 +231,7 @@
       pad.setPointerCapture(event.pointerId);
       stick.pointer = event.pointerId;
       pad.classList.add('is-held');
-      gesture ??= {source:'pointer', twist:[0,0,0], started:false, busy:false};
+      startGesture('pointer');
       notice = null;
       move(stick, event);
       drive();
@@ -212,7 +241,8 @@
       pad.addEventListener(type, event => {
         if (event.pointerId !== stick.pointer) return;
         resetStick(stick);
-        if (sticks.every(item => item.pointer === null)) {release(); render();}
+        if (type !== 'pointerup') {release(); render();}
+        else if (sticks.every(item => item.pointer === null)) {centerControls(); render();}
         else drive();
       });
     }
@@ -246,7 +276,7 @@
     event.preventDefault();
     if (event.repeat || heldKeys.has(event.code) || !allowRemote()) return;
     heldKeys.add(event.code);
-    gesture ??= {source:'keyboard', twist:[0,0,0], started:false, busy:false};
+    startGesture('keyboard');
     notice = null;
     keyboardSticks();
   });
@@ -255,7 +285,7 @@
     if (!heldKeys.delete(event.code)) return;
     event.preventDefault();
     if (heldKeys.size) keyboardSticks();
-    else {release(); render();}
+    else {sticks.forEach(resetStick); centerControls(); render();}
   });
   document.addEventListener('focusin', event => {
     if (gesture?.source === 'keyboard' && keyboardBlocked(event.target)) {release(); render();}
@@ -288,7 +318,6 @@
   for (const event of ['blur','pagehide']) window.addEventListener(event, release);
   document.addEventListener('visibilitychange', () => {if (document.hidden) release();});
   window.addEventListener('duck-languagechange', render);
-  setInterval(drive, 75);
   window.DuckMotion = {
     get revision() {return rollerRevision;},
     release() {release(); render();},

@@ -1,80 +1,108 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="servo.css?v=protection-readings">
+<title data-zh="舵机设置 · XGO Duck">Servo setup · XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=panel-nav"><link rel="stylesheet" href="servo.css?v=scan-help-entry">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
+<link rel="stylesheet" href="hardware-check.css">
 <main class="page-servo">
-<header>
+<header class="panel-header">
   <div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1 data-zh="舵机设置">Servo setup</h1></div>
   <div class="header-actions">
-    <nav class="nav"><a href="/" data-zh="控制">Control</a><a href="/calibrate.html" data-zh="标定">Calibration</a><a href="/servo.html" aria-current="page" data-zh="舵机设置">Servo setup</a></nav>
+    <nav class="nav">
+      <a href="/" data-zh="控制">Control</a>
+      <a href="/calibrate.html" data-zh="标定">Calibration</a>
+      <a href="/servo.html" aria-current="page" data-zh="舵机设置">Servo setup</a>
+      <a id="cockpit-link" href="/mobile.html" target="_blank" rel="noopener noreferrer" data-zh="语音交互驾驶舱">Cockpit</a>
+      <a href="https://github.com/LuwuDynamics/xgoduck_runtime_arduino" target="_blank" rel="noopener noreferrer">GitHub</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck" target="_blank" rel="noopener noreferrer">Wiki</a>
+      <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer" data-zh="常见问题">FAQ</a>
+    </nav>
     <button id="language" type="button">中文</button>
-    <button class="stop" id="exit" data-zh="退出">Exit</button>
+    <button class="stop" id="exit" title="Release torque and exit servo setup" data-zh-title="卸力并退出舵机设置" data-zh="舵机卸力">Torque off</button>
   </div>
 </header>
 <p class="warn" data-zh="修改 ID 时，请只连接要修改的那一个舵机。同一总线上无法区分 ID 重复的舵机。">When changing an ID, connect only the servo you want to change. Duplicate IDs cannot be distinguished on the same bus.</p>
 <p id="message" role="status" data-zh="正在进入舵机设置，所有舵机将卸力…">Entering servo setup and unloading all servos…</p>
 <section class="servo-panel">
   <div class="servo-scan">
-    <div class="servo-scan-actions">
-      <button id="scan" data-zh="扫描所有 ID">Scan all IDs</button>
-      <button id="scan-stop" data-zh="停止扫描" hidden>Stop scan</button>
-      <span id="scan-status" role="status" data-zh="扫描 ID 0–253，查找已连接的舵机。">Scan IDs 0–253 to find connected servos.</span>
+    <div class="servo-scan-header">
+      <div class="servo-scan-actions">
+        <button id="scan" data-zh="扫描所有 ID">Scan all IDs</button>
+        <button id="scan-stop" data-zh="停止扫描" hidden>Stop scan</button>
+        <span id="scan-status" role="status" data-zh="扫描 ID 0–253，查找已连接的舵机。">Scan IDs 0–253 to find connected servos.</span>
+      </div>
+      <button id="scan-help" type="button" aria-haspopup="dialog" aria-controls="scan-empty" data-zh="扫描帮助">Scan help</button>
     </div>
     <progress id="scan-progress" max="254" value="0" hidden aria-label="Servo scan progress" data-zh-aria-label="舵机扫描进度"></progress>
     <div id="scan-results" class="servo-scan-results" aria-label="Discovered servo IDs" data-zh-aria-label="已找到的舵机 ID"></div>
     <p class="hint" data-zh="选择找到的 ID，即可读取或修改该舵机的设置。停止扫描会保留已有结果。ID 254 和 255 为保留地址。">Select a found ID to read or change that servo's settings. Stop scan keeps the results found so far. IDs 254 and 255 are reserved.</p>
   </div>
-  <div class="servo-grid">
-    <div class="servo-row servo-action-row">
-      <button id="reset-mid" data-zh="重置中位" disabled>Reset Mid</button>
-    </div>
-    <div class="servo-row">
-      <span class="servo-label" data-zh="设置 KP/KD">Set KP/KD</span>
-      <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
-      <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
-      <button id="set-gains" data-zh="写入 KP/KD" aria-describedby="gains-restart-hint" disabled>Set KpKd</button>
-      <span id="gains-restart-hint" class="hint" data-zh="写入后断电重启，舵机会加载保存的 KP/KD。">After writing, power-cycle the Duck to reload the saved KP/KD.</span>
-    </div>
-    <div class="servo-row">
-      <span class="servo-label" data-zh="新 ID">Change ID to</span>
-      <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" data-zh-title="新 ID" disabled>
-      <button id="set-id" data-zh="修改 ID" disabled>Change ID</button>
-    </div>
-    <div class="servo-row servo-action-row">
-      <button id="read" data-zh="读取" disabled>Read</button>
-      <strong id="read-out" class="servo-readout">—</strong>
-    </div>
-    <div class="servo-gains">
-      <table aria-label="Selected servo KP and KD" data-zh-aria-label="所选舵机的 KP 和 KD">
-        <thead><tr><th scope="col" data-zh="参数来源">Parameter source</th><th scope="col">KP</th><th scope="col">KD</th></tr></thead>
-        <tbody>
-          <tr><th scope="row" data-zh="保存值（上电时加载）">Saved (power-on)</th><td id="saved-kp">—</td><td id="saved-kd">—</td></tr>
-          <tr><th scope="row" data-zh="运行值（当前生效）">Runtime (current)</th><td id="runtime-kp">—</td><td id="runtime-kd">—</td></tr>
-        </tbody>
-      </table>
-      <p id="gains-status" role="status" data-zh="请选择舵机，读取保存值和运行值。">Select a servo to read both values.</p>
-    </div>
-    <p class="hint" data-zh="保存值存储在舵机中，运行值是当前生效的参数。「写入 KP/KD」同时更新两组值。「读取」只查看数值。">Saved values are stored in the servo. Runtime values are used now. Set KpKd writes both; Read never changes them.</p>
-  </div>
-</section>
-<section class="servo-panel servo-test">
-  <h2 data-zh="单舵机安装检查">Single-servo installation check</h2>
-  <div class="servo-test-layout">
-    <figure>
-      <img id="servo-test-image" alt="" loading="lazy" hidden>
-      <figcaption id="servo-test-caption"></figcaption>
-    </figure>
-    <div>
-      <label for="servo-test-id" data-zh="测试舵机">Servo to test</label>
-      <select id="servo-test-id" disabled></select>
-      <p class="hint" data-zh="支撑好小鸭。开始测试后可反复拖动滑条，确认图中标出的关节在动。测完点「停止并卸力」。左右以小鸭自身为准。">Support Duck, start the test, and move the slider to verify the highlighted joint. Click Stop and unload when finished. Left and right are from Duck’s perspective.</p>
-      <div class="buttons servo-test-actions">
-        <button id="servo-test-start" type="button" data-zh="开始测试" disabled>Start test</button>
-        <button id="servo-test-stop" type="button" data-zh="停止并卸力" disabled>Stop and unload</button>
+  <div class="servo-workspace" id="servo-workspace">
+    <div class="joint-guide">
+      <h2 data-zh="舵机安装位置">Servo locations</h2>
+      <div class="joint-view">
+        <canvas id="servo-model" role="img" aria-label="Duck joint locations" data-zh-aria-label="小鸭关节位置"></canvas>
+        <p id="model-hint" class="hint" data-zh="拖动旋转 · 点选舵机">Drag to rotate · Tap a servo</p>
       </div>
-      <label for="servo-test-offset"><span data-zh="相对起始位置">Offset from start</span> <output id="servo-test-angle" for="servo-test-offset">0°</output></label>
-      <input id="servo-test-offset" type="range" min="-30" max="30" value="0" step="1" disabled>
-      <p id="servo-test-status" class="hint" role="status" data-zh="测试范围最大为起始位置的 ±30°。">The test moves up to 30° in either direction.</p>
+      <div id="joint-groups"></div>
+      <div class="joint-operation servo-test">
+        <h3 data-zh="单舵机运动控制">Single-servo motion control</h3>
+        <label for="servo-test-offset"><span data-zh="相对起始位置">Offset from start</span> <output id="servo-test-angle" for="servo-test-offset">0°</output></label>
+        <input id="servo-test-offset" type="range" min="-30" max="30" value="0" step="1" disabled>
+        <div class="buttons servo-test-actions">
+          <button id="servo-test-start" data-hardware-arm type="button" data-zh="开始测试" disabled>Start test</button>
+          <button id="servo-test-stop" type="button" data-zh="停止并卸力" disabled>Stop and unload</button>
+        </div>
+        <p class="hint" data-zh="扶稳小鸭，点「开始测试」，拖动滑条并对照关节图。左右以小鸭自身为准。">Support Duck, select Start test, then move the slider and compare the joint with the diagram. Left and right are from Duck’s perspective.</p>
+        <p id="servo-test-status" class="hint" role="status" data-zh="测试范围最大为起始位置的 ±30°。">The test moves up to 30° in either direction.</p>
+        <details id="joint-pose-guide" hidden>
+          <summary data-zh="查看该关节的运动示意">View joint movement diagram</summary>
+          <img id="joint-pose-image" alt="" width="340" height="330">
+        </details>
+      </div>
+    </div>
+    <div class="servo-controls">
+      <div class="selection-heading">
+        <h2 id="current-joint" aria-live="polite" data-zh="请选择舵机 ID">Select a servo ID</h2>
+        <p id="selection-hint" class="hint" data-zh="从扫描结果或关节图选择。">Choose a scan result or a joint on the model.</p>
+      </div>
+      <div class="joint-operation">
+        <h3 data-zh="ID 与中位">ID and midpoint</h3>
+        <div class="servo-row">
+          <label for="new-id" data-zh="新 ID">New ID</label>
+          <input id="new-id" type="number" min="0" max="253" value="10" title="New ID" data-zh-title="新 ID" disabled>
+          <button id="set-id" data-zh="修改 ID" aria-describedby="set-id-hint" disabled>Change ID</button>
+          <button id="reset-mid" data-zh="重置中位" disabled>Reset Mid</button>
+        </div>
+        <p id="set-id-hint" class="hint" data-zh="先将舵机转到所需中位。改号会把当前位置设为中位，开启电压保护和 2 A 过流保护，并写入 KP=5、KD=10。">Position the servo at its intended midpoint first. Changing its ID sets the current position as its midpoint, enables voltage and 2 A overcurrent protection, and writes KP=5 and KD=10.</p>
+      </div>
+      <div class="joint-operation joint-gains">
+        <h3>KP / KD</h3>
+        <div class="servo-row">
+          <label for="kp">KP</label>
+          <input id="kp" type="number" min="0" max="255" value="5" title="KP" disabled>
+          <label for="kd">KD</label>
+          <input id="kd" type="number" min="0" max="255" value="10" title="KD" disabled>
+          <button id="set-gains" data-zh="写入 KP/KD" aria-describedby="gains-restart-hint" disabled>Set KpKd</button>
+          <span id="gains-restart-hint" class="hint" data-zh="写入后断电重启，舵机会加载保存的 KP/KD。">After writing, power-cycle the Duck to reload the saved KP/KD.</span>
+        </div>
+        <div class="servo-row gains-readback">
+          <dl>
+            <div><dt data-zh="当前舵机 ID">Current servo ID</dt><dd id="read-id">—</dd></div>
+            <div><dt data-zh="当前编码器值">Current encoder value</dt><dd id="read-position">—</dd></div>
+          </dl>
+          <button id="read" data-zh="重新读取" disabled>Read again</button>
+        </div>
+        <div class="servo-gains">
+          <table aria-label="Selected servo KP and KD" data-zh-aria-label="所选舵机的 KP 和 KD">
+            <thead><tr><th scope="col" data-zh="参数来源">Parameter source</th><th scope="col">KP</th><th scope="col">KD</th></tr></thead>
+            <tbody>
+              <tr><th scope="row" data-zh="保存值（上电时加载）">Saved (power-on)</th><td id="saved-kp">—</td><td id="saved-kd">—</td></tr>
+              <tr><th scope="row" data-zh="运行值（当前生效）">Runtime (current)</th><td id="runtime-kp">—</td><td id="runtime-kd">—</td></tr>
+            </tbody>
+          </table>
+          <p id="gains-status" role="status" data-zh="请选择舵机，读取保存值和运行值。">Select a servo to read both values.</p>
+        </div>
+      </div>
     </div>
   </div>
 </section>
@@ -121,5 +149,32 @@
   <p class="hint" data-zh="开关逐台应用到已检测到的舵机。电流阈值广播写入，分辨率为 6.5 mA。">Switches apply to each detected servo. The current threshold is broadcast in 6.5 mA steps.</p>
 </section>
 </main>
-<script src="panel-language.js"></script><script src="servo.js?v=stop-confirmation"></script>
+<dialog id="scan-empty" aria-labelledby="scan-empty-title">
+  <h2 id="scan-empty-title"></h2>
+  <div class="scan-empty-body">
+    <ol>
+      <li>
+        <span data-zh="请先把电池充满，再重新扫描。充满通常需要 1 小时以上。">Fully charge the battery before scanning again. A full charge usually takes an hour or more.</span><br>
+        <span data-zh="建议使用 8.4 V 18650 电池组，容量大于 3500 mAh，放电倍率大于 3C。">We recommend an 8.4 V 18650 battery pack with a capacity greater than 3500 mAh and a discharge rating greater than 3C.</span>
+      </li>
+      <li><span class="scan-photo-right" data-zh="对照右图">Use the photo on the right</span><span class="scan-photo-below" data-zh="对照下图">Use the photo below</span><span data-zh="检查舵机连线，确认插头方向正确、两端都已插紧。"> to check the servo wiring. Make sure both plugs are oriented correctly and fully seated.</span></li>
+      <li data-zh="检查电池插头，确认已插紧在扩展板的电池接口上。">Make sure the battery plug is firmly connected to the battery socket on the expansion board.</li>
+      <li data-zh="联系售后时，请发一张您这台设备的实拍照片，拍清电池、扩展板和舵机之间的接线。">When you contact support, send a photo of your own device that clearly shows the connections between the battery, expansion board and servo.</li>
+    </ol>
+    <figure>
+      <button type="button" id="enlarge-wiring" aria-haspopup="dialog" aria-controls="wiring-photo-dialog" aria-label="Enlarge wiring photo" data-zh-aria-label="放大接线图">
+        <img src="servo-wiring.jpg" width="1080" height="1919" loading="lazy" alt="Battery on the left and servo on the right, both plugged into the expansion board below" data-zh-alt="左侧电池和右侧舵机分别接到下方扩展板的对应接口">
+        <span data-zh="放大">Enlarge</span>
+      </button>
+      <figcaption data-zh="电池和舵机的正确接线">Correct battery and servo connections</figcaption>
+    </figure>
+  </div>
+  <form method="dialog"><button autofocus data-zh="关闭">Close</button></form>
+</dialog>
+<dialog id="wiring-photo-dialog" aria-label="Wiring photo" data-zh-aria-label="接线大图">
+  <form method="dialog"><button autofocus data-zh="关闭大图">Close photo</button></form>
+  <img width="1080" height="1919" alt="">
+</dialog>
+<script src="panel-language.js?v=panel-nav"></script><script src="servo-model.js?v=servo-cases"></script><script src="servo.js?v=scan-help-entry"></script>
+<script src="hardware-check.js"></script>
 </html>

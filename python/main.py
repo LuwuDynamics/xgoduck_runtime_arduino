@@ -20,6 +20,7 @@ from arduino.router_bridge import Bridge, DEFAULT_ADDRESS
 from bridge_recovery import BridgeRecovery
 from motion_calibration import AppController as Controller
 from controller import BATTERY_WARNING_TIMEOUT_S
+from servo_feedback_log import ServoFeedbackLog
 from media_proxy import register_media
 from gamepad import register_gamepad
 from motion_access import MotionAccess
@@ -36,6 +37,7 @@ from forward_avoidance import ForwardAvoidance
 sys.setswitchinterval(0.001)
 bridge = Bridge(os.environ.get('APP_SOCKET', DEFAULT_ADDRESS))
 controller = Controller(bridge)
+controller.servo_feedback_log = ServoFeedbackLog(DATA / 'servo-feedback.log')
 voice_config = VoiceConfig()
 access = MotionAccess(controller, remote_allowed=lambda: voice_config.get()['remote_motion_enabled'])
 token = secrets.token_urlsafe(32)
@@ -48,8 +50,7 @@ def voice_dispatch(method, path, body):
             return {'motion': controller.status(), 'control': access.state()}
     if method == 'GET' and path == '/tof':
         sensor = tof.status()
-        # A read still works when avoidance is disabled (no guard worker).
-        # No concurrent guard sampling exists in this configuration.
+        # Explicit measurements also work when background avoidance is off.
         if not avoidance.settings['enabled']:
             avoidance.update(sensor)
         return {'sensor': sensor, 'front': avoidance.status()}
@@ -107,11 +108,26 @@ def command(body: dict):
     try: return access.web_command(**{k: v for k, v in body.items() if k != 'source'})
     except (TypeError, ValueError) as exc: raise HTTPException(400, str(exc))
 
-def cockpit_motion(request: Request, body: dict):
+def require_cockpit(request: Request):
     origin = request.headers.get('origin')
     if (request.headers.get('x-duck-cockpit') != '1' or
             origin and urlsplit(origin).netloc != request.headers.get('host')):
         raise HTTPException(403, 'Request origin mismatch.')
+
+def tof_status():
+    return dict(tof.status(), avoidance_enabled=avoidance.settings['enabled'])
+
+def tof_avoidance(request: Request, body: dict):
+    require_cockpit(request)
+    try:
+        return avoidance.set_enabled(body.get('enabled'))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    except OSError as exc:
+        raise HTTPException(500, 'Could not save obstacle avoidance settings.') from exc
+
+def cockpit_motion(request: Request, body: dict):
+    require_cockpit(request)
     try:
         return access.cockpit_motion(**body)
     except (TypeError, ValueError) as exc:
@@ -230,7 +246,8 @@ def app_version():
 
 ui.expose_api('GET', '/api/version', app_version)
 ui.expose_api('GET', '/api/status', controller.status)
-ui.expose_api('GET', '/api/tof/status', tof.status)
+ui.expose_api('GET', '/api/tof/status', tof_status)
+ui.expose_api('POST', '/api/tof/avoidance', tof_avoidance)
 ui.expose_api('GET', '/api/voice/status', voice.status)
 register_voice_region(ui, voice, voice_config)
 ui.expose_api('POST', '/api/mode', mode)
@@ -283,3 +300,4 @@ finally:
         worker.join(timeout=2)
     finally:
         bridge.disconnect()
+        controller.servo_feedback_log.close()

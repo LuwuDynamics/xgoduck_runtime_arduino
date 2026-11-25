@@ -50,31 +50,39 @@ def register_media(ui, client=None):
     def error(message, status=503):
         return JSONResponse({'error': message}, status_code=status)
 
-    async def forward(method, path, body=b'', mime='application/json'):
+    async def forward(method, path, body=b'', mime='application/json', query=''):
+        target = f'{upstream}/api/{path}' + (f'?{query}' if query else '')
         try:
-            res = await client.request(method, f'{upstream}/api/{path}', content=body,
+            res = await client.request(method, target, content=body,
                                        headers={'Content-Type': mime, 'X-Device-Test': '1'})
-            return Response(res.content, status_code=res.status_code,
-                headers={'Content-Type': res.headers.get('Content-Type', 'application/json'),
-                         'Cache-Control': 'no-store'})
+            if res.status_code == 204:
+                return Response(status_code=204, headers={'Cache-Control': 'no-store'})
+            headers = {'Content-Type': res.headers.get('Content-Type', 'application/json'),
+                       'Cache-Control': 'no-store'}
+            frame_seq = res.headers.get('X-Frame-Seq')
+            if frame_seq is not None:
+                headers['X-Frame-Seq'] = frame_seq
+            return Response(res.content, status_code=res.status_code, headers=headers)
         except httpx.HTTPError:
             return error('Media service unavailable. Check the duck-device-test service.')
 
     async def read(path: str, request: Request):
         if path not in READ_PATHS:
             return error('Not found', 404)
+        query = request.url.query
         if path == 'audio/stream':
             origin = request.headers.get('origin')
             if request.headers.get('x-device-test') != '1' or (
                     origin and urlsplit(origin).netloc != request.headers.get('host')):
                 return error('Request origin mismatch. Use the Duck page.', 403)
         if path not in {'camera/stream', 'audio/stream'}:
-            return await forward('GET', path)
+            return await forward('GET', path, query=query)
         if streams.locked():
             return error('Too many media streams. Close another Duck page.', 429)
         await streams.acquire()
         try:
-            res = await client.send(client.build_request('GET', f'{upstream}/api/{path}',
+            target = f'{upstream}/api/{path}' + (f'?{query}' if query else '')
+            res = await client.send(client.build_request('GET', target,
                 headers={'X-Device-Test': '1'}), stream=True)
             if res.status_code != 200:
                 data = await res.aread()

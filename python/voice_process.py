@@ -368,6 +368,8 @@ class Runtime:
 
 
 def main():
+    # Bound GIL handoff latency between media HTTP/camera threads and voice/wakeword threads.
+    sys.setswitchinterval(0.001)
     os.umask(0o077)
     private_directory()
     os.environ.update(LUWU_ROOT=str(VENDOR), DUCK_VOICE_STATE_DIR=str(PRIVATE),

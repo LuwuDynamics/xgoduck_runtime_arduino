@@ -216,11 +216,15 @@ def vision_type():
             return bool(self.bench.camera_path())
 
         def capture(self):
-            self.bench.camera_start()
             with self.bench.frame_ready:
-                before = self.bench.frames
-                ok = self.bench.frame_ready.wait_for(lambda: self.bench.frames > before or self.bench.closed, timeout=5)
-                if not ok or not self.bench.jpeg:
+                self.bench.camera_start()
+                proc, before = self.bench.camera, self.bench.frames
+                ok = self.bench.frame_ready.wait_for(
+                    lambda: self.bench.camera is not proc or proc.poll() is not None or self.bench.frames > before,
+                    timeout=5)
+                if self.bench.camera is not proc:
+                    raise ValueError('Camera capture was stopped.')
+                if not ok or proc.poll() is not None or not self.bench.jpeg:
                     raise ValueError('USB camera did not produce a fresh frame.')
                 jpeg = self.bench.jpeg
             return jpeg, Image.open(io.BytesIO(jpeg)).convert('RGB')

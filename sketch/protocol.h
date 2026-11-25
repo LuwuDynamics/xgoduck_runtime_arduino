@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-constexpr uint32_t BRIDGE_BAUD = 2000000;
+constexpr uint32_t BRIDGE_MAX_BAUD = 2000000;
 constexpr uint32_t TICK_US = 10000;
 constexpr uint32_t HOST_HEARTBEAT_US = 250000; // Calibration/debug modes only.
 constexpr uint32_t IMU_STALE_US = 500000; // Mirrored by wire.py IMU_STALE_S.
@@ -38,7 +38,8 @@ enum ServoOp : uint8_t {
   SERVO_TEST_MOVE = 14,
   SERVO_TEST_STOP = 15,
   SERVO_READ_PROTECTION = 16,
-  SERVO_SET_PROTECTION_SWITCH = 17
+  SERVO_SET_PROTECTION_SWITCH = 17,
+  SERVO_INIT_ID_PROTECTION = 18
 };
 constexpr uint8_t SERVO_TEST_OFFSET_DEG = 30;
 constexpr uint8_t SERVO_TEST_OFFSET_BIAS = 10; // Preserve the original move encoding.
@@ -65,6 +66,13 @@ struct __attribute__((packed)) StatePacket {
   int16_t acc[3], gyro[3];
   float angle[15], velocity[15], target[15];
 };
+// DQS2 appends this tail only for a state sample with a missing or abnormal reply.
+struct __attribute__((packed)) ServoReplyDetail {
+  uint16_t badChecksumMask, unexpectedLengthMask;
+  uint8_t error[15];  // Last nonzero, checksum-valid status byte for each ID in this read.
+  uint16_t invalidPositionMask;  // Optional trailing field when a position is outside the encoder range.
+};
+static_assert(sizeof(ServoReplyDetail) == 21, "Servo reply detail ABI");
 struct __attribute__((packed)) DiagnosticPacket {
   char magic[4];
   uint32_t bridgeState, bridgeAttempts, bridgeFailures, notifyDrops;

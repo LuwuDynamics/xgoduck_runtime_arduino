@@ -7,7 +7,7 @@ import threading
 import time
 
 # Accept the former clearance and coverage settings in existing board files.
-DEFAULTS = dict(enabled=True, stop_mm=100., slow_mm=150., clear_margin_mm=50.,
+DEFAULTS = dict(enabled=False, stop_mm=100., slow_mm=150., clear_margin_mm=50.,
                 max_age_ms=600., rows=[2, 6], columns=[2, 6], min_valid_zones=3)
 
 
@@ -46,6 +46,8 @@ class ForwardAvoidance:
     def __init__(self, monitor, *, settings=None, settings_path=None, clock=time.monotonic):
         self.monitor, self.clock = monitor, clock
         self.settings = copy.deepcopy(DEFAULTS)
+        self.settings_path = Path(settings_path) if settings_path is not None else None
+        self.settings_lock = threading.Lock()
         self.config_error = ''
         try:
             if settings_path is not None:
@@ -54,13 +56,41 @@ class ForwardAvoidance:
                 self.settings = validate_settings(dict(self.settings, **settings))
         except (OSError, ValueError, TypeError) as exc:
             self.config_error = str(exc)
+            self.settings['enabled'] = True  # Keep invalid configurations fail-closed.
         self.lock = threading.Lock()
         self.stop_event = threading.Event()
+        self.sampling = threading.Event()
+        if self.settings['enabled']:
+            self.sampling.set()
         self.thread = None
         self.frame, self.received = {}, self.clock()
         self.distance, self.valid = None, 0
         self.speed = .2
         self.stop_count, self.last_stop = 0, None
+
+    def set_enabled(self, enabled):
+        if type(enabled) is not bool:
+            raise ValueError('enabled must be boolean')
+        with self.settings_lock:
+            if self.config_error:
+                raise ValueError(self.config_error)
+            if self.settings['enabled'] != enabled:
+                updated = dict(self.settings, enabled=enabled)
+                if self.settings_path is not None:
+                    pending = self.settings_path.with_suffix('.tmp')
+                    self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        pending.write_text(json.dumps(updated, indent=2) + '\n')
+                        pending.replace(self.settings_path)
+                    finally:
+                        pending.unlink(missing_ok=True)
+                with self.lock:
+                    self.settings = updated
+                    if enabled:
+                        self.sampling.set()
+                    elif not self.stop_event.is_set():
+                        self.sampling.clear()
+            return {'enabled': enabled}
 
     def _thresholds(self):
         # Give faster Roller travel an additional distance margin.
@@ -144,10 +174,11 @@ class ForwardAvoidance:
         print('[forward-avoidance]', self.last_stop['reason'], flush=True)
 
     def start(self):
-        if not self.settings['enabled']:
-            return
         def run():
             while not self.stop_event.is_set():
+                self.sampling.wait()
+                if self.stop_event.is_set():
+                    break
                 try:
                     # status renews the monitor lease. Its worker alone calls
                     # the MCU at 5 Hz, even with all browser pages closed.
@@ -159,7 +190,9 @@ class ForwardAvoidance:
         self.thread.start()
 
     def close(self):
-        self.stop_event.set()
+        with self.lock:
+            self.stop_event.set()
+            self.sampling.set()
         if self.thread is not None:
             self.thread.join(timeout=2)
 

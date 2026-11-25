@@ -4,7 +4,7 @@
   let volumeDirty=false,volumeSaving=false,pendingVolume=null;
   let live=null,wake=null,noticeTimer=null,audioContext=null,mediaRevision=0,usbRevision=0,activePanel='quick',speakerTesting=false;
   let audioState='listenIdle',audioValues={};
-  let duckCall=null;
+  let duckCall=null,videoSession=null,linkLabel='';
   let chosenHud,previousHud;
   const duckSounds=[...document.querySelectorAll('[data-duck-sound]')];
   const compactLayout=window.matchMedia('(max-width:600px), (max-width:1080px) and (max-height:520px), (pointer:coarse) and (max-width:1080px)');
@@ -42,7 +42,12 @@
   }
   function render(){
     const cam=media?.camera,a=media?.audio,light=cam?.light,controlsBusy=cameraBusy||lightBusy;
-    $('link').textContent='';$('link').append(document.createElement('i'),document.createTextNode(t(robot?'online':'reconnecting')));$('link').classList.toggle('online',!!robot);
+    const nextLink=t(robot?'online':'reconnecting');
+    if(nextLink!==linkLabel){
+      linkLabel=nextLink;
+      $('link').textContent='';$('link').append(document.createElement('i'),document.createTextNode(nextLink));
+    }
+    $('link').classList.toggle('online',!!robot);
     const battery=robot?.battery, voltage=battery?.voltage_v, batteryChip=$('batteryVoltage');
     const showLowVoltage=battery?.low===true&&battery.below_threshold===true;
     const voltageLabel=t(showLowVoltage?'voltageLow':'voltage'), voltageText=Number.isFinite(voltage)?voltage.toFixed(1)+' V':'—';
@@ -116,13 +121,88 @@
     $('usbStatus').textContent=usbStatus;
     $('frameHint').textContent=activePanel==='quick'?'':t(activePanel==='gamepad'?'gamepadHint':activePanel==='servo'?'servoHint':'calibrationHint');
     const want=cam?.running&&!document.hidden;
-    if(want&&!streaming){streaming=true;$('feed').src='/api/media/camera/stream?t='+Date.now();}
-    if(!want&&streaming){streaming=false;$('feed').removeAttribute('src');}
+    if(want&&!streaming)startVideo();
+    if(!want&&streaming)stopVideo();
     const waitingForFrame=want&&!cam.ready;
     $('feed').hidden=!want||waitingForFrame;
     $('welcome').hidden=want&&!waitingForFrame||!!window.DuckToF?.expanded;
     $('cameraPlaceholder').textContent=t(waitingForFrame?'startingCamera':cam&&!cam.available?'cameraMissing':'cameraClosed');
     document.querySelector('.reticle').hidden=$('feed').hidden;
+  }
+  const cockpit=$('cockpit'),feed=$('feed'),feedCtx=feed.getContext?.('2d',{alpha:false});
+  function stopVideo(){
+    const session=videoSession;
+    videoSession=null;
+    streaming=false;
+    if(session){
+      clearTimeout(session.timer);
+      clearTimeout(session.timeout);
+      session.abort?.abort();
+    }
+  }
+  function startVideo(){
+    if(videoSession)return;
+    streaming=true;
+    const session={seq:0,abort:null,timer:null,timeout:null,errors:0};
+    videoSession=session;
+    // Keep at most one preview frame in flight so TCP/decoder queues can never accumulate latency.
+    const next=async()=>{
+      if(videoSession!==session)return;
+      const started=performance.now();
+      const fpsLimit=Number(media?.camera?.preview_fps_limit)||15;
+      const minInterval=1000/Math.max(1,fpsLimit);
+      const controller=new AbortController();
+      session.abort=controller;
+      session.timeout=setTimeout(()=>controller.abort(),4000);
+      let waitMs=0;
+      try{
+        const response=await fetch('/api/media/camera/frame?preview=1&after='+session.seq,{cache:'no-store',signal:controller.signal});
+        clearTimeout(session.timeout);session.timeout=null;
+        if(videoSession!==session)return;
+        if(response.status===204){
+          session.errors=0;
+          waitMs=0;
+        }else if(response.ok){
+          const headerSeq=Number(response.headers.get('X-Frame-Seq'));
+          if(Number.isFinite(headerSeq)&&headerSeq>0)session.seq=headerSeq;
+          const blob=await response.blob();
+          if(videoSession!==session)return;
+          if(typeof createImageBitmap==='function'&&feedCtx){
+            const bitmap=await createImageBitmap(blob);
+            try{
+              if(videoSession!==session)return;
+              if(feed.width!==bitmap.width||feed.height!==bitmap.height){feed.width=bitmap.width;feed.height=bitmap.height;}
+              feedCtx.drawImage(bitmap,0,0);
+            }finally{bitmap.close();}
+          }else if(feedCtx){
+            const url=URL.createObjectURL(blob);
+            try{
+              const image=new Image();image.src=url;await image.decode();
+              if(videoSession!==session)return;
+              if(feed.width!==image.naturalWidth||feed.height!==image.naturalHeight){feed.width=image.naturalWidth;feed.height=image.naturalHeight;}
+              feedCtx.drawImage(image,0,0);
+            }finally{URL.revokeObjectURL(url);}
+          }
+          session.errors=0;
+          waitMs=Math.max(0,minInterval-(performance.now()-started));
+        }else{
+          throw Error('HTTP '+response.status);
+        }
+      }catch{
+        clearTimeout(session.timeout);session.timeout=null;
+        if(videoSession!==session)return;
+        session.errors++;
+        if(session.errors===3&&media?.camera?.running)notify(t('cameraInterrupted'));
+        waitMs=Math.min(1000,150*session.errors);
+      }finally{
+        if(session.abort===controller)session.abort=null;
+      }
+      if(videoSession===session){
+        if(waitMs>0)session.timer=setTimeout(next,waitMs);
+        else next();
+      }
+    };
+    next();
   }
   async function requestWake(){try{if(navigator.wakeLock&&!wake)wake=await navigator.wakeLock.request('screen');wake?.addEventListener('release',()=>wake=null,{once:true});}catch{}}
   async function camera(start){
@@ -139,11 +219,9 @@
     catch(error){notify(message(error));}finally{lightBusy=false;render();}
   }
   $('lightOn').onclick=()=>light(true);$('lightOff').onclick=()=>light(false);
-  const cockpit=$('cockpit'),feed=$('feed');
   cockpit.addEventListener('contextmenu',event=>{
     if(event.target===cockpit||event.target===feed||event.target.closest('.stick-pad'))event.preventDefault();
   });
-  feed.onerror=()=>{streaming=false;if(media?.camera?.running)notify(t('cameraInterrupted'));};
   $('fit').onclick=()=>{const fill=feed.classList.toggle('fill');render();notify(t(fill?'fillNotice':'fitNotice'));};
   document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement)requestWake();});
   function openCockpitDialog(panel){
@@ -314,7 +392,7 @@
     }catch(error){notify(message(error));}finally{mediaBusy=false;render();}
   };
   function leave(){
-    stopLive();streaming=false;$('feed').removeAttribute('src');wake?.release();wake=null;
+    stopLive();stopVideo();wake?.release();wake=null;
     window.DuckBinding?.updateCameraAvailability(false);
   }
   document.addEventListener('visibilitychange',()=>{if(document.hidden)leave();else{render();if(media?.camera.running)requestWake();}});

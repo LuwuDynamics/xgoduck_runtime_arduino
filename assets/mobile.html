@@ -3,23 +3,28 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#080f14"><meta name="mobile-web-app-capable" content="yes">
-<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest?v=cockpit-portrait"><link rel="stylesheet" href="mobile.css?v=cockpit-landscape">
-<link rel="stylesheet" href="mobile-tof.css?v=cockpit-layout">
+<title>小鸭驾驶舱</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="manifest" href="mobile.webmanifest?v=cockpit-portrait"><link rel="stylesheet" href="mobile.css?v=control-center">
+<link rel="stylesheet" href="mobile-tof.css?v=tof-avoidance">
 <link rel="stylesheet" href="mobile-binding.css?v=20261102-startup1">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
 <link rel="stylesheet" href="remote-control-notice.css">
 </head>
 <body data-hud="all">
 <main id="cockpit">
-  <img id="feed" alt="小鸭摄像头实时画面" data-i18n-alt="cameraAlt" draggable="false" hidden>
+  <canvas id="feed" role="img" aria-label="小鸭摄像头实时画面" data-i18n-aria-label="cameraAlt" draggable="false" hidden></canvas>
   <div class="shade"></div>
   <div class="reticle" aria-hidden="true" hidden><i></i><i></i><i></i><i></i></div>
   <header class="hud top">
-    <a class="brand" href="/index.html" data-desktop-link aria-label="打开桌面控制页" data-i18n-aria-label="desktopControl">
+    <a class="brand" href="/index.html" data-desktop-link aria-label="打开控制调试中心" data-i18n-aria-label="desktopControl">
       <span class="duck-mark">D<span>↗</span></span>
       <span><span class="brand-name">DUCK</span><small><span class="brand-caption" data-i18n="cockpit">驾驶舱</span><span class="app-version" data-app-version hidden></span></small></span>
     </a>
-    <div class="status-row"><span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button><button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 语音交互绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button><span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span></div>
+    <div class="status-row">
+      <span id="link" class="chip"><i></i>正在连接</span><span id="videoStats" class="chip optional">摄像头已关闭</span><button id="padLink" class="chip" data-i18n-aria-label="configureGamepad">手柄未连接</button>
+      <button id="openBinding" class="chip binding-entry" type="button" aria-haspopup="dialog" aria-controls="bindingDialog"><span data-i18n="bindAi">AI 语音交互绑定</span><span id="bindingRegionChip" class="binding-region-chip" aria-hidden="true">—</span></button>
+      <span id="batteryVoltage" class="chip" title="舵机供电总线电压"><span id="batteryLabel">电压 </span><span id="batteryValue">—</span></span>
+      <a id="controlPageLink" class="chip" href="/index.html" data-desktop-link data-i18n="controlPage">控制调试中心</a>
+    </div>
     <div class="top-actions">
       <button id="language" class="language-button" type="button">EN</button>
       <button id="full" class="fullscreen-button" aria-label="进入全屏" aria-pressed="false"><span aria-hidden="true">⛶</span><span id="fullLabel">全屏</span></button>
@@ -63,8 +68,10 @@
           <div class="tof-center"><span data-i18n="tofCenter">中心距离</span><div><strong id="tofCenter">—</strong><small id="tofCenterUnit">cm</small></div></div>
           <div class="tof-nearest"><span data-i18n="tofNearest">最近距离</span><div><strong id="tofNearest">—</strong><small id="tofNearestUnit">cm</small></div></div>
           <div id="tofValid" class="tof-valid">0 / 64</div>
+          <label class="tof-avoidance"><input id="tofAvoidance" type="checkbox" role="switch" disabled><span data-i18n="tofAvoidance">前向避障</span></label>
         </div>
         <div class="tof-legend"><span data-i18n="tofNear">近</span><i aria-hidden="true"></i><span data-i18n="tofFar">远 · 2 m+</span></div>
+        <p id="tofAvoidanceError" class="tof-message" role="status" hidden data-i18n="tofAvoidanceError">避障设置保存失败，请重试。</p>
         <p id="tofMessage" class="tof-message" role="status"></p>
         <div class="tof-footer"><span id="tofTiming">—</span><span id="tofFrame"># —</span></div>
       </div>
@@ -141,7 +148,6 @@
       <div class="flight-actions">
         <button id="torqueOff" class="stop"><span aria-hidden="true">■ </span><span data-i18n="torqueOff">舵机卸力</span></button>
         <button id="rollerMode" class="roller-switch" type="button" role="switch" aria-checked="false" data-i18n-aria-label="rollerMode" disabled>轮滑模式</button>
-        <a id="controlPageLink" class="desktop-link" href="/index.html" data-desktop-link data-i18n="controlPage" data-i18n-aria-label="desktopControl" aria-label="打开桌面控制页">控制台</a>
       </div>
     </div>
     <div class="audio-dock">
@@ -197,7 +203,7 @@
   <div class="walking-help-body">
     <p data-i18n="walkingHelpStop">先停止移动并扶稳小鸭。</p>
     <ol>
-      <li><strong data-i18n="walkingHelpInstall">检查舵机安装</strong><p data-i18n="walkingHelpInstallStep">卸力后，在舵机设置的单舵机安装检查中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。</p></li>
+      <li><strong data-i18n="walkingHelpInstall">检查舵机安装</strong><p data-i18n="walkingHelpInstallStep">卸力后，在舵机设置的「单舵机运动控制」中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。</p></li>
       <li><a href="/calibrate.html" data-desktop-link="/calibrate.html" data-i18n="walkingHelpCalibration">打开标定</a><p data-i18n="walkingHelpCalibrationStep">先按参考图统一标定 15 个舵机，再标定 IMU，最后检查默认姿势。</p></li>
       <li><a href="/servo.html" data-desktop-link="/servo.html" data-i18n="walkingHelpServo">打开舵机设置</a><p data-i18n="walkingHelpServoStep">扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。</p></li>
     </ol>
@@ -247,9 +253,9 @@
       </div>
       <p class="muted" data-i18n="audioFileHint">选择不超过 30 秒的音频，在小鸭扬声器播放。</p>
     </section>
-    <section><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开桌面控制页 ↗</a></section>
+    <section><a href="/index.html" data-desktop-link class="desktop-link" data-i18n="desktopControlLink">打开控制调试中心 ↗</a></section>
   </div>
   <div id="framePanel" hidden><p class="frame-hint" id="frameHint"></p><iframe id="settingsFrame" title="小鸭配置" data-i18n-title="configuration" src="about:blank"></iframe></div>
 </dialog>
-<script src="mobile-i18n.js?v=gamepad-language"></script><script src="mobile-fullscreen.js?v=cockpit-portrait"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=cockpit-layout"></script><script src="remote-control-notice.js"></script><script src="mobile-motion.js?v=rear-cover-notice"></script><script src="mobile-binding.js?v=camera-region"></script><script src="mobile.js?v=gamepad-language"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
+<script src="mobile-i18n.js?v=servo-motion-control"></script><script src="mobile-fullscreen.js?v=cockpit-portrait"></script><script src="mobile-audio.js?v=20261013-live"></script><script src="mobile-tof.js?v=tof-avoidance"></script><script src="remote-control-notice.js"></script><script src="mobile-motion.js?v=roller-stance"></script><script src="mobile-binding.js?v=camera-region"></script><script src="mobile.js?v=cockpit-perf"></script><script src="mobile-startup.js?v=20261102-startup1"></script>
 </body></html>

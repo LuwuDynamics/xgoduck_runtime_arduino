@@ -26,9 +26,15 @@ def sha256(path):
 def firmware_inputs(root):
     files = [Path('provenance/toolchain.json')]
     files.extend(Path('tools', name) for name in (
-        'prepare-ai-sketch.py', 'prepare-bridge.py', 'bridge_patch.py', 'verify-elf.py',
+        'prepare-ai-sketch.py', 'prepare-bridge.py', 'verify-elf.py',
     ))
-    for folder in ('sketch', 'tools/patches'):
+    folders = ['sketch']
+    # The host boot guard also services older fixed-baud releases, whose
+    # manifests include the script and patches applied to the Arduino cache.
+    if (root / 'tools/bridge_patch.py').is_file():
+        files.append(Path('tools/bridge_patch.py'))
+        folders.append('tools/patches')
+    for folder in folders:
         files.extend(path.relative_to(root) for path in (root / folder).rglob('*')
                      if path.is_file() and not any(part.startswith('.') for part in path.relative_to(root).parts))
     return sorted(files)

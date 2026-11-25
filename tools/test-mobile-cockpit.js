@@ -28,9 +28,10 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       control:{enabled:gamepadEnabled,bindings:gamepadBindings,learning:gamepadLearning,
         binding_message:gamepadBindingMessage,roller_mode:robot.roller.enabled},usb:snapshot
     });
-    const tof={state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
+    const tof={avoidance_enabled:false,state:'ranging',fresh:true,age_ms:10,seq:7,frequency_hz:5,center_mm:750,min_mm:120,
       grid_mm:Array.from({length:8},(_,y)=>Array.from({length:8},(_,x)=>y+x===0?null:120+(y*8+x)*30))};
-    let tofHTTP=200,tofDelay=0,blockForward=false,failVolume=false,failRoller=false;
+    let tofHTTP=200,tofDelay=0,failAvoidance=false,blockForward=false,failVolume=false,failRoller=false;
+    let rollerReturning=false;
     let holdVolume=false,receivedVolume,releaseVolume;
     let holdNext=false,releaseStatus,capturedStatus;
     let holdNextUsb=false,releaseUsbStatus,capturedUsbStatus;
@@ -55,11 +56,18 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       if(url.pathname.startsWith('/api/')){
         if(request.method()==='POST'){
           const body=request.postDataJSON();writes.push({path:url.pathname,body});
+          if(url.pathname==='/api/tof/avoidance'){
+            assert.equal(request.headers()['x-duck-cockpit'],'1');
+            assert.equal(typeof body.enabled,'boolean');
+            if(failAvoidance)return route.fulfill({status:500,json:{detail:'Cannot save settings'}});
+            tof.avoidance_enabled=body.enabled;
+            return route.fulfill({json:{enabled:body.enabled}});
+          }
           if(url.pathname==='/api/cockpit/motion'){
             assert.equal(request.headers()['x-duck-cockpit'],'1');
             if(body.kind==='stand')Object.assign(robot,{mode:'policy',enabled:false,arming:true,arm_failed:false});
             if(body.kind==='torque_off')Object.assign(robot,{mode:'off',enabled:false});
-            return route.fulfill({json:{ok:true,forward_blocked:blockForward&&body.twist?.[0]>0}});
+            return route.fulfill({json:{ok:true,roller_gliding:rollerReturning,forward_blocked:blockForward&&body.twist?.[0]>0}});
           }
           if(url.pathname==='/api/roller'){
             assert.equal(typeof body.enabled,'boolean');
@@ -141,9 +149,9 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       await page.locator('[data-hud-choice='+mode+']').click();
     };
     const phoneShortcuts=['#link','#startCamera','#full','#clean','#moveStick','#turnStick','[data-motion=stand]','[data-motion=sit]',
-      '.quack-action','[data-motion=stop]','#openActions','#rollerMode','#torqueOff'];
+      '.quack-action','[data-motion=stop]','#openActions','#rollerMode','#torqueOff','#controlPageLink'];
     const phoneExtras=['.brand','#language','#padLink','#openBinding','#batteryVoltage','#settings',
-      '#openDepth','#openDeviceTools','#openWalkingHelp','#controlPageLink','#restoreHud'];
+      '#openDepth','#openDeviceTools','#openWalkingHelp','#restoreHud'];
     const checkPhoneHud=async()=>{
       assert.equal(await page.locator('body').getAttribute('data-hud'),'sticks');
       for(const selector of phoneShortcuts)assert.equal(await page.locator(selector).isVisible(),true,selector+' missing from driving view.');
@@ -151,6 +159,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       assert.equal(await page.locator('#stopCamera').isHidden(),true);
     };
     assert.equal(await page.locator('#controlPageLink').getAttribute('href'),'http://duck-mobile.test:9527/');
+    assert.equal(await page.locator('.top #batteryVoltage + #controlPageLink').innerText(),'控制调试中心');
     assert.equal(page.url(),origin+'/');
     await page.getByRole('button',{name:'开启摄像头',exact:true}).waitFor();
     await page.waitForFunction(()=>!document.getElementById('startCamera').disabled);
@@ -314,6 +323,24 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
       ['/api/media/camera/light',{enabled:false}],['/api/media/camera/stop',{}]
     ]);
 
+    await page.locator('#openDepth').click();
+    const avoidance=depthDialog.locator('#tofAvoidance');
+    await depthDialog.locator('#tofAvoidance:enabled').waitFor();
+    assert.equal(await avoidance.isChecked(),false);
+    await avoidance.click();
+    await depthDialog.locator('#tofAvoidance:checked:enabled').waitFor();
+    assert.equal(tof.avoidance_enabled,true);
+    failAvoidance=true;
+    await avoidance.click();
+    await depthDialog.locator('#tofAvoidanceError').waitFor();
+    assert.equal(await avoidance.isChecked(),true);
+    failAvoidance=false;
+    await avoidance.click();
+    await depthDialog.locator('#tofAvoidance:not(:checked):enabled').waitFor();
+    assert.equal(tof.avoidance_enabled,false);
+    assert.equal(await depthDialog.locator('#tofCenter').innerText(),'75.0');
+    await depthDialog.locator('.dialog-head button').click();
+
     const capturedUsb=new Promise(resolve=>capturedUsbStatus=resolve);holdNextUsb=true;
     await Promise.race([capturedUsb,new Promise((_,reject)=>setTimeout(()=>reject(Error('No USB status poll')),4000))]);
     await openTools();await page.locator('#usbHostQuick').click();
@@ -442,9 +469,24 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(await page.locator('#moveStick.roller-pad').count(),1);
     assert.equal(await page.locator('#moveStickLabel').textContent(),'Forward / back');
     assert.equal(await page.locator('#keyboardStrafe').isHidden(),true);
-    await touch('touchStart',[await left(),await right()]);
-    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>0&&body.twist[1]===0&&body.twist[2]<0&&body.twist[2]>=-.25);
+    await touch('touchStart',[await stickPoint('#moveStick',.5,.03,1),await stickPoint('#turnStick',.97,.5,2)]);
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]>.39&&body.twist[0]<=.4&&body.twist[1]===0&&body.twist[2]<-.44&&body.twist[2]>=-.45);
     await touch('touchEnd');
+    await waitMotion(body=>body?.kind==='release');
+    await page.keyboard.down('s');
+    await waitMotion(body=>body?.kind==='begin'&&body.twist[0]===-.1);
+    await waitMotion(body=>body?.kind==='drive'&&Math.abs(body.twist[0]+.175)<1e-9);
+    await page.keyboard.down('q');
+    await waitMotion(body=>body?.kind==='drive'&&body.twist[0]<-.39&&body.twist[2]>.44);
+    await page.keyboard.up('q');
+    rollerReturning=true;
+    await page.keyboard.up('s');
+    await waitMotion(body=>body?.kind==='drive'&&body.roller_release===true&&body.twist.every(v=>v===0));
+    const glideWrites=writes.length;
+    await page.waitForTimeout(900);
+    assert.ok(writes.slice(glideWrites).filter(w=>w.body?.roller_release).length>2);
+    assert.ok(!writes.slice(glideWrites).some(w=>w.body?.kind==='release'));
+    rollerReturning=false;
     await waitMotion(body=>body?.kind==='release');
     failRoller=true;
     await page.locator('#rollerMode').click();
@@ -662,7 +704,16 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     control.on('pageerror',error=>errors.push(error.message));
     await control.route(origin+'/**',mockCockpit);
     await control.route(origin+':9527/**',mockCockpit);
+    await control.context().addCookies([{url:origin,name:'xgo_duck_rear_cover_ack',value:'1'}]);
     await control.goto(origin+':9527/');
+    const controlNotice=control.locator('#hardware-check');
+    await controlNotice.getByRole('heading',{name:'运动前，请检查扩展板和保护壳'}).waitFor();
+    for(const src of ['hardware-insulation.webp','hardware-rear-cover.webp']){
+      assert.ok(await controlNotice.locator('img[src="'+src+'"]').isVisible());
+    }
+    await controlNotice.getByRole('button',{name:'稍后检查'}).click();
+    await control.reload();
+    assert.equal(await controlNotice.isVisible(),false);
     const disclosure=control.locator('#walking-help');
     const summary=disclosure.locator('summary');
     assert.equal(await summary.innerText(),'走不稳？');
@@ -677,21 +728,22 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     assert.equal(writes.filter(call=>call.path==='/api/mode').length,modeWrites,'Space on walking help must not unload the servos.');
     assert.deepEqual(await disclosure.locator('a').evaluateAll(links=>links.map(link=>link.getAttribute('href'))),
       ['/calibrate.html','/servo.html']);
-    const controlNotice=control.locator('#remote-control-notice');
     const hold=control.locator('[data-mode=hold]:enabled');
     const modes=()=>writes.filter(call=>call.path==='/api/mode').map(call=>call.body.mode);
     await control.locator('#stop').click();
     assert.equal(modes().at(-1),'off','Torque off is available before confirmation.');
     await hold.focus();
     await control.keyboard.down('Enter');
-    await controlNotice.getByRole('heading',{name:'遥控前建议安装后部保护壳'}).waitFor();
+    await controlNotice.getByRole('heading',{name:'运动前，请检查扩展板和保护壳'}).waitFor();
     await control.keyboard.down('Enter');
     assert.equal(await controlNotice.isVisible(),true,'Holding Enter must not confirm the notice.');
     await control.keyboard.up('Enter');
-    await controlNotice.getByRole('button',{name:'知道了'}).focus();
+    await controlNotice.getByRole('button',{name:'已按板型完成检查'}).focus();
     await control.keyboard.press('Space');
     await controlNotice.waitFor({state:'hidden'});
     assert.deepEqual(modes().slice(modeWrites),['off'],'Confirming must not change the mode or replay the original command.');
+    await control.reload();
+    assert.equal(await controlNotice.isVisible(),false);
     await hold.click();
     assert.equal(modes().at(-1),'hold');
     await control.locator('#language').click();
@@ -700,7 +752,7 @@ const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR
     const standRequest=control.waitForRequest(request=>request.url().endsWith('/api/cockpit/motion')&&request.postDataJSON().kind==='stand');
     await control.locator('[data-motion=stand]:enabled').click();
     await standRequest;
-    assert.equal(await controlNotice.isVisible(),false,'The cockpit shares confirmation with port 9527 on the same host.');
+    assert.equal(await control.locator('#remote-control-notice').isVisible(),false,'The cockpit shares confirmation with port 9527 on the same host.');
     await control.close();
 
     const binding=await browser.newPage({locale:'zh-CN',viewport:{width:1200,height:800}});

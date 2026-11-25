@@ -41,9 +41,26 @@ class VoiceSupervisor:
         env['DUCK_NATIVE_LIB_DIR'] = str(native / 'lib')
         process = subprocess.Popen([sys.executable, '-u', str(Path(__file__).with_name('voice_process.py'))],
                                    env=env, start_new_session=True)
+        # Keep wakeword/voice strictly below the 50 Hz balance control loop and off core 0-1.
+        try:
+            os.setpriority(os.PRIO_PROCESS, process.pid, 19)
+        except OSError:
+            pass
+        voice_cpus = None
+        try:
+            cpus = sorted(os.sched_getaffinity(0))
+            if len(cpus) >= 4:
+                voice_cpus = set(cpus[2:])
+            elif len(cpus) >= 2:
+                voice_cpus = {cpus[-1]}
+            if voice_cpus:
+                os.sched_setaffinity(process.pid, voice_cpus)
+        except (AttributeError, OSError):
+            pass
         with self.lock:
             self.process = process
-        print('[supervisor] voice PID', process.pid, flush=True)
+        print(f'[supervisor] voice PID {process.pid} (nice=19, cpus={sorted(voice_cpus) if voice_cpus else "all"})',
+              flush=True)
         return process
 
     def start(self):

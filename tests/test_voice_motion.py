@@ -475,6 +475,32 @@ class VoiceMotionTest(unittest.TestCase):
             self.move(**lease, sequence=3)
         self.assertFalse(self.c.arm_pending)
 
+    def test_remote_held_direction_cannot_rearm_after_imu_reinitializes(self):
+        self.access.remote_allowed = lambda: True
+        remote = dict(remote=True, controller_id='phone_session_A', duration=.7)
+        self.assertEqual(self.move(**remote, sequence=1)['status'], 'accepted')
+        self.assertEqual(self.c.twist, [.08, 0, 0])
+
+        self.c.feedback.imu_ok = self.c.feedback.enabled = False
+        self.motion_status.update(imu_ok=False, full_robot_ready=False)
+        self.c.step()
+        self.assertEqual(self.c.mode, 'shadow')
+        self.access.tick()
+
+        self.c.feedback.imu_ok = True
+        self.motion_status.update(imu_ok=True, full_robot_ready=True)
+        self.access.tick()
+        with self.assertRaisesRegex(ValueError, 'release the direction key'):
+            self.move(**remote, sequence=2)
+        self.assertFalse(self.c.arm_pending)
+        self.assertEqual(self.c.mode, 'shadow')
+
+        self.access.start_action(kind='stop', session=101, remote=True,
+                                 controller_id=remote['controller_id'], sequence=3)
+        self.assertEqual(self.move(**remote, sequence=4)['status'], 'paused')
+        self.assertEqual(self.c.mode, 'policy')
+        self.assertTrue(self.c.arm_pending)
+
     def test_remote_stand_timeout_needs_a_new_press(self):
         self.access.remote_allowed = lambda: True
         self.c.mode = 'hold'

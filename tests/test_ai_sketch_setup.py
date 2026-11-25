@@ -80,6 +80,13 @@ class SketchSetupTest(unittest.TestCase):
             self.assertNotIn('--upload', command)
             self.assertNotIn('-u', command)
 
+    def test_profile_uses_the_bundled_reliable_libraries(self):
+        profile = (ROOT / 'sketch/sketch.yaml').read_text()
+        for name in ('Arduino_RouterBridge', 'Arduino_RPClite'):
+            self.assertIn(f'- dir: libraries/{name}', profile)
+            self.assertNotIn(f'- {name} (', profile)
+        subprocess.run([setup.sys.executable, str(ROOT / 'tools/prepare-bridge.py')], check=True)
+
     def test_metadata_remains_consistent_with_sketch_platform_pin(self):
         info = setup.metadata()
         profile = (ROOT / 'sketch/sketch.yaml').read_text()

@@ -239,6 +239,18 @@ def main():
                     assert tof['sensor']['grid_mm'] == [[1000]*8 for _ in range(8)]
                     assert tof['front']['front_distance_mm'] == 1000
                     assert tof['front']['forward_ready']
+                    if mode == 'tof_read_disabled_avoidance':
+                        path = '/api/tof/avoidance'
+                        headers = {'X-Duck-Cockpit': '1'}
+                        assert client.get('/api/tof/status').json()['avoidance_enabled'] is False
+                        assert client.post(path, json={'enabled': True}).status_code == 403
+                        assert client.post(path, json={'enabled': 'false'}, headers=headers).status_code == 400
+                        for enabled in (True, False):
+                            reply = client.post(path, json={'enabled': enabled}, headers=headers)
+                            assert reply.status_code == 200 and reply.json() == {'enabled': enabled}
+                            assert client.get('/api/status').json()['obstacle_avoidance']['enabled'] is enabled
+                            sensor = client.get('/api/tof/status').json()
+                            assert sensor['avoidance_enabled'] is enabled and sensor['fresh']
                     media = client.get('/api/media/status')
                     assert media.status_code == 200 and set(media.json()) == {'camera', 'audio', 'tts'}
                     if mode == 'orphan':

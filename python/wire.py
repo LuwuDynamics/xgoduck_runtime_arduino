@@ -4,6 +4,9 @@ import math
 import struct
 
 STATE = struct.Struct('<4sBBH10I6h45f')
+STATE_REPLY_DETAIL = struct.Struct('<HH15s')
+POSITION_FAULTS = struct.Struct('<H')
+NO_SERVO_ERRORS = bytes(15)
 DIAGNOSTIC = struct.Struct('<4s16I')
 DIAGNOSTIC_V2 = struct.Struct('<4s17I')
 VOLTAGE = struct.Struct('<4sIIH15B')
@@ -31,17 +34,19 @@ SERVO_READ_RUN_GAINS = 12
 SERVO_TEST_START, SERVO_TEST_MOVE, SERVO_TEST_STOP = range(13, 16)
 SERVO_READ_PROTECTION = 16
 SERVO_SET_PROTECTION_SWITCH = 17
+SERVO_INIT_ID_PROTECTION = 18
 SERVO_TEST_OFFSET_DEG = 30
 SERVO_TEST_OFFSET_BIAS = 10
 SERVO_TEST_OPS = (SERVO_TEST_START, SERVO_TEST_MOVE, SERVO_TEST_STOP)
 BROADCAST_ID = 254
 PROTECTION_CURRENT_UNIT_A = 0.0065
-PROTECTION_VOLTAGE, PROTECTION_OVERCURRENT = 0x01, 0x08
-PROTECTION_DISABLED, PROTECTION_ENABLED = 0x04, 0x0D
+PROTECTION_VOLTAGE, PROTECTION_OVERHEAT, PROTECTION_OVERCURRENT = 0x01, 0x04, 0x08
+PROTECTION_DISABLED, PROTECTION_ENABLED = PROTECTION_OVERHEAT, 0x0D
 SERVO_OPS = (SERVO_ENTER, SERVO_EXIT, SERVO_UNLOCK, SERVO_SET_ID,
              SERVO_SET_PERM_KP_KD, SERVO_READ, SERVO_PING, SERVO_RESET_MID,
              SERVO_SET_PROTECTION, SERVO_SET_PROTECTION_CURRENT,
-             SERVO_READ_RUN_GAINS, *SERVO_TEST_OPS, SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH)
+             SERVO_READ_RUN_GAINS, *SERVO_TEST_OPS, SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH,
+             SERVO_INIT_ID_PROTECTION)
 
 assert STATE.size == 240
 assert DIAGNOSTIC.size == 68
@@ -73,6 +78,10 @@ class Feedback:
     angles: tuple
     velocities: tuple
     targets: tuple
+    servo_errors: bytes | None = None  # None for firmware without reply diagnostics.
+    bad_checksum_mask: int = 0
+    unexpected_length_mask: int = 0
+    invalid_position_mask: int = 0
 
     @property
     def imu_ok(self):
@@ -91,16 +100,28 @@ class Feedback:
         return bool(self.flags & 16)
 
 def decode_state(data):
-    if not isinstance(data, (bytes, bytearray)) or len(data) != STATE.size:
-        raise ValueError('expected 240-byte state')
-    x = STATE.unpack(data)
-    if x[0] != b'DQS1' or x[1] != 1 or x[3] & ~ALL_MASK:
+    if not isinstance(data, (bytes, bytearray)) or len(data) < STATE.size:
+        raise ValueError('incomplete state')
+    x = STATE.unpack_from(data)
+    checksum = length = invalid_position = 0
+    if x[:2] == (b'DQS1', 1) and len(data) == STATE.size:
+        errors = None
+    elif x[:2] == (b'DQS2', 2) and len(data) == STATE.size and x[3] == ALL_MASK:
+        errors = NO_SERVO_ERRORS
+    elif x[:2] == (b'DQS2', 2) and len(data) - STATE.size in (
+            STATE_REPLY_DETAIL.size, STATE_REPLY_DETAIL.size + POSITION_FAULTS.size):
+        checksum, length, errors = STATE_REPLY_DETAIL.unpack_from(data, STATE.size)
+        if len(data) > STATE.size + STATE_REPLY_DETAIL.size:
+            invalid_position, = POSITION_FAULTS.unpack_from(data, STATE.size + STATE_REPLY_DETAIL.size)
+    else:
+        raise ValueError('invalid state ABI')
+    if (x[3] | checksum | length | invalid_position) & ~ALL_MASK:
         raise ValueError('invalid state ABI')
     if not all(math.isfinite(v) for v in x[20:]):
         raise ValueError('non-finite state')
     return Feedback(x[2], x[3], *x[4:14], tuple(v*9.8/16384 for v in x[14:17]),
                     tuple(v/32 for v in x[17:20]), tuple(x[20:35]),
-                    tuple(x[35:50]), tuple(x[50:65]))
+                    tuple(x[35:50]), tuple(x[50:65]), errors, checksum, length, invalid_position)
 
 def decode_diagnostics(data):
     if not isinstance(data, (bytes, bytearray)):
@@ -246,7 +267,7 @@ def decode_servo_reply(data):
                 'current_raw': x[5], 'current_a': x[5] * PROTECTION_CURRENT_UNIT_A}
     if x[2] > 253:
         raise ValueError('invalid servo reply ID')
-    if x[1] in (SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH):
+    if x[1] in (SERVO_READ_PROTECTION, SERVO_SET_PROTECTION_SWITCH, SERVO_INIT_ID_PROTECTION):
         return {'op': x[1], 'target_id': x[2], 'ok': bool(x[3]),
                 'protection_flags': x[4], 'voltage_protection': bool(x[4] & PROTECTION_VOLTAGE),
                 'overcurrent_protection': bool(x[4] & PROTECTION_OVERCURRENT),

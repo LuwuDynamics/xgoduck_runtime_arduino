@@ -13,6 +13,14 @@ REFERENCE_G = 9.8
 FRAME = 'qmi-policy-body-offset-v2'
 MAX_GYRO_ZERO_DPS = 20.0
 GYRO_ZERO_ERROR = 'Gyroscope zero offset is too large. Check the IMU and try again.'
+MOTION_LIMITS = dict(acc_std_ms2=.30, gyro_std_dps=1.125, acc_peak_ms2=1.0, gyro_peak_dps=4.5)
+
+
+class ImuMovementError(ValueError):
+    def __init__(self, metrics, exceeded):
+        super().__init__('Movement detected. Hold the board still and try again.')
+        self.metrics = metrics
+        self.exceeded = exceeded
 
 
 def vector(values):
@@ -64,11 +72,6 @@ def estimate(rows):
     mean_gyro = [math.fsum(row[i] for row in gyro)/n for i in range(3)]
     acc_std = [math.sqrt(math.fsum((row[i]-mean_acc[i])**2 for row in acc)/n) for i in range(3)]
     gyro_std = [math.sqrt(math.fsum((row[i]-mean_gyro[i])**2 for row in gyro)/n) for i in range(3)]
-    acc_peak = max(math.dist(row, mean_acc) for row in acc)
-    gyro_peak = max(math.dist(row, mean_gyro) for row in gyro)
-    if (math.hypot(*acc_std) > .30 or math.hypot(*gyro_std) > 1.125
-            or acc_peak > 1.0 or gyro_peak > 4.5):
-        raise ValueError('Movement detected. Hold the board still and try again.')
     check_standing(mean_acc)
     reference = [0., 0., -REFERENCE_G]
     record = dict(version=2, frame=FRAME, method='offset',
@@ -79,6 +82,12 @@ def estimate(rows):
                                    mean_acc_ms2=mean_acc, mean_gyro_dps=mean_gyro,
                                    acc_std_ms2=acc_std, gyro_std_dps=gyro_std))
     ImuCorrection(record)
+    metrics = dict(acc_std_ms2=math.hypot(*acc_std), gyro_std_dps=math.hypot(*gyro_std),
+                   acc_peak_ms2=max(math.dist(row, mean_acc) for row in acc),
+                   gyro_peak_dps=max(math.dist(row, mean_gyro) for row in gyro))
+    exceeded = [name for name, value in metrics.items() if value > MOTION_LIMITS[name]]
+    if exceeded:
+        raise ImuMovementError(metrics, exceeded)
     return record
 
 

@@ -1,9 +1,11 @@
-/* Read-only ToF view. Colours animate real snapshots; no synthetic distances. */
+/* Live ToF readings and the device-wide forward avoidance setting. */
 (() => {
   const $=id=>document.getElementById(id),t=(key,values)=>window.DuckI18n.t(key,values);
-  const panel=$('tofPanel'),grid=$('tofGrid'),cells=[];
+  const panel=$('tofPanel'),grid=$('tofGrid'),cells=[],lastCells=new Array(64);
   const states={starting:'tofStarting',initializing:'tofStarting',ranging:'tofLive',absent:'tofAbsent',offline:'tofOffline',error:'tofError',unavailable:'tofUnavailable',disconnected:'tofDisconnected',stale:'tofStale',empty:'tofEmpty'};
-  let expanded=true,data=null,received=0,timer=null,request=null,stopped=false;
+  let expanded=true,data=null,received=0,timer=null,request=null,stopped=false,lastLang='';
+  const avoidance=$('tofAvoidance');
+  let avoidanceEnabled=null, savingAvoidance=false, avoidanceRevision=0;
   let compact=false;
   try{expanded=localStorage.getItem('duck-tof-expanded')!=='false';}catch{}
   for(let i=0;i<64;i++){
@@ -11,6 +13,34 @@
     if([27,28,35,36].includes(i))cell.classList.add('tof-middle');
     grid.append(cell);cells.push(cell);
   }
+  function renderAvoidance(){
+    avoidance.indeterminate=typeof avoidanceEnabled!=='boolean';
+    avoidance.checked=avoidanceEnabled===true;
+    avoidance.disabled=avoidance.indeterminate||savingAvoidance;
+  }
+  avoidance.onchange=async()=>{
+    const enabled=avoidance.checked;
+    savingAvoidance=true;
+    ++avoidanceRevision;
+    $('tofAvoidanceError').hidden=true;
+    renderAvoidance();
+    try{
+      const response=await fetch('/api/tof/avoidance',{
+        method:'POST',headers:{'Content-Type':'application/json','X-Duck-Cockpit':'1'},
+        body:JSON.stringify({enabled}),signal:AbortSignal.timeout(3000)
+      });
+      if(!response.ok)throw Error('ToF avoidance '+response.status);
+      const result=await response.json();
+      if(result.enabled!==enabled)throw Error('Unexpected avoidance setting');
+      avoidanceEnabled=result.enabled;
+    }catch{
+      $('tofAvoidanceError').hidden=false;
+    }finally{
+      savingAvoidance=false;
+      ++avoidanceRevision;
+      renderAvoidance();
+    }
+  };
   function distance(value){
     if(!Number.isFinite(value)||value<=0)return ['—',''];
     return value>=1000?[(value/1000).toFixed(2),'m']:[(value/10).toFixed(1),'cm'];
@@ -43,8 +73,13 @@
     $('tofMessage').textContent=reason;$('tofMessage').hidden=!reason;
     $('tofMessage').title=data?.error_message||'';
     grid.setAttribute('aria-label',t('tofGridDescription',{count,distance:distance(fresh?data?.center_mm:null).join(' ').trim()}));
+    const langChanged=lastLang!==window.DuckI18n.language;
+    lastLang=window.DuckI18n.language;
     cells.forEach((cell,i)=>{
-      const mm=values[i];cell.classList.toggle('is-valid',mm!==null);
+      const mm=values[i];
+      if(!langChanged&&lastCells[i]===mm)return;
+      lastCells[i]=mm;
+      cell.classList.toggle('is-valid',mm!==null);
       if(mm===null){cell.style.removeProperty('--depth-color');cell.title=t('tofZoneInvalid',{row:Math.floor(i/8)+1,column:i%8+1});}
       else{
         // Fixed 0–2 m colour scale; numeric values are never capped at 2 m.
@@ -77,6 +112,7 @@
   function schedule(delay){clearTimeout(timer);if(!document.hidden&&!stopped)timer=setTimeout(poll,delay);}
   async function poll(){
     if(request||document.hidden||stopped)return;
+    const revision=avoidanceRevision;
     const controller=new AbortController();request=controller;
     const deadline=setTimeout(()=>controller.abort(),2500),started=performance.now();
     try{
@@ -87,20 +123,28 @@
         // Include transit time: a delayed reply cannot make an old frame fresh.
         if(Number.isFinite(snapshot.age_ms))snapshot.age_ms+=performance.now()-started;
         data=snapshot;received=performance.now();
+        if(!savingAvoidance&&revision===avoidanceRevision)avoidanceEnabled=snapshot.avoidance_enabled;
       }
     }catch{
-      if(!document.hidden&&!stopped){data={state:'disconnected',fresh:false};received=performance.now();}
+      if(!document.hidden&&!stopped){
+        data={state:'disconnected',fresh:false};received=performance.now();
+        if(!savingAvoidance&&revision===avoidanceRevision)avoidanceEnabled=null;
+      }
     }finally{
-      clearTimeout(deadline);request=null;render();
+      clearTimeout(deadline);request=null;render();renderAvoidance();
       schedule(Math.max(0,(data?.state==='disconnected'?1500:250)-(performance.now()-started)));
     }
   }
-  function suspend(){clearTimeout(timer);request?.abort();data=null;render();}
+  function suspend(){clearTimeout(timer);request?.abort();data=null;avoidanceEnabled=null;render();renderAvoidance();}
   document.addEventListener('visibilitychange',()=>{if(document.hidden)suspend();else schedule(0);});
   window.addEventListener('pagehide',()=>{stopped=true;suspend();});
   window.addEventListener('pageshow',()=>{stopped=false;schedule(0);});
   window.addEventListener('duck-languagechange',()=>{layout();render();});
   // Invalidate the display during a stalled HTTP read, before that read times out.
-  setInterval(()=>{if(!document.hidden&&!stopped)render();},250);
-  layout();render();schedule(0);
+  setInterval(()=>{
+    if(document.hidden||stopped||panel.dataset.state!=='ranging')return;
+    const age=data?.age_ms==null?null:data.age_ms+Math.max(0,performance.now()-received);
+    if(age===null||age>1000)render();
+  },250);
+  layout();render();renderAvoidance();schedule(0);
 })();

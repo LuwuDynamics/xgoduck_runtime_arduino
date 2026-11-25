@@ -16,7 +16,7 @@
 
 1. 扶稳小鸭并卸力，停止旧 App，记录默认 App 和安装目录，备份旧 App 及 `data/`。用新的 `.ard` 或源码 ZIP 安装到另一个目录。
 2. 新旧 App 都停止时，迁移同一只鸭子的持久数据，包括 `data/imu-calibration.json`、舵机中位记录、`data/voice_config.json`、`data/voice-state/` 和手柄映射。保留文件权限及归属。跳过 `.cache/`、`data/native/` 和运行时 socket。历史软件零位按硬件中位迁移说明处理。 [标定迁移](ai-chat.md)
-3. 在新目录按 README 第 4 步配置和启动。若要回退，停止新 App，按旧版流程从旧目录恢复硬件支持、共享 Router 和开机默认 App，再启动旧 App。 [安装与启动](../README_CN.md#4-终端配置与启动)
+3. 在新目录按 README 第 4 步配置和启动。当前开发版的 Router 与 STM32 使用可靠协议，从 115200 握手后协商至 2 Mbaud。回退到旧版固定 2M 时，停止新 App，在旧目录恢复硬件支持和开机默认 App，并执行旧目录的 `sudo bash tools/router-2m.sh`，再启动旧 App。 [安装与启动](../README_CN.md#4-终端配置与启动)
 
 若使用全量包迁回旧配置，安装器会自动启动新 App。安装结束后先运行 `arduino-app-cli app stop <新目录>`，再执行 `sudo systemctl stop xgoduck-ai-hardware.service`。按上面的文件范围迁回数据，保留权限、归属和新生成的 `data/native/`。核对完成后依次执行 `sudo systemctl start xgoduck-ai-hardware.service` 和 `arduino-app-cli app start --no-prepare <新目录>`，再验收。
 
@@ -27,6 +27,8 @@
 首次未绑定账号、缺少 USB 音频或没有公网时，不要求语音在线，将对应配置记录为待完成项。语音进程崩溃或依赖错误仍需处理。只有已绑定、音频设备齐全且公网可用时，才验收语音云连接和音频就绪。正常重启验收不要求断网；断网冷启动可在配置完成后另测。
 
 ## 发版文件
+
+制作全量包的离线 APT 仓库时，从要支持的系统镜像分别导出 `/var/lib/dpkg/status`。在已更新 APT 索引的 Debian 13 ARM64 构建环境中运行 `bash tools/prepare-full-dbus.sh <全量包的debs目录> <status文件> [更多status文件...]`。脚本会下载 `python3-dbus`、Router 所需的 `socat`、摄像头工具 `v4l-utils` 及其配套库 `libv4l2rds0t64`，按各镜像清单补齐这些包的依赖，再生成 `debs/Packages`。打包前分别用每份清单和包内仓库离线验证安装依赖，随后重算包内 `SHA256SUMS` 与 ZIP 校验文件。
 
 三个包使用同一版本的源码。源码 ZIP 继续放在 `packages/xgoduck_ai.zip`，同时更新其 `.sha256`。在 UNO Q 上用 `python3 tools/package-ai-app.py --release` 构建带版本号的 `.ard`，让每版有独立的安装目录。制作全量包时使用同一版本的 `.ard`，让包内脚本、安装目录和清单与新版本一致。 [预编译包制作与恢复](ai-chat.md#precompiled-uno-q-release)
 

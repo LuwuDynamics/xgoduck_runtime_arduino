@@ -273,7 +273,10 @@ class GamepadControl:
                     self.wait_for_neutral = False
                 if self.controller.input_source == 'web' and any(twist):
                     self.controller.input_source = 'gamepad'
-                self.controller.command(twist=twist, source='gamepad')
+                if self.controller.roller_mode and not any(twist) and not any(buttons.values()):
+                    self.controller.command(twist=twist, source='gamepad', roller_release=True)
+                else:
+                    self.controller.command(twist=twist, source='gamepad')
             except ValueError as e:
                 self.error = str(e)
 

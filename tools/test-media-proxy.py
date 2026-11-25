@@ -25,6 +25,11 @@ class ProxyTest(unittest.IsolatedAsyncioTestCase):
                 return httpx.Response(200, headers={'Content-Type': 'multipart/x-mixed-replace; boundary=duckframe'},
                                       stream=httpx.ByteStream(b'--duckframe\r\nframe-data'))
             if req.url.path.endswith('/camera/frame'):
+                if req.url.params.get('after') == '7':
+                    return httpx.Response(204, headers={'Cache-Control': 'no-store'})
+                if req.url.params.get('preview') == '1':
+                    return httpx.Response(200, content=b'\xff\xd8preview\xff\xd9',
+                                          headers={'Content-Type': 'image/jpeg', 'X-Frame-Seq': '7'})
                 return httpx.Response(503, json={'error': 'Not ready'})
             return httpx.Response(200, json={'audio': {'state': 'idle'}})
         self.upstream = httpx.AsyncClient(transport=httpx.MockTransport(upstream))
@@ -42,6 +47,17 @@ class ProxyTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.requests[-1].url.path, '/api/status')
         response = await self.client.get('/api/media/camera/frame')
         self.assertEqual(response.status_code, 503)
+
+    async def test_camera_frame_forwards_preview_query_seq_and_204(self):
+        response = await self.client.get('/api/media/camera/frame?preview=1&after=0')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'\xff\xd8preview\xff\xd9')
+        self.assertEqual(response.headers['x-frame-seq'], '7')
+        self.assertEqual(self.requests[-1].url.params.get('preview'), '1')
+        self.assertEqual(self.requests[-1].url.params.get('after'), '0')
+        empty = await self.client.get('/api/media/camera/frame?preview=1&after=7')
+        self.assertEqual(empty.status_code, 204)
+        self.assertEqual(empty.content, b'')
 
     async def test_stream_forwarded_without_json_encoding(self):
         response = await self.client.get('/api/media/camera/stream')

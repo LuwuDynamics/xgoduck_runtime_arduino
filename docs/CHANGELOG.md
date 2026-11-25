@@ -1,5 +1,15 @@
 # XGO Duck AI 更新记录 / Changelog
 
+## 未发布 / Unreleased
+
+- Linux 与 STM32 默认使用 Arduino 可靠协议，握手后协商至 2 Mbaud。升级和回退时使用与目标固件配套的 Router。
+- IMU 六轴原始读数连续 10 帧全为零时，STM32 卸力并重新初始化 IMU。连续 3 帧有效后恢复反馈，小鸭保持卸力，等待新的起立或上力指令。
+- Linux and STM32 now use Arduino’s reliable protocol and negotiate 2 Mbaud. Use the target firmware’s matching Router when upgrading or rolling back.
+- After ten consecutive all-zero IMU samples, STM32 releases torque and reinitializes the IMU. Three consecutive valid samples restore feedback. Duck stays unloaded until a fresh arm command.
+
+- 开机连上 Wi-Fi 后，点阵向右滚动显示带分隔点的完整 IPv4 地址，末位数字先进入，30 秒后熄灭。
+- At startup, the LED matrix shows the last part of the Wi-Fi address for 30 seconds, then turns off.
+
 ## 0.3.7
 
 ### 简体中文

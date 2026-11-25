@@ -1,10 +1,33 @@
 const $=id=>document.getElementById(id);
 const {t,setText}=window.DuckPanelLanguage;
-const allowRemote=()=>window.DuckRemoteNotice?.allow()!==false;
-const cockpitURL=new URL('/',location.href);
-cockpitURL.port='';
-$('cockpit-link')?.setAttribute('href',cockpitURL.href);
 const toggleLabel=enabled=>enabled?t('On','开'):t('Off','关');
+// FEETECH HLS status byte, section 3.2 of the register table.
+const servoAlarmBits = [
+  [0x01, 'Voltage out of range', '电压异常'],
+  [0x02, 'Magnetic encoder fault', '磁编码器异常'],
+  [0x04, 'Overheating', '过热'],
+  [0x08, 'Overcurrent', '过流'],
+];
+const hexByte = value => '0x' + value.toString(16).toUpperCase().padStart(2, '0');
+function showServoAlarms(alarms) {
+  const entries = Object.entries(alarms || {}).filter(([, alarm]) => alarm.code > 0);
+  $('servo-alarms').hidden = entries.length === 0;
+  if (entries.length) setText('servo-alarms', () => {
+    const items = entries.map(([id, alarm]) => {
+      const meanings = [];
+      let unknown = alarm.code;
+      for (const [bit, en, zh] of servoAlarmBits) {
+        if (alarm.code & bit) meanings.push(t(en, zh));
+        unknown &= ~bit;
+      }
+      if (!meanings.length) meanings.push(t('Unknown alarm', '未知报警'));
+      else if (unknown) meanings.push(t('Unknown flag', '未知报警位') + ' ' + hexByte(unknown));
+      const when = alarm.active ? t('current', '当前') : t('last 2 s', '最近 2 秒');
+      return `ID ${id} · ${meanings.join(t(' + ', '、'))} · ${hexByte(alarm.code)} (${when})`;
+    });
+    return t('Servo alarm', '舵机报警') + '　' + items.join(' / ');
+  });
+}
 const actionLabels={
   pick:['Pick','叼东西'],roulade:['Roulade','翻滚'],sit:['Sit','坐下'],stand:['Stand','站起'],
   left_kick:['Left kick','左脚踢球'],right_kick:['Right kick','右脚踢球']
@@ -14,7 +37,7 @@ const modeLabels={
   policy:['walk','行走'],calibrate:['calibration','标定'],servo_debug:['servo setup','舵机设置'],
   sit:['sit','坐姿'],stand:['stand','正在站起'],left_kick:['left kick','左脚踢球'],right_kick:['right kick','右脚踢球']
 };
-const recoveryLabels={walk:['Walking','行走中'],default_pose:['Preparing to get up','准备起身'],getup:['Getting up','正在起身']};
+const recoveryLabels={walk:['Walking','行走中'],default_pose:['Preparing to get up','准备起身'],getup:['Getting up','正在起身'],retreat:['Returning to default stance','正在回到默认站姿']};
 const serverMessages=new Map([
   ['Request failed.','请求失败。'],
   ['Could not read robot status.','暂时无法读取小鸭状态。'],
@@ -35,6 +58,8 @@ const serverMessages=new Map([
   ['Not enough IMU readings. Check the connection and try again.','IMU 读数不足，请检查连接后重试。'],
   ['Not enough IMU readings. Keep the board still and try again.','IMU 读数不足，请保持主板静止后重试。'],
   ['Unexpected acceleration. Keep the board still and try again.','加速度异常，请保持主板静止后重试。'],
+  ['IMU vector must have three values','IMU 读数无效，请检查 IMU 后重试。'],
+  ['IMU contains nonfinite values','IMU 读数无效，请检查 IMU 后重试。'],
   ['Movement detected. Hold the board still and try again.','检测到晃动，请保持主板静止后重试。'],
   ['Gyroscope zero offset is too large. Check the IMU and try again.','陀螺仪零偏过大，请检查 IMU 后重试。'],
   ['Calibration cancelled because the control mode changed.','控制模式已切换，标定已取消。'],
@@ -46,7 +71,9 @@ const serverMessages=new Map([
   ['IMU feedback is stale','IMU 反馈已过期。'],
   ['required servo feedback / IMU missing','缺少必要的舵机或 IMU 反馈。'],
   ['STM32 feedback timed out; motion paused, holding last targets','STM32 反馈超时，运动已暂停，舵机保持上一次目标位置。'],
-  ['sensor feedback lost; disarmed','传感器反馈中断，舵机已卸力。'],
+  ['sensor feedback lost; disarmed','IMU 姿态反馈中断，舵机已卸力','IMU attitude feedback interrupted. Servos disarmed.'],
+  ['Servo stalled; returning to the default stance.','检测到舵机持续过流且未转动，正在回到默认站姿。'],
+  ['Stall recovery stopped; torque off. Support the duck and select Walk / get up.','脱困停止，舵机已卸力。请扶稳小鸭，再点「行走 / 起身」。'],
   ['MCU released torque during the feedback pause','反馈中断期间，STM32 已卸力。'],
   ['calibrate/servo_debug heartbeat lost; exited','标定或舵机设置页面失去连接，已退出当前模式。'],
   ['exit calibrate/servo_debug first','请先退出标定或舵机设置。'],
@@ -93,6 +120,8 @@ function localizeMessage(message){
   for(const [prefix,zh] of [['Previous calibration kept. ','已保留上一次标定结果。'],['Motion command failed: ','运动指令失败。']]){
     if(message.startsWith(prefix))return t(prefix,zh)+localizeMessage(message.slice(prefix.length));
   }
+  const imuRetries=message.match(/^No stable IMU readings after (\d+) automatic retries\./);
+  if(imuRetries)return t(message,`自动重试 ${imuRetries[1]} 次仍未得到稳定读数。请扶稳主板后再试。`);
   const remaining=message.match(/^旧版软件零位.*尚未完成的 ID：([\d, ]+)。/);
   if(remaining)return t(`Set the mechanical centers on the Calibration page. Remaining servo IDs ${remaining[1]}.`,`请先在标定页设置舵机机械中位。未完成的舵机 ID ${remaining[1]}。`);
   const rollerRange=message.match(/^roller wz must be between (-?[\d.]+) and (-?[\d.]+)$/);
@@ -107,7 +136,7 @@ let statusBusy=false, commandBusy=false, commandPending=false, rollerBusy=false;
 let rollerEnabled=false;
 let sitstandPhase='idle', sitstandBusy=false, sitstandReady=false;
 let kickActive=false, kickBusy=false;
-let imuCalibrationActive=false, imuCalibrationBusy=false, imuCalibrationError=null, imuReady=false;
+let imuCalibrationActive=false, imuReady=false;
 let imuState=null, controlModeAvailable=true;
 let actionPreparing=false;
 let headingBusy=false;
@@ -115,17 +144,6 @@ const motionRanges={
   walk:{forward:.2,backward:.2,strafe:.3,yaw:1,keyboard:[.2,.15,.5]},
   roller:{forward:.4,backward:.4,strafe:0,yaw:.45,keyboard:[.4,0,.45]}
 };
-for(let i=0;i<4;i++){
-  $('head-controls').insertAdjacentHTML('beforeend',`<label><span id="head-label-${i}"></span> ${i+1}<input id="head${i}" type="range" min="-1" max="1" value="0" step="0.02"></label>`);
-  setText('head-label-'+i,()=>t('Head','头部'));
-}
-$('head-controls').insertAdjacentHTML('beforeend','<label><span id="mouth-label"></span><input id="mouth" type="range" min="0" max="30" value="0" step="1"></label>');
-setText('mouth-label',()=>t('Mouth','嘴部'));
-document.querySelectorAll('#head-controls input').forEach(input=>{
-  input.addEventListener('input',()=>{if(!allowRemote())input.value='0';});
-});
-document.querySelectorAll('[data-mode="hold"], [data-mode="policy"], #pick, #roulade, #sitstand, #left_kick, #right_kick')
-  .forEach(button=>window.DuckRemoteNotice?.bindButton(button));
 function showPreparation(active){
   actionPreparing=!!active;
   if(actionPreparing)for(const id of ['pick','roulade','sitstand','left_kick','right_kick','roller-mode'])$(id).disabled=true;
@@ -174,10 +192,6 @@ function showKick(state){
   if(active!==kickActive)zero(false);
   kickActive=active;
   for(const side of ['left','right'])$(side+'_kick').disabled=kickBusy||active||actionPreparing;
-  document.querySelectorAll('#head-controls input').forEach(input=>{
-    input.disabled=active;
-    if(active)input.value=0;
-  });
   if(active){
     document.querySelector('[data-mode="policy"]').disabled=true;
     $('pick').disabled=$('roulade').disabled=$('sitstand').disabled=true;
@@ -222,9 +236,10 @@ $('sitstand').onclick=async()=>{
 $('stop').onclick=()=>{zero();setMode('off')};
 const keys=new Set(), sticks={left:{x:0,y:0},right:{x:0,y:0}}, resetSticks=[];
 let motion=[0,0,0], targetMotion=[0,0,0];
+let rollerReleasing=false, stopPending=false;
 const deadzone=v=>Math.abs(v)<=.15?0:v;
 function updateMotion(){
-  if(kickActive||imuCalibrationActive||imuCalibrationBusy){targetMotion=[0,0,0];return;}
+  if(kickActive||imuCalibrationActive){targetMotion=[0,0,0];return;}
   const key=(a,b)=>keys.has(a)-keys.has(b);
   const limits=motionRanges[rollerEnabled?'roller':'walk'];
   const forward=deadzone(sticks.left.y);
@@ -237,14 +252,30 @@ function updateMotion(){
 function showMotion(){
   ['vx','vy','wz'].forEach((id,i)=>$(id+'Value').textContent=motion[i].toFixed(2));
 }
+function releaseMotion(){
+  updateMotion();
+  if(rollerEnabled && motion[0] && !targetMotion.some(Boolean)){
+    rollerReleasing=true;
+    motion=[0,0,0];
+  }
+  sendCommand();
+}
 async function sendCommand(){
-  if(imuCalibrationActive||imuCalibrationBusy||!controlModeAvailable)return;
+  if(imuCalibrationActive||!controlModeAvailable)return;
   if(commandBusy){commandPending=true;return;}
   commandBusy=true;commandPending=false;
+  if(targetMotion.some(Boolean))rollerReleasing=false;
+  const stop=stopPending;
+  stopPending=false;
+  const rollerRelease=rollerReleasing&&!stop;
+  const idleHeartbeat=!stop&&!rollerRelease&&!motion.some(Boolean)&&!targetMotion.some(Boolean);
   motion=motion.map((old,i)=>{const value=.75*old+.25*targetMotion[i];return targetMotion[i]===0&&Math.abs(value)<.001?0:value;});
   showMotion();
-  try{await post('command',{twist:imuCalibrationActive?[0,0,0]:[...motion],head:[0,1,2,3].map(i=>imuCalibrationActive?0:+$('head'+i).value),mouth:imuCalibrationActive?0:+$('mouth').value});}
-  catch(e){showError(e);}
+  try{
+    const result=await post('command',{twist:stop?[0,0,0]:[...motion],
+      roller_release:rollerRelease||undefined,idle_heartbeat:idleHeartbeat||undefined});
+    if(rollerRelease&&!result.roller_gliding)rollerReleasing=false;
+  }catch(e){rollerReleasing=false;showError(e);}
   finally{commandBusy=false;if(commandPending)sendCommand();}
 }
 function joystick(id,side){
@@ -262,15 +293,20 @@ function joystick(id,side){
     const distance=Math.hypot(dx,dy);
     if(distance>radius){dx*=radius/distance;dy*=radius/distance;}
     knob.style.transform=`translate(${dx}px,${dy}px)`;
+    const wasTravelling=targetMotion[0]!==0;
     sticks[side]={x:dx/radius,y:-dy/radius};updateMotion();
+    if(rollerEnabled&&wasTravelling&&!targetMotion.some(Boolean))releaseMotion();
   }
-  zone.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;e.preventDefault();if(!allowRemote())return;pointer=e.pointerId;zone.setPointerCapture(pointer);move(e);sendCommand();};
+  zone.onpointerdown=e=>{if(pointer!==null||e.button!==0)return;e.preventDefault();pointer=e.pointerId;zone.setPointerCapture(pointer);move(e);sendCommand();};
   zone.onpointermove=e=>{if(e.pointerId===pointer)move(e);};
-  const release=e=>{if(e.pointerId!==pointer)return;reset();updateMotion();sendCommand();};
-  zone.onpointerup=zone.onpointercancel=zone.onlostpointercapture=release;
+  zone.onpointerup=e=>{if(e.pointerId!==pointer)return;reset();releaseMotion();};
+  zone.onpointercancel=zone.onlostpointercapture=e=>{if(e.pointerId===pointer)zero();};
 }
 joystick('joy-left','left');joystick('joy-right','right');
-function zero(send=true){keys.clear();resetSticks.forEach(reset=>reset());motion=[0,0,0];updateMotion();showMotion();if(send)sendCommand();}
+function zero(send=true){
+  rollerReleasing=false;keys.clear();resetSticks.forEach(reset=>reset());motion=[0,0,0];updateMotion();showMotion();
+  if(send){stopPending=true;sendCommand();}
+}
 $('zero').onclick=()=>zero();
 ['leg-alpha','head-alpha'].forEach(id=>$(id).onchange=()=>post('filter',{leg:+$('leg-alpha').value,head:+$('head-alpha').value}).catch(showError));
 const actionInputs=[['action-scale','action_scale'],['leg-alpha','action_alpha'],['head-alpha','action_alpha_head']];
@@ -370,50 +406,27 @@ function updateStartupChecks(status) {
   }
 }
 
-function showImuCalibration(){
-  imuCalibrationActive=!!imuState?.active;
-  const busy=imuCalibrationBusy||imuCalibrationActive;
-  $('imu-calibrate').disabled=busy||!imuReady||!controlModeAvailable||!imuState;
-  $('imu-reset').disabled=busy||!imuReady||!controlModeAvailable||!imuState||(!imuState.calibrated&&imuState.state!=='error');
-  const percent=Math.round((imuState?.progress||0)*100);
-  setText('imu-calibrate',()=>imuCalibrationActive?t(`Calibrating… ${percent}%`,`正在标定… ${percent}%`):t('Calibrate IMU','标定 IMU'));
-  $('imu-calibration-progress').hidden=!imuCalibrationActive;
-  $('imu-calibration-progress').value=imuState?.progress||0;
-  const failed=!!imuCalibrationError||imuState?.state==='error';
-  $('imu-calibration-status').classList.toggle('error',failed);
-  const seconds=imuState?.seconds??1.5;
-  setText('imu-calibration-status',()=>{
-    const description=imuCalibrationActive
-      ?t(`Keep the board still. Calibrating for ${seconds} seconds…`,`请保持主板静止，正在采样 ${seconds} 秒…`)
-      :imuCalibrationError?requestErrorText(imuCalibrationError):localizeMessage(imuState?.message);
-    return description||(failed?t('IMU calibration failed. Try again.','IMU 标定失败，请重试。')
-      :t('Reading calibration status…','正在读取标定状态…'));
-  });
-  document.querySelector('[data-mode="shadow"]').disabled=busy;
-  if(busy){
+function updateControlsForImuCalibration(){
+  document.querySelector('[data-mode="shadow"]').disabled=imuCalibrationActive;
+  if(imuCalibrationActive){
     document.querySelectorAll('[data-mode]').forEach(b=>b.disabled=true);
     for(const id of ['pick','roulade','sitstand','left_kick','right_kick','roller-mode'])$(id).disabled=true;
-    document.querySelectorAll('#head-controls input').forEach(input=>input.disabled=true);
   }
 }
-for(const [id,action]of [['imu-calibrate','start'],['imu-reset','reset']])$(id).onclick=async()=>{
-  if(imuCalibrationBusy||imuCalibrationActive||!imuReady||!controlModeAvailable||!imuState)return;
-  imuCalibrationBusy=true;imuCalibrationError=null;zero(false);showImuCalibration();
-  try{
-    await post('mode',{mode:'off'});
-    imuState=await post('imu-calibration',{action});
-  }catch(e){imuCalibrationError=e;}
-  finally{imuCalibrationBusy=false;showImuCalibration();}
-};
 function keyCommand(){updateMotion();sendCommand();}
+$('voltage-help').onclick=()=>{
+  if(keys.size||motion.some(Boolean))zero();
+  $('voltage-dialog').showModal();
+};
 $('walking-help')?.addEventListener('toggle',e=>{if(e.currentTarget.open&&(keys.size||motion.some(Boolean)))zero();});
 window.addEventListener('keydown',e=>{
-  if(e.defaultPrevented||e.target.closest?.('#walking-help, #remote-control-notice'))return;
+  if(e.defaultPrevented||e.target.closest?.('#walking-help, #hardware-check, #voltage-dialog'))return;
+  if(e.code==='Space'&&e.target===$('voltage-help'))return;
   if(e.code==='Space'){if(e.target===$('language'))return;e.preventDefault();$('stop').click();return;}
   const k=e.key.toLowerCase();
-  if(!e.repeat&&k.length===1&&'wasdqe'.includes(k)&&allowRemote()){keys.add(k);keyCommand();}
+  if(!e.repeat&&k.length===1&&'wasdqe'.includes(k)){keys.add(k);keyCommand();}
 });
-window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(keys.delete(k))keyCommand();});
+window.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(keys.delete(k))releaseMotion();});
 window.addEventListener('blur',()=>zero());
 document.addEventListener('visibilitychange',()=>{if(document.hidden)zero();});
 window.addEventListener('pagehide',()=>{
@@ -428,6 +441,7 @@ const s=await r.json();
 $('rx').textContent=s.feedback_hz.toFixed(1)+' Hz';
 $('rl').textContent=s.inference_hz.toFixed(1)+' Hz';
 $('servos').textContent=(s.servo_ids?.length||0)+'/15';
+showServoAlarms(s.servo_alarms);
 setText('imu',()=>s.imu_ok?t('online','在线'):t('offline','离线'));
 const mode=s.left_kick?.active?'left_kick':s.right_kick?.active?'right_kick':s.sitstand?.active?s.sitstand.phase:s.mode;
 setText('mode',()=>{
@@ -476,10 +490,9 @@ if(recovery){
   $('tilt-angle').textContent=recovery.angle_deg==null?'—':recovery.angle_deg.toFixed(1)+'°';
   const walking=recovery.phase==='walk'&&!actionPreparing&&!kickRunning&&!sitActive&&!roulade?.active&&!pick?.active;
   setText('recovery-timer',()=>!recovery.active?t('Stopped','已停止'):walking?t('Ready','就绪'):phaseLabel());
-  if(pick?.active)$('mouth').value=Math.round(s.mouth||0);
 }
-showImuCalibration();
+updateControlsForImuCalibration();
 for(const [id,values]of [['acc-values',s.acc_corrected||s.acc],['gyro-values',s.gyro_corrected||s.gyro],['gravity-values',s.gravity],['acc-raw-values',s.acc],['gyro-raw-values',s.gyro]])$(id).textContent=values?values.map(x=>x.toFixed(3)).join(' / '):'—';
 setText('command-health',()=>s.control_ready?t('Controls ready.','控制已就绪。'):t('Waiting for feedback.','等待反馈。'));
 if(s.angles)$('joints').innerHTML=s.motors.map((id,i)=>`<tr class="${s.servo_ids.includes(id)?'':'missing'}"><td>${id}</td><td>${s.angles[i].toFixed(1)}</td><td>${s.targets[i].toFixed(1)}</td></tr>`).join('');
-}catch(e){showError(e);}finally{statusBusy=false;}},250);
+}catch(e){showServoAlarms();showError(e);}finally{statusBusy=false;}},250);

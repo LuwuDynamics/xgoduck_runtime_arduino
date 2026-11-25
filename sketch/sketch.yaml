@@ -4,8 +4,8 @@ profiles:
     platforms:
       - platform: arduino:zephyr (1.0.0)
     libraries:
-      - Arduino_RouterBridge (0.4.3)
-      - Arduino_RPClite (0.3.1)
+      - dir: libraries/Arduino_RouterBridge
+      - dir: libraries/Arduino_RPClite
       - MsgPack (0.4.2)
       - ArxContainer (0.7.0)
       - ArxTypeTraits (0.3.2)

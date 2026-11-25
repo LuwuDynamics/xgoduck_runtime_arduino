@@ -12,7 +12,8 @@ ROOT=Path(__file__).resolve().parents[1]
 class RuntimeGainsMCUTest(unittest.TestCase):
     def test_manual_tuning_and_reads_survive_debug_entry_exit_and_retired_profile_requests(self):
         sketch=(ROOT/'sketch/sketch.ino').read_text();bus=(ROOT/'sketch/scs_bus.h').read_text()
-        writer=bus[bus.index('static void servoSetKpKd('):bus.index('static void servoSetProtectionCurrent(')]
+        writer=bus[bus.index('static void servoSetKpKd('):bus.index('static void readAllRegisters(')]
+        init_protection=bus[bus.index('static bool initServoIdProtection('):].split('\n}',1)[0]+'\n}\n'
         receiver=sketch[sketch.index('static void receiveServo('):sketch.index('static void fillRawPacket(')]
         dispatch=sketch[sketch.index('constexpr uint32_t SERVO_TEST_KEEPALIVE_US'):sketch.index('static void controlTask(')]
         code=r'''
@@ -35,6 +36,7 @@ uint8_t savedKp=7,savedKd=19,liveKp=7,liveKd=19;
 bool rejectLive=false;
 uint8_t storedProtection=PROTECTION_ENABLED | 0x20;
 int protectionWrites=0;
+bool ignoreProtectionWrite=false;
 void scsWriteBuf(uint8_t id,uint8_t op,const uint8_t *data,uint8_t len){
  assert(id==33&&op==3&&len==3);
  if(data[0]==ADDR_PERM_KP_KD){
@@ -60,7 +62,7 @@ void scsWriteByte(uint8_t id,uint8_t reg,uint8_t value){
  }
  if (reg==ADDR_UNLOAD_CONDITION){
   assert(id==33);
-  storedProtection=value;
+  if(!ignoreProtectionWrite)storedProtection=value;
   ++protectionWrites;
  }
 }
@@ -71,24 +73,37 @@ int motorIndexById(uint8_t id){
 }
 uint16_t satPos(int32_t value){return value<POS_MIN?POS_MIN:value>POS_MAX?POS_MAX:value;}
 void servoUnlock(uint8_t){} void servoSetId(uint8_t,uint8_t){}
-void servoSetProtectionCurrent(uint16_t){}
+uint16_t storedCurrent=308;
+int currentWrites=0;
+bool ignoreCurrent=false;
+void scsWriteWord(uint8_t id,uint8_t addr,uint16_t value){
+ assert(id==33 && addr==ADDR_PROTECTION_CURRENT);
+ ++currentWrites;
+ if(!ignoreCurrent)storedCurrent=value;
+}
+constexpr unsigned SETUP_READ_ATTEMPTS=10;
 bool pingServo(uint8_t){return true;}
-bool readServoPresent(uint8_t,uint16_t &p){p=2048;return true;}
+uint8_t positionAlarm=0;
+bool positionAvailable=true;
+bool readServoPresent(uint8_t,uint16_t &p,bool requireNoAlarm=false,unsigned attempts=1){
+ if(requireNoAlarm)assert(attempts==SETUP_READ_ATTEMPTS);
+ p=2048;return positionAvailable && (!requireNoAlarm || positionAlarm==0);
+}
 bool readServoTorque(uint8_t id,uint8_t &torque){
  assert(id==33);
  torque=testTorqueRegister;
  return torqueReadAvailable;
 }
-bool readServoGains(uint8_t,uint8_t &p,uint8_t &d,uint8_t address=ADDR_PERM_KP_KD){
+bool readServoGains(uint8_t,uint8_t &p,uint8_t &d,uint8_t address=ADDR_PERM_KP_KD,unsigned=1){
  readAddress=address;
  p=address==ADDR_TEMP_KP ? liveKp : savedKp;
  d=address==ADDR_TEMP_KP ? liveKd : savedKd;
  return true;
 }
-bool readServoProtection(uint8_t id,uint8_t &flags,uint16_t &current){
+bool readServoProtection(uint8_t id,uint8_t &flags,uint16_t &current,unsigned=1){
  if (id!=33) return false;
  flags=storedProtection;
- current=308;
+ current=storedCurrent;
  return true;
 }
 HostBusMode hostMode=HOST_NORMAL;
@@ -97,7 +112,7 @@ uint8_t servoMidId=255,servoMidCount=0;
 uint32_t servoMidNextUs=0;
 ServoReplyPacket lastReply;
 void publishServoReply(const ServoReplyPacket &r){lastReply=r;}
-''' + writer+receiver+dispatch+r'''
+''' + writer+init_protection+receiver+dispatch+r'''
 void receive(ServoPacket p,bool resetMailbox=true){
  memcpy(p.magic,"DQV2",4);
  MsgPack::bin_t<uint8_t> bytes(sizeof p);memcpy(bytes.data(),&p,sizeof p);
@@ -143,6 +158,18 @@ int main(){
  protection.protectionMask=PROTECTION_VOLTAGE | PROTECTION_OVERCURRENT;
  receive(protection);assert(!servoPending);
  assert(savedWrites==0&&liveWrites==0&&liveKp==7&&liveKd==19);
+ ServoPacket init={};init.op=SERVO_INIT_ID_PROTECTION;init.targetId=254;
+ receive(init);assert(!servoPending);
+ init.targetId=33;init.reserved2=1;receive(init);assert(!servoPending);
+ init.reserved2=0;receive(init);assert(servoPending);
+ hostMode=HOST_NORMAL;applyServoOp(init,false);assert(!lastReply.ok&&currentWrites==0);
+ hostMode=HOST_SERVO_DEBUG;applyServoOp(init,true);assert(!lastReply.ok&&currentWrites==0);
+ storedProtection=0x24;storedCurrent=231;ignoreCurrent=true;
+ applyServoOp(init,false);assert(!lastReply.ok&&storedProtection==0x24&&protectionWrites==9);
+ ignoreCurrent=false;applyServoOp(init,false);
+ assert(lastReply.ok&&lastReply.protectionCurrent==308&&lastReply.protectionFlags==0x2D);
+ assert(currentWrites==6&&protectionWrites==12);
+ applyServoOp(init,false);assert(lastReply.ok&&currentWrites==6&&protectionWrites==12);
  p.op=SERVO_READ_RUN_GAINS;applyServoOp(p, false);
  assert(lastReply.ok&&readAddress==50&&lastReply.kp==7&&lastReply.kd==19);
  assert(hostMode==HOST_SERVO_DEBUG&&savedWrites==0&&liveWrites==0);
@@ -162,6 +189,10 @@ int main(){
  receive(test);assert(servoPending);
  applyServoOp(test, false);assert(!lastReply.ok&&testTorque.empty());
  p.op=SERVO_ENTER;applyServoOp(p, false);
+ positionAvailable=false;applyServoOp(test,false);assert(!lastReply.ok&&testTorque.empty()&&testGoals.empty());
+ positionAvailable=true;
+ positionAlarm=0x24;applyServoOp(test, false);assert(!lastReply.ok&&testTorque.empty()&&testGoals.empty());
+ positionAlarm=0;
  applyServoOp(test, false);
  assert(lastReply.ok&&lastReply.testSession==100&&lastReply.rawPos==2048);
  assert(lastReply.testFeedbackLimit==10&&lastReply.testOffsetLimitDeg==30);
@@ -169,7 +200,7 @@ int main(){
  assert(testTorque.size()==1&&testTorque.back().id==33&&testTorque.back().value==1);
  assert(testGoals.size()==1&&testGoals.back().value==2048);
  protection.protectionMask=PROTECTION_OVERCURRENT;
- applyServoOp(protection, false);assert(!lastReply.ok&&protectionWrites==9);
+ applyServoOp(protection, false);assert(!lastReply.ok&&protectionWrites==12);
 
  test.targetId=34;applyServoOp(test, false);
  assert(!lastReply.ok&&testTorque.size()==1);
@@ -297,6 +328,10 @@ int main(){
  serviceServoOperation(&stop,false);
  assert(lastReply.ok&&lastReply.testTorqueOff&&testTorqueRegister==0);
  assert(savedWrites==6&&liveWrites==2);
+ storedProtection=0x20;ignoreProtectionWrite=true;
+ applyServoOp(init,false);assert(!lastReply.ok&&lastReply.protectionFlags==0x20);
+ ignoreProtectionWrite=false;
+ applyServoOp(init,false);assert(lastReply.ok&&lastReply.protectionFlags==0x29);
 }
 '''
         with tempfile.TemporaryDirectory(prefix='duck-manual-gains-') as directory:

@@ -6,7 +6,7 @@ from collections import deque
 import threading
 import time
 import uuid
-from controller import ACTION_PREPARE_TIMEOUT_S, BRIDGE_RECOVERY_REASON, ROULADE_S
+from controller import ACTION_PREPARE_TIMEOUT_S, BRIDGE_RECOVERY_REASON, ROLLER_YAW_LIMIT, ROULADE_S
 from recovery import Recovery
 from speech_mouth import OUTPUT_HZ, SpeechMouthMotion
 from motion_feedback import (LEG_IDS, HEAD_IDS, MOUTH_ID, SERVO_IDS,
@@ -96,6 +96,7 @@ class MotionAccess:
                 self._zero_twist()
 
     def _zero_twist(self):
+        self.controller._finish_roller_glide_locked('stopped', keep_hold=True)
         if any(self.controller.twist):
             self.controller.twist = [0.] * 3
             self.controller.generation += 1
@@ -216,8 +217,15 @@ class MotionAccess:
                 ids += (MOUTH_ID,)
         return ids
 
-    def web_command(self, **body):
+    def web_command(self, *, idle_heartbeat=False, **body):
+        if type(idle_heartbeat) is not bool or (idle_heartbeat and (
+                body.get('twist') != [0., 0., 0.] or body.get('roller_release'))):
+            raise ValueError('An idle heartbeat requires a neutral twist.')
         with self.lock:
+            # Only the driving gesture may renew the glide. An idle panel can
+            # still update head/mouth without cancelling it or extending its timeout.
+            if idle_heartbeat and self.controller._roller_pose is not None:
+                del body['twist']
             result = self.controller.command(**body, source='web')
             if body.get('mouth') is not None and 'ignored' not in result:
                 self.speech_mouth.override(restore=False)
@@ -327,7 +335,7 @@ class MotionAccess:
             else:
                 self.controller.input_source = 'web'
 
-    def cockpit_motion(self, controller_id, sequence, kind, twist=None):
+    def cockpit_motion(self, controller_id, sequence, kind, twist=None, roller_release=False):
         """Local browser control. A held pad needs a live, single-owner lease."""
         if (not isinstance(controller_id, str) or not re.fullmatch(r'[a-f0-9]{24}', controller_id)
                 or type(sequence) is not int or not 0 < sequence < 2**53):
@@ -336,15 +344,20 @@ class MotionAccess:
                         'begin', 'drive', 'release', 'stop', 'torque_off'):
             raise ValueError('Unknown cockpit action.')
         drive = kind in ('begin', 'drive')
-        if drive:
-            if (not isinstance(twist, list) or len(twist) != 3
-                    or any(type(v) not in (int, float) or not -limit <= v <= limit
-                           for v, limit in zip(twist, COCKPIT_TWIST_LIMITS))):
-                raise ValueError('Cockpit joystick input exceeds bounds.')
-        elif twist is not None:
+        if type(roller_release) is not bool or (roller_release and (
+                kind != 'drive' or twist != [0., 0., 0.])):
+            raise ValueError('Roller release requires a neutral drive renewal.')
+        if not drive and twist is not None:
             raise ValueError('Unexpected joystick input.')
 
         with self.lock:
+            c = self.controller
+            if drive:
+                limits = (.4, .3, 1.) if c.roller_mode else COCKPIT_TWIST_LIMITS
+                if (not isinstance(twist, list) or len(twist) != 3
+                        or any(type(v) not in (int, float) or not -limit <= v <= limit
+                               for v, limit in zip(twist, limits))):
+                    raise ValueError('Cockpit joystick input exceeds bounds.')
             if sequence <= self.cockpit_sequences.get(controller_id, 0):
                 raise ValueError('Cockpit command retired.')
             self.cockpit_sequences.pop(controller_id, None)
@@ -352,7 +365,6 @@ class MotionAccess:
             if len(self.cockpit_sequences) > 64:
                 del self.cockpit_sequences[next(iter(self.cockpit_sequences))]
 
-            c = self.controller
             if kind == 'torque_off':
                 return self.web_mode('off')
             if kind == 'release':
@@ -404,19 +416,21 @@ class MotionAccess:
                                        resume_hold=True)
             else:
                 movement = self.movement_state(
-                    status, ongoing=drive and held and c.input_source == 'cockpit' and any(c.twist),
+                    status, ongoing=drive and held and c.input_source == 'cockpit'
+                    and (any(c.twist) or status.get('roller', {}).get('stop_pose_active')),
                     required_ids=self._required_ids(kind, payload), allow_hold=kind == 'sit')
                 if not movement['movement_ready']:
                     raise ValueError(movement['movement_block_reason'])
             if drive:
                 if c.roller_mode:
-                    twist = [twist[0], 0., max(-.25, min(.25, twist[2]))]
+                    twist = [twist[0], 0., max(-ROLLER_YAW_LIMIT, min(ROLLER_YAW_LIMIT, twist[2]))]
                 c.input_source = 'cockpit'
                 self.cockpit_driver = controller_id
-                if kind == 'begin':
+                returning = status.get('roller', {}).get('stop_phase', 'idle') != 'idle'
+                if kind == 'begin' and not (held and returning):
                     c.command(twist=[0.] * 3, source='cockpit')
                 self.cockpit_deadline = self.clock() + COCKPIT_LEASE_S
-                return c.command(twist=twist, source='cockpit')
+                return c.command(twist=twist, source='cockpit', roller_release=roller_release)
             self._apply_action(kind, payload, source=c.input_source)
             self._manual_action_started()
             return {'ok': True}
@@ -635,6 +649,9 @@ class MotionAccess:
         c._require_battery()
         status = c.status()
         kind = job['kind']
+        stall = (status.get('stall_recovery') or {}).get('phase')
+        if stall == 'retreat' or (stall == 'disarmed' and (kind != 'stand' or queued)):
+            raise ValueError(status.get('last_error') or '请扶稳小鸭并重新点击站起。')
         required_ids = self._required_ids(kind, payload)
         self._require_feedback(status, required_ids=required_ids, resume_hold=kind == 'stand')
         avoidance = status.get('obstacle_avoidance') or {}
@@ -957,6 +974,8 @@ class MotionAccess:
                 elif self.clock() >= self.calibration_pose_deadline:
                     self.web_mode('shadow')
             status = self.controller.status()
+            if status.get('imu_ok') is False:
+                self._retire_remote_directions()
             self._interrupt_obstructed_forward(status)
             running = self._action_running()
             required_ids = self.action.get('required_joint_ids', LEG_IDS) if running else ()

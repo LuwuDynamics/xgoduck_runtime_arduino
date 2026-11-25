@@ -103,10 +103,10 @@ class LifecycleTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.onboard.snapshot()['ipv4'])
 
     async def test_ip_display_retries_an_unready_router(self):
-        with patch('startup_ip_display.send_octet', side_effect=[TimeoutError(), True]) as send, \
+        with patch('startup_ip_display.send_address', side_effect=[TimeoutError(), True]) as send, \
              patch('startup_ip_display.asyncio.sleep', new_callable=AsyncMock):
             await display_startup_ip(lambda: '192.168.31.244')
-        self.assertEqual([call.args for call in send.call_args_list], [(244,), (244,)])
+        self.assertEqual([tuple(call.args[0].packed) for call in send.call_args_list], [(192, 168, 31, 244)] * 2)
 
     async def test_cached_binding_offline_recovery_and_unknown_cloud_are_separate(self):
         self.hardware.connected = True

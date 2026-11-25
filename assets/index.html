@@ -1,17 +1,17 @@
 <!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=overcurrent-check">
+<title data-zh="XGO Duck 控制台">XGO Duck</title><link rel="icon" type="image/png" href="/xgo-favicon.png"><link rel="stylesheet" href="style.css?v=voltage-help-inline">
 <link rel="stylesheet" href="/app-version.css"><script src="/app-version.js" defer></script>
-<link rel="stylesheet" href="remote-control-notice.css">
+<link rel="stylesheet" href="hardware-check.css">
 <main>
-<header>
+<header class="panel-header">
   <div><small>ARDUINO UNO Q</small> <span class="app-version" data-app-version hidden></span><h1>XGO Duck</h1></div>
   <div class="header-actions">
     <nav class="nav">
       <a href="/" aria-current="page" data-zh="控制">Control</a>
       <a href="/calibrate.html" data-zh="标定">Calibration</a>
       <a href="/servo.html" data-zh="舵机设置">Servo setup</a>
-      <a id="cockpit-link" href="/mobile.html" data-zh="语音交互驾驶舱">Cockpit</a>
+      <a id="cockpit-link" href="/mobile.html" target="_blank" rel="noopener noreferrer" data-zh="语音交互驾驶舱">Cockpit</a>
       <a href="https://github.com/LuwuDynamics/xgoduck_runtime_arduino" target="_blank" rel="noopener noreferrer">GitHub</a>
       <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck" target="_blank" rel="noopener noreferrer">Wiki</a>
       <a href="https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-troubleshooting" target="_blank" rel="noopener noreferrer" data-zh="常见问题">FAQ</a>
@@ -26,10 +26,23 @@
   <p id="imu-check-warning" hidden><span id="imu-check-text"></span> <a href="/calibrate.html" data-zh="打开标定">Open Calibration</a></p>
   <p id="overcurrent-check-warning" hidden><span id="overcurrent-check-text"></span> <a href="/servo.html#servo-protection" data-zh="打开舵机保护设置">Open servo protection settings</a></p>
 </div>
-<section class="metrics"><article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article><article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article><article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article><article><small data-zh="电压">Voltage</small><strong id="voltage">—</strong></article><article><small>IMU</small><strong id="imu">—</strong></article></section>
+<section class="metrics">
+  <article><small data-zh="反馈频率">Feedback</small><strong id="rx">—</strong></article>
+  <article><small data-zh="推理频率">Policy</small><strong id="rl">—</strong></article>
+  <article><small data-zh="在线舵机">Servos online</small><strong id="servos">—</strong></article>
+  <article>
+    <div class="voltage-heading">
+      <small data-zh="电压">Voltage</small>
+      <button id="voltage-help" type="button" aria-haspopup="dialog" aria-controls="voltage-dialog" aria-label="About the voltage reading" data-zh-aria-label="电压说明" data-zh="说明">Info</button>
+    </div>
+    <strong id="voltage">—</strong>
+  </article>
+  <article><small>IMU</small><strong id="imu">—</strong></article>
+</section>
+<p id="servo-alarms" class="warn" role="status" hidden></p>
 <section>
   <h2><span data-zh="模式">Mode</span> <span id="mode">—</span></h2>
-  <div class="buttons"><button data-mode="shadow" data-zh="仅推理">Inference only</button><button data-mode="hold" data-zh="默认姿态">Default pose</button><button data-mode="policy" data-zh="行走 / 起身">Walk / get up</button><button id="pick" data-zh="叼东西">Pick</button><button id="roulade" data-zh="翻滚">Roulade</button><button id="sitstand" data-zh="坐下" disabled>Sit</button><button id="left_kick" data-zh="左脚踢球" disabled>Left kick</button><button id="right_kick" data-zh="右脚踢球" disabled>Right kick</button><label class="mode-toggle"><input id="roller-mode" type="checkbox" role="switch"><span data-zh="滑行模式">Skating mode</span> <span id="roller-state" data-zh="关">Off</span></label></div>
+  <div class="buttons"><button data-mode="shadow" data-zh="仅推理">Inference only</button><button data-hardware-arm data-mode="hold" data-zh="默认姿态">Default pose</button><button data-hardware-arm data-mode="policy" data-zh="行走 / 起身">Walk / get up</button><button data-hardware-arm id="pick" data-zh="叼东西">Pick</button><button data-hardware-arm id="roulade" data-zh="翻滚">Roulade</button><button data-hardware-arm id="sitstand" data-zh="坐下" disabled>Sit</button><button data-hardware-arm id="left_kick" data-zh="左脚踢球" disabled>Left kick</button><button data-hardware-arm id="right_kick" data-zh="右脚踢球" disabled>Right kick</button><label class="mode-toggle"><input id="roller-mode" type="checkbox" role="switch"><span data-zh="滑行模式">Skating mode</span> <span id="roller-state" data-zh="关">Off</span></label></div>
   <p class="hint" data-zh="默认姿态保持站立。行走 / 起身支持行走和跌倒后起身。可选择叼东西、翻滚、坐下、站起或踢球。滑行时请开启滑行模式。仅推理模式只预览动作。点击「舵机卸力」可释放扭矩。">Default pose holds a standing pose. Walk / get up walks and recovers after a fall. Choose Pick, Roulade, Sit/Stand or a kick to perform that action. Enable Skating mode for skating. Inference only previews motion; Torque off releases the motors.</p>
 </section>
 <section>
@@ -40,19 +53,19 @@
       <div class="walking-help-body">
         <p data-zh="如果小鸭走不稳或发抖，先停止移动并扶稳小鸭。">If Duck shakes or walks unsteadily, stop moving and support it.</p>
         <ol>
-          <li><strong data-zh="检查舵机安装">Check servo installation</strong><p data-zh="卸力后，在舵机设置的单舵机安装检查中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。">Release servo torque, then use the single-servo test in Servo setup to check IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.</p></li>
+          <li><strong data-zh="检查舵机安装">Check servo installation</strong><p data-zh="卸力后，在舵机设置的「单舵机运动控制」中核对 ID、安装位置和顺序。检查舵盘和固定螺丝是否松动。">Release servo torque, then use Single-servo motion control in Servo setup to check IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.</p></li>
           <li><a href="/calibrate.html" data-zh="打开标定">Open Calibration</a><p data-zh="先按参考图统一标定 15 个舵机，再标定 IMU，最后检查默认姿势。">Use the reference photos to calibrate all 15 servos, then calibrate the IMU and check the default pose.</p></li>
           <li><a href="/servo.html" data-zh="打开舵机设置">Open Servo setup</a><p data-zh="扫描所有 ID，逐个写入 KP 5、KD 10，再读取核对保存值和运行值。断电重启后会加载保存值。">Scan all IDs. Set KP to 5 and KD to 10 on each servo, then read back the saved and runtime values. Power-cycling reloads the saved values.</p></li>
         </ol>
       </div>
     </details>
   </div>
+  <p class="warn" role="note" data-zh="遥控时请只打开一个控制页。用手机遥控前，请先关闭电脑上的控制页，否则小鸭可能走走停停。">Keep only one control page open at a time. Before driving from your phone, close the control page on your computer or Duck may keep stopping.</p>
   <p id="roller-warning" class="warn" role="note" data-zh="长时间滑行后，请暂停片刻，让驱动电机冷却。" hidden>Let the roll motors cool down between longer skating sessions.</p>
   <div class="joysticks"><div class="joystick-side"><label id="left-label" data-zh="前后 / 侧移">Forward / strafe</label><div class="joy" id="joy-left" role="group" aria-labelledby="left-label"><div class="knob"></div></div><p class="joy-value">vx <span id="vxValue">0.00</span> · vy <span id="vyValue">0.00</span></p></div><div class="joystick-side"><label id="right-label" data-zh="左右转向">Yaw</label><div class="joy" id="joy-right" role="group" aria-labelledby="right-label"><div class="knob"></div></div><p class="joy-value">ωz <span id="wzValue">0.00</span></p></div></div>
   <div class="buttons"><button id="zero" data-zh="停止移动">Zero motion</button><label class="mode-toggle"><input id="heading-hold" type="checkbox" role="switch" checked><span data-zh="航向保持">Heading hold</span> <span id="heading-state" data-zh="开">On</span></label></div>
   <p class="hint"><span data-zh="拖动摇杆移动，松开停止。W/S 前进或后退，A/D 左右侧移，Q/E 左右转向。按空格键可卸力。">Drag a pad to move; release to stop. W/S moves forward/back, A/D moves sideways and Q/E turns. Space releases the motors.</span> <span id="motion-limits" data-zh="速度范围 · vx ±0.2，vy ±0.3，ωz ±1.0。">Limits: vx ±0.2, vy ±0.3, ωz ±1.0.</span></p>
 </section>
-<section><h2 data-zh="头部与嘴部">Head and mouth</h2><div class="controls" id="head-controls"></div><p class="hint" data-zh="拖动滑块可调整头部姿态和嘴部开合。">Move the sliders to adjust the head and open or close the mouth.</p></section>
 <section>
   <h2><span data-zh="动作参数">Action settings</span> · <span id="action-profile" data-zh="行走 / 其他模型">Walking / other models</span></h2>
   <div class="controls"><label><span data-zh="动作幅度">Action scale</span> <span id="action-scale-value">1.00</span><input id="action-scale" type="range" min="0" max="2" value="1" step="0.05"></label><label><span data-zh="腿部平滑">Leg smoothing</span> <span id="leg-alpha-value">0.35</span><input id="leg-alpha" type="range" min="0" max="0.95" value="0.35" step="0.05"></label><label><span data-zh="头部平滑">Head smoothing</span> <span id="head-alpha-value">0.45</span><input id="head-alpha" type="range" min="0" max="0.95" value="0.45" step="0.05"></label></div>
@@ -69,17 +82,12 @@
   <p class="hint" data-zh="跌倒后，小鸭会起身并恢复行走模式。">After a fall, the robot gets up and returns to walking.</p>
 </section>
 <section class="telemetry"><h2 data-zh="IMU 与舵机">IMU and servos</h2><div class="telemetry-grid"><div class="imu-lines"><div><b data-zh="加速度">acc</b> <span id="acc-values">—</span></div><div><b data-zh="角速度">gyro</b> <span id="gyro-values">—</span></div><div><b data-zh="重力方向">grav</b> <span id="gravity-values">—</span></div><div><b data-zh="原始加速度">acc raw</b> <span id="acc-raw-values">—</span></div><div><b data-zh="原始角速度">gyro raw</b> <span id="gyro-raw-values">—</span></div></div><div class="table"><table><thead><tr><th>ID</th><th>°</th><th data-zh="目标角度">Target</th></tr></thead><tbody id="joints"></tbody></table></div></div><p class="hint" id="command-health" data-zh="等待反馈…">Waiting for feedback…</p>
-  <div class="imu-calibration">
-    <div>
-      <h3 data-zh="IMU 标定">IMU calibration</h3>
-      <div class="buttons"><button id="imu-calibrate" data-zh="标定 IMU" disabled>Calibrate IMU</button><button id="imu-reset" data-zh="重置 IMU 标定" disabled>Reset IMU calibration</button></div>
-      <p class="hint" data-zh="将 Arduino 主板竖直放置，底边贴紧桌面，保持静止 1.5 秒。">Keep Arduino upright, with its bottom edge firmly against the tabletop. Hold still for 1.5 seconds.</p>
-      <progress id="imu-calibration-progress" max="1" value="0" hidden></progress>
-      <p id="imu-calibration-status" role="status" aria-live="polite" data-zh="正在读取标定状态…">Reading calibration status…</p>
-    </div>
-    <figure class="imu-calibration-pose">
-      <img src="imu-calibration-pose.png" width="910" height="1155" alt="IMU calibration posture: Arduino upright with its bottom edge resting on the tabletop." data-zh-alt="IMU 标定姿态。Arduino 主板竖直，底边贴紧桌面。">
-    </figure>
-  </div>
 </section>
-</main><script src="panel-language.js"></script><script src="remote-control-notice.js"></script><script src="app.js?v=rear-cover-notice"></script></html>
+</main>
+<dialog id="voltage-dialog" aria-labelledby="voltage-dialog-title">
+  <h2 id="voltage-dialog-title" data-zh="电压说明">About the voltage reading</h2>
+  <p data-zh="每个舵机都会测量自己的供电电压。比如三个舵机分别测到 7.7、7.8 和 7.9 V，页面就显示中间的 7.8 V。">Each servo measures its own supply voltage. If three servos report 7.7, 7.8 and 7.9 V, the page shows the middle reading, 7.8 V.</p>
+  <p data-zh="显示「—」时，表示暂时没有读到舵机电压。">A dash (—) means there’s no recent voltage reading from the servos.</p>
+  <form method="dialog"><button autofocus data-zh="关闭">Close</button></form>
+</dialog>
+<script src="panel-language.js?v=panel-nav"></script><script src="app.js?v=voltage-help"></script><script src="hardware-check.js"></script></html>

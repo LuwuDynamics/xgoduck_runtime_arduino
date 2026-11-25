@@ -45,7 +45,7 @@ IDs follow Microduck. The bus always addresses all 15, in this order:
 | 30–33 | Neck and head. Policy order inside the 14-D action is 10–14, 30–33, 20–24. |
 | 34 | Mouth. It is not part of the policy action. The web UI commands it from 0° to 30°. |
 
-The ordinary walking home pose in `python/rl_core.py` is left/right hip pitch −22°/+22°, knee −2°/+2°, ankle +20°/−20°, hip roll −5°/+5°, neck and head pitch 20°, mouth 0°. Its `action_scale` is 1. Roller applies its fixed leg angles over the ONNX home and uses scale 0.8; it is off at startup and selectable using the stable page's Roller switch. Use it only with the corresponding roller-equipped robot. MCU angles use each servo's hardware center at encoder position 2047.
+The ordinary walking home pose in `python/rl_core.py` is left/right hip pitch −22°/+22°, knee −2°/+2°, ankle +20°/−20°, hip roll −5°/+5°, neck and head pitch 20°, mouth 0°. Its `action_scale` is 1. Roller applies its fixed leg angles over the ONNX home and uses scale 0.6; it is off at startup and selectable using the stable page's Roller switch. Use it only with the corresponding roller-equipped robot. MCU angles use each servo's hardware center at encoder position 2047.
 
 Hardware centers are stored in the servos. Legacy `data/zero_pos.json` files are preserved as backups and no longer applied. Nondefault legacy software zeros require the hardware-centering workflow before arming; `data/hardware-centers.json` records acknowledged progress for this robot.
 
@@ -60,8 +60,8 @@ Deploy `assets/`, `python/`, and `sketch/` together for this feature; updating o
 Do this before the servos are installed in the frame. Connect **one servo at a time**. Two servos with the same ID on the bus will both accept a write.
 
 1. Open **Servo setup** (`/servo.html`) and enter setup.
-2. Assign IDs **10–14** and **20–24** for the legs. Assign **30–34** for the neck, head, and mouth. The ID write unlocks register `0x37` and then writes `0x05`.
-3. With torque off, turn the joint by hand to its mechanical center and click **Reset Mid**. It remains unloaded.
+2. With torque off, turn the joint by hand to its intended mechanical midpoint. Assign IDs **10–14** and **20–24** for the legs, or **30–34** for the neck, head, and mouth.
+3. Click **Change ID**. After verifying the new address, the app sets the current position as the hardware midpoint, enables voltage and overcurrent protection on that servo, and verifies the 2 A threshold (308 counts at 6.5 mA per count). To repeat setup after a partial write, keep the joint at the intended midpoint, scan again, and enter its current ID as the new ID. Use **Reset Mid** for a midpoint-only adjustment.
 4. Write stored KP/KD. The page defaults are **KP = 5** and **KD = 10**. The write unlocks `0x37` and stores both bytes at `0x15`.
 5. Disconnect that servo and repeat until every ID exists exactly once.
 6. Install the servos in the frame and finish the wiring: servo bus on D0/D1 (`Serial1`, 1 Mbps), QMI8658 on D20/D21 (`Wire`, 400 kHz, address `0x6A` then `0x6B`).
@@ -74,32 +74,24 @@ Do this after wiring and confirming every servo ID answers.
 
 1. Open **Calibration** (`/calibrate.html`). All servos unload.
 2. Match the four reference photos and click **Calibrate all 15 servos**. The STM32 confirms both the reset and the reference write for every joint while torque stays off.
-3. Calibrate the IMU, then use **Default pose** at the bottom of the page with Duck supported before trying Walk / get up.
+3. Position the neck parallel to the torso and click **Calibrate ID 30**. When the center is saved, click **Unload all**.
+4. Calibrate the IMU, then use **Default pose** at the bottom of the page with Duck supported before trying Walk / get up.
 
 Legacy software-center migration is described above and in the AI guide. Do not replace old zeros with 2047 to skip calibration. The page also offers Roller walking, independent model amplitude/action filters, IMU filtering, and separate all-servo protection-switch/current broadcasts; protection settings are changed only when explicitly requested from the page.
 
 ## Running
 
-Pinned stack: App CLI with Arduino Zephyr core 1.0.0, RouterBridge 0.4.3, RPClite 0.3.1, MsgPack 0.4.2. `sketch/sketch.yaml` lists those libraries, including the transitive ones. Python packages are installed by the App build from `python/requirements.txt`.
+The current sketch uses the Arduino Zephyr core 1.0.0 and the RouterBridge and RPClite sources in `sketch/libraries/`. The build profile selects those sources for both App Lab imports and precompiled releases. Python dependencies are listed in `python/requirements.txt`.
 
-Router: 0.8.0 or newer (the 2 Mbps drop-in below passes `--after-ready`). Since 0.2.41 the Bridge supervisor accepts the `RouteAlreadyExists` answer that Routers 0.5.4–0.10.x give to a repeated registration; 0.2.37–0.2.40 reconnected every 2.26 s on those Routers and effectively needed 0.11.0. Verified on a board with Router 0.9.0.
-
-On the Uno Q, from this directory:
+Stop the App with Duck supported and torque released. From the installed App directory, run:
 
 ```bash
-python3 tools/prepare-bridge.py
 sudo bash tools/router-2m.sh
 arduino-app-cli app start "$PWD"
+sudo stty -F /dev/ttyHS1 speed
 ```
 
-`prepare-bridge.py` patches the resolved library cache and keeps the original headers as `.h.original`:
-
-- RouterBridge 0.4.3: RPC thread stack 500 → 4096 bytes, bounded RPC waits, nonblocking notifications and retry-safe initialization/reconnection (implemented in `tools/bridge_patch.py`).
-- RPClite 0.3.1: a bounded MessagePack scanner accepts a complete frame before `Unpacker::feed()`, and rejects a frame larger than the RPC buffer.
-
-Re-run the script after a library-cache wipe or on a new board. If it cannot find the libraries, let the App CLI resolve `sketch.yaml` once, then run it again.
-
-`router-2m.sh` sets the router serial rate to 2 Mbps in `/etc/systemd/system/arduino-router.service.d/90-xgoduck-baud.conf` and leaves the board GPIO ready-hook in place. That rate is global. Before starting another app that calls `Bridge.begin()` at 115200, move the drop-in aside, reload systemd, and restart `arduino-router`. Both ends must use the same rate. Restarting the router recreates its socket and resets the MCU, so stop this app first, restart the router, then start the app again. A normal app restart does not need a router restart.
+The installer uses the bundled ARM64 Router from Arduino’s reliable-protocol test build (`45cccf1`). The Router starts at 115200 baud, detects the protocol and negotiates up to 2000000 baud with the paired sketch. After the handshake, the last command should report `2000000`. The shared Router controls the STM32 reset line, so a Router restart interrupts motion. To roll back to a Duck release that starts at a fixed 2 Mbaud, stop the running App, run that older release’s `tools/router-2m.sh` and start its matching firmware. [Arduino Router protocol](https://github.com/arduino/arduino-router/pull/73) · [Arduino RouterBridge protocol](https://github.com/arduino-libraries/Arduino_RouterBridge/pull/81)
 
 If an isolated CLI build tries to re-download a toolchain that is already on the board and GitHub is unreachable, run `python3 tools/reuse-toolchain.py` and start the app again.
 
@@ -121,7 +113,11 @@ The app boots in **inference only**: the network runs, torque stays off. From th
 
 Closing or backgrounding the page sends zero travel. One second without input clears travel while keeping balance. Voice actions renew input only within their original deadline. After 150 ms without fresh STM32 feedback, Linux pauses new targets and clears travel. The MCU holds the last targets while Bridge and its IMU are healthy. Fresh feedback with torque still enabled restores the current control mode. The MCU disarms if Bridge is unavailable or its IMU sample is older than 500 ms. Linux also disarms on invalid IMU data or total IMU age above 500 ms. App exit, gamepad disconnect and explicit Off unload. Calibration and servo setup have a separate 250 ms MCU host-heartbeat guard and a two-second host UI-heartbeat guard.
 
-The web joystick uses vx -0.18 to +0.2, vy ±0.3 and yaw ±1.0 for ordinary walking; Roller uses vx ±0.4, vy 0 and yaw ±0.25. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
+If all six raw accelerometer and gyroscope axes read zero on ten consecutive samples, STM32 releases torque and reinitializes the IMU. Three consecutive valid samples restore its ready state. Duck stays unloaded until a fresh explicit arm command.
+
+The control panel and cockpit both use vx ±0.4, vy 0 and yaw ±0.45 in Roller mode. Both update held inputs every 50 ms and blend 25% of the target per update. For ordinary walking the control panel uses vx ±0.2 and the cockpit uses vx ±0.15, both with vy ±0.3 and yaw ±1.0. Head channels are four radians in ±1. Keyboard: W/S, A/D, Q/E, Space.
+
+On a normal forward or reverse roller release, the board keeps the last submitted travel command, including turn, while it gradually narrows the skating policy's outward hip-roll targets. With live controls this phase has no duration limit. When both measured hips are within 6° of roller home and the body is upright, travel goes to zero and all ten leg targets move smoothly to roller home. The controller holds this stance after fresh feedback confirms all ten joints within 5°, low joint and body speeds, and stable posture for 200 ms. Stick input during the return cannot change its speed or direction. A stick held through completion must return to neutral before a new movement. While Roller is selected, a servo reporting only overcurrent (0x08) continues to report the warning in status and the servo log, even when stationary with a sustained position error. Manual release still starts the normal stance return. Ordinary walking retains its overcurrent stall recovery. Stop, disconnect, detected forward obstacles, other fault bits and the existing fall and power protections still take priority. The status fields `roller.stop_phase` and `roller.glide_result` and the `roller_pose` events in the servo feedback log report the outcome.
 
 ## Policies
 
@@ -160,7 +156,7 @@ assets/                  Web UI
 python/                  Host policy, Bridge client, ONNX models
 sketch/                  STM32 firmware
 data/hardware-centers.json  Per-robot calibration migration record (not in git)
-tools/                   Bridge patch, router rate, ELF check, read-only capture
+tools/                   Router installer, MCU library and ELF checks, read-only capture
 ```
 
 ## Checks

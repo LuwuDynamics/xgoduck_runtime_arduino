@@ -39,7 +39,7 @@
 </main>
 <script>
 const $=id=>document.getElementById(id);
-let state=null,busy=false,source='music',recordKey='',ttsKey='',streamActive=false;
+let state=null,busy=false,source='music',recordKey='',ttsKey='',streamSession=null,frameUrl=null;
 function notice(text=''){ $('notice').textContent=text; $('notice').hidden=!text; }
 async function request(path,data={}){
  const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json','X-Device-Test':'1'},body:JSON.stringify(data)});
@@ -101,13 +101,48 @@ $('upload').onchange=async()=>{
  }catch(e){notice('音乐上传失败：'+e.message);}finally{if(ctx)await ctx.close();busy=false;if(state)render(state);}
 };
 async function poll(){try{const res=await fetch('/api/status');if(!res.ok)throw Error();render(await res.json());}catch(e){$('connection').textContent='● 连接中断，正在重试';document.querySelectorAll('button').forEach(b=>b.disabled=true);}finally{setTimeout(poll,800);}}
+function stopStream(){
+ const s=streamSession;streamSession=null;
+ if(s){clearTimeout(s.timer);clearTimeout(s.timeout);s.abort?.abort();}
+ $('frame').removeAttribute('src');
+ if(frameUrl){URL.revokeObjectURL(frameUrl);frameUrl=null;}
+}
+function startStream(){
+ if(streamSession)return;
+ const s={seq:0,abort:null,timer:null,timeout:null,errors:0};streamSession=s;
+ const img=$('frame');
+ const next=async()=>{
+  if(streamSession!==s)return;
+  const started=performance.now(),minInterval=1000/Math.max(1,Number(state?.camera?.preview_fps_limit)||15);
+  const ctrl=new AbortController();s.abort=ctrl;s.timeout=setTimeout(()=>ctrl.abort(),4000);
+  let waitMs=0;
+  try{
+   const res=await fetch('/api/camera/frame?preview=1&after='+s.seq,{cache:'no-store',signal:ctrl.signal});
+   clearTimeout(s.timeout);s.timeout=null;if(streamSession!==s)return;
+   if(res.status===204){s.errors=0;}
+   else if(res.ok){
+    const seq=Number(res.headers.get('X-Frame-Seq'));if(Number.isFinite(seq)&&seq>0)s.seq=seq;
+    const blob=await res.blob();if(streamSession!==s)return;
+    const url=URL.createObjectURL(blob),prev=frameUrl;frameUrl=url;img.src=url;
+    try{if(typeof img.decode==='function')await img.decode();}catch{}
+    if(prev)URL.revokeObjectURL(prev);
+    s.errors=0;waitMs=Math.max(0,minInterval-(performance.now()-started));
+   }else throw Error('HTTP '+res.status);
+  }catch{
+   clearTimeout(s.timeout);s.timeout=null;if(streamSession!==s)return;
+   s.errors++;waitMs=Math.min(1000,150*s.errors);
+  }finally{if(s.abort===ctrl)s.abort=null;}
+  if(streamSession===s){if(waitMs>0)s.timer=setTimeout(next,waitMs);else next();}
+ };
+ next();
+}
 function syncStream(){
  const c=state?.camera,want=c?.running&&!document.hidden;
- if(want&&!streamActive){streamActive=true;$('frame').src='/api/camera/stream?t='+Date.now();}
- if(!want&&streamActive){streamActive=false;$('frame').removeAttribute('src');}
+ if(want&&!streamSession)startStream();
+ if(!want&&streamSession)stopStream();
  $('frame').hidden=!want||!c?.ready;$('live').hidden=!want||!c?.ready;$('placeholder').hidden=!!want&&!!c?.ready;
 }
-$('frame').onerror=()=>{streamActive=false;};
 document.addEventListener('visibilitychange',syncStream);
+window.addEventListener('pagehide',stopStream);
 poll();
 </script></body></html>

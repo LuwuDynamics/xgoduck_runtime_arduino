@@ -59,30 +59,116 @@
 .servo-gains td{font-family:monospace;color:#8ce2cc;font-size:17px;min-width:40px}
 .servo-gains #gains-status{margin:12px 8px 0;color:#9cafc3;font-size:13px}
 .servo-gains #gains-status[data-state=different],.servo-gains #gains-status[data-state=incomplete]{color:#f4c373}
-.servo-test-layout {
+.servo-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(275px, 0.8fr) minmax(0, 1.2fr);
+  gap: 24px;
   align-items: start;
-  gap: 18px;
 }
-.servo-test figure { margin: 0; }
-.servo-test img { width: 100%; border-radius: 8px; }
-.servo-test figcaption { margin-top: 4px; color: #9cafc3; font-size: 13px; }
-.servo-test select {
-  width: 100%;
-  margin-top: 4px;
-  padding: 8px;
-  border: 1px solid #3c5b78;
-  border-radius: 6px;
-  background: #0e1924;
-  color: #dce5ef;
-  font: inherit;
+.joint-guide { min-width: 0; }
+.joint-guide h2, .selection-heading h2 { margin: 0 0 6px; }
+.joint-view {
+  position: relative;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid #304353;
+  border-radius: 10px;
+  background: radial-gradient(ellipse at 48% 48%, #253747, #101d29 85%);
 }
-.servo-test-actions { margin: 12px 0; }
+#servo-model { display: block; width: 100%; height: clamp(260px, 31vw, 320px); cursor: grab; touch-action: pan-y; }
+#servo-model:active { cursor: grabbing; }
+#model-hint { margin: 0; padding: 5px 10px 9px; text-align: center; font-size: 12px; }
+#joint-groups { margin: 12px 0 0; }
+.joint-group {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(5, minmax(0, 1fr));
+  align-items: center;
+  gap: 4px;
+  margin-top: 5px;
+}
+.joint-group span { color: #b8c9d6; font-size: 12px; }
+.joint-group button {
+  padding: 5px 0;
+  min-height: 34px;
+  font: 600 14px monospace;
+  background: #101c28;
+  color: #d4dfea;
+  border-color: #354c60;
+}
+.joint-group button[aria-pressed=true] { color: #ffca72; border-color: #c88e42; background: #3c3022; }
+.joint-group button:focus-visible { outline: 2px solid #8ce2cc; outline-offset: 1px; }
+.servo-controls { min-width: 0; }
+.servo-workspace .hint { margin: 6px 0; font-size: 13px; }
+.servo-workspace .servo-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.servo-workspace .servo-row input { width: 66px; }
+.servo-workspace .servo-row label { color: #c1d1df; font-size: 14px; }
+.joint-operation { border-top: 1px solid #304252; padding-top: 14px; margin-top: 14px; }
+.joint-operation h3 { margin: 0 0 8px; font-size: 16px; }
+.servo-test-actions { margin: 10px 0; }
 .servo-test-actions button { padding: 7px 12px; }
-.servo-test output { color: #8ce2cc; }
+.servo-test output { color: #8ce2cc; font-variant-numeric: tabular-nums; }
+.servo-test label { font-size: 14px; }
+#servo-test-offset { width: 100%; margin: 6px 0 0; }
+.joint-gains .servo-row + .servo-row { margin-top: 10px; }
+.joint-gains .servo-gains { margin-top: 10px; }
+@media (max-width: 720px) {
+  .servo-workspace { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  #servo-model { height: 245px; }
+  .selection-heading { padding-top: 12px; border-top: 1px solid #304252; }
+}
 @media (max-width: 560px) {
   .protection-readings th, .protection-readings td { padding-inline: 6px; }
-  .servo-test-layout { grid-template-columns: 1fr; }
-  .servo-test figure { max-width: 260px; }
+}
+
+#joint-pose-guide { padding: 0; margin: 8px 0 0; background: transparent; border: 0; }
+#joint-pose-guide summary { width: fit-content; font-size: 13px; color: #8ce2cc; cursor: pointer; }
+#joint-pose-image { display: block; width: min(100%, 260px); height: auto; margin-top: 8px; border-radius: 8px; }
+.gains-readback dl, .gains-readback dl > div { display: flex; align-items: baseline; flex-wrap: wrap; }
+.gains-readback dl { gap: 4px 16px; margin: 0; }
+.gains-readback dl > div { gap: 6px; }
+.gains-readback dt { font-size: 13px; color: #b8c9d6; }
+.gains-readback dd { margin: 0; color: #8ce2cc; font: 600 15px monospace; }
+
+.servo-scan-header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 10px; }
+#scan-help { padding: 7px 12px; color: #8ce2cc; background: transparent; font-size: 14px; }
+#scan-help:hover, #scan-help:focus-visible { background: #183b3a; }
+#scan-empty {
+  box-sizing: border-box;
+  width: min(620px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  padding: 18px;
+  border: 1px solid #476477;
+  border-radius: 14px;
+  color: #e8f1f5;
+  background: #13202c;
+}
+#scan-empty[open] { display: flex; flex-direction: column; gap: 14px; }
+#scan-empty::backdrop { background: #040a10bf; }
+#scan-empty h2 { margin: 0; font-size: 1.18rem; }
+.scan-empty-body {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 205px);
+  gap: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.scan-empty-body ol { margin: 0; padding-inline-start: 1.6em; line-height: 1.6; }
+.scan-empty-body li + li { margin-top: 12px; }
+.scan-photo-below { display: none; }
+.scan-empty-body figure { margin: 0; text-align: center; }
+.scan-empty-body img { display: block; width: auto; height: auto; max-width: 100%; max-height: 46dvh; margin: 0 auto; border-radius: 8px; }
+.scan-empty-body figcaption { margin-top: 6px; color: #b8c9d6; font-size: 13px; }
+#enlarge-wiring { position: relative; display: inline-block; vertical-align: top; max-width: 100%; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: zoom-in; }
+#enlarge-wiring span { position: absolute; top: 6px; right: 6px; padding: 3px 10px; border: 1px solid #94aabd; border-radius: 6px; background: #13202c; color: #fff; font-size: 14px; line-height: 1.5; }
+#enlarge-wiring:focus-visible { outline: 3px solid #8ce2cc; outline-offset: -3px; }
+#wiring-photo-dialog { padding: 10px; max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); border: 1px solid #476477; border-radius: 12px; background: #13202c; }
+#wiring-photo-dialog::backdrop { background: #040a10e6; }
+#wiring-photo-dialog form { margin: 0 0 8px; text-align: right; }
+#wiring-photo-dialog img { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100dvh - 100px); margin: auto; }
+#scan-empty form { margin: 0; text-align: right; }
+@media (max-width: 520px) {
+  .scan-empty-body { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .scan-empty-body li + li { margin-top: 6px; }
+  .scan-photo-below { display: inline; }
+  .scan-photo-right { display: none; }
 }
