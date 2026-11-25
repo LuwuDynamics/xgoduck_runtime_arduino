@@ -233,95 +233,20 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 ## 5. 设置舵机并编号
 
-[按官方图文完成舵机设置与编号](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+每次只接一个舵机，按安装位置设置 ID，核对后贴上编号标签。[舵机设置图解](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-05)
 
 ## 6. 组装 XGO Duck
 
-[按官方图文组装 XGO Duck](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
-
-[音视频安装教程（PDF）](docs/xgo-duck-av-installation.pdf) · [下载中英装配 PPTX（约 69 MB）](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
-
-<img src="docs/images/wiring/overview-zh.png" alt="XGO Duck 实物端口接线图，标出 UNO Q、载板、摄像头、ToF 模块、扬声器和补光灯" width="960">
+按装配图核对舵机编号和安装方向，装好机身并连接音视频设备。[整机装配与接线图解](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-06)
 
 ## 7. IMU 标定和舵机标定
 
-打开 `http://<板子IP>:9527/`，确认 **15/15** 个舵机在线。扶稳小鸭后点顶部 **标定**，等页面确认舵机已卸力。
-
-1. **统一标定舵机。** 按四张图摆好小鸭，避开线束。点 **标定 15 个舵机**，等页面确认中位已保存。
-2. **单独标定颈部。** 让脖子与躯干平行，点 **标定 30 号舵机**。看到中位已保存后，点 **全部卸力**。
-3. **标定 IMU。** 保持舵机卸力，让 UNO Q 竖直、电池接口朝上、板子下边缘贴住水平桌面。点一次 **标定 IMU**，保持静止直到页面显示已保存。若读数有波动，页面会显示自动重试的进度。[IMU 标定细节](docs/imu-calibration.md)
-4. **检查默认姿势。** 把小鸭放到平坦处扶稳，点标定页底部的 **默认姿势**。等舵机上力，再对照实拍检查头颈、腿和脚的位置。如果姿势不对，先扶稳并点 **全部卸力**，再复查摆位和舵机标定。
-
-<img src="docs/images/default-pose-reference.jpg" alt="小鸭默认站姿实拍：左为轮脚，右为普通脚掌" width="900">
-
-[标定按钮和状态说明](docs/calibration-guide.md)
+按标定页提示校准舵机和 IMU，确认默认姿势正确后再试走。[标定与首次行走指南](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-07)
 
 ## 8. 绑定账号，选择智能体
 
-1. 电脑或手机与小鸭连接同一网络，打开 **`http://<板子IP>/`**，无需端口和页面后缀。
+选择服务区域，绑定小鸭并选好智能体，用对应的唤醒词试一次语音对话。[账号绑定与语音验收指南](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-ai-voice)
 
-   <img src="docs/images/cockpit-live-cn.png" alt="中文驾驶舱的实时画面、ToF 测距、左右遥控摇杆和底部动作按钮，顶部为 AI 语音交互绑定入口" width="1000">
-
-2. 打开准备使用的绑定平台。也可在驾驶舱顶部的 **AI 语音交互绑定** 里提前选择 **国内版** 或 **国际版**，点击即保存选区并重连语音。
-
-   | 设备选区 | 唤醒词 | 绑定与管理平台 |
-   | --- | --- | --- |
-   | `cn` 国内版 | **小鸭小鸭** | [agent.xgorobot.com/devices](https://agent.xgorobot.com/devices) |
-   | `global` 国际版 | **Hey Ducky** | [agent.luwudynamics.ai](https://agent.luwudynamics.ai/) |
-
-3. 登录平台，在「设备」中点击「添加设备」。按提示开启蓝牙，选择 `XGO-Duck` 开头的设备，完成配网和账号绑定，再选择要使用的智能体。
-4. 回到驾驶舱打开 **AI 语音交互绑定**，确认语音在线后，说页面上当前选区对应的唤醒词。
-
-<img src="docs/images/ai-binding-cn.jpg" alt="AI 语音交互绑定窗口显示国内版唤醒词小鸭小鸭和国际版唤醒词 Hey Ducky" width="760">
-
-网页蓝牙需使用支持 Web Bluetooth 的 Chrome / Edge。iPhone / iPad 可用对应的小程序或 App 完成添加：
-
-| 国内微信小程序 | 国际版 App |
-| --- | --- |
-| <img src="docs/images/qr_miniprogram.png" alt="国内微信小程序二维码" width="150"> | <img src="docs/images/qr_app_intl.png" alt="国际版 App 下载二维码" width="150"> |
-| 用微信扫码 | [打开 App 下载页](https://agent.luwudynamics.ai/download) |
-
-国内、国际账号和设备绑定相互独立。若小鸭还未选区，联网后会自动检查两边的绑定，只绑定一边就使用该服务，两边都绑定则使用国内版。已保存的选区优先。切换服务器会保留对话语言、音量和运动设置。首次切到另一侧需要在那里单独绑定。设备已绑定其他账号时，应先在原账号中解绑。
-
-如果绑定后语音没上线，可以复制这段提示词让 AI 协助排查。
-
-```text
-板子 IP：[填写]，我选择的服务区域：[国内 cn / 国际 global]。
-请读取驾驶舱的绑定状态和 9527 的 /api/voice/status，检查服务区域和语音连接。
-告诉我卡在配网、绑定还是语音连接，并引导我在相应平台完成下一步。
-账号登录、蓝牙授权、绑定和换区由我操作。
-```
-
-### 开机提示音
-
-后续通电会自动探测 USB 音视频设备，启动网页、聊天和运动服务，**无需每次打开 App Lab 或点击 Run**。完成配网、账号绑定并接好 USB 音频设备后，会依次听到两段启动鸭叫：
-
-| 顺序 | 含义 | 示例音效 |
-| --- | --- | --- |
-| ① | 联网成功 | [试听第一段鸭叫](assets/startup-network.wav?raw=true) |
-| ② | 语音服务已连接，聊天就绪 | [试听第二段鸭叫](assets/startup-voice.wav?raw=true) |
-
-如果还未绑定，联网鸭叫之后会播报三遍「请在浏览器打开［当前 IP 地址］，完成 AI 绑定」。开机连上 Wi-Fi 后，UNO Q 的板载点阵将完整 IP（如 `192.168.31.8`）连同分隔点一起向右循环滚动，末位数字最先从左侧进入，30 秒后熄灭。
-
-听到语音服务就绪的鸭叫后，说 **AI 语音交互绑定 → 开机自启与唤醒** 中显示的唤醒词。听到唤醒鸭叫后就可以说话。启动音示例可在当前手机或电脑上试听，实际启动音由小鸭扬声器播放。
-
-## 日常使用
-
-- **界面语言：**每次打开或刷新时跟随访问设备的浏览器系统语言，中文显示中文，其余显示英文；顶部切换按钮仅临时生效。
-- **音频测试：**首页「实时音频」中，左侧「测试扬声器」播放约 3 秒合成鸭叫，播放时可点击停止；右侧「实时监听」收听小鸭麦克风。
-- 手机横屏、竖屏默认都显示双摇杆。「更多」里有其他动作和鸭叫，「视图 → 显示全部」可打开设备设置。
-- 电脑上按住 **W/S** 前进或后退、**A/D** 侧移、**Q/E** 转向。松开按键或按 **空格** 停止移动。
-- 国内版说「小鸭小鸭」，国际版说「Hey Ducky」唤醒聊天。在平台中管理智能体，在驾驶舱「设置 → 扬声器」调整音量。
-- **音视频：**驾驶舱可开启/关闭摄像头、控制补光灯、保存照片和实时监听麦克风。
-- 开机先开启 USB Host，最多等待 5 秒识别 USB 摄像头或音频设备。识别到就保留 Host，否则切回 Device，方便用 USB 连接电脑。开机后才插入外设时，先让小鸭停止运动，再通过 Wi-Fi 打开驾驶舱，用顶部的 **USB Host** 开关手动开启。切换会中断当前 USB 连接。
-- ToF 正常测距时显示 8×8 实时距离，面板的「前向避障」默认关闭。开启后，普通速度前进时在 15 cm 内减速，10 cm 及以内停止前进。未接 ToF、传感器离线或没有有效的前方读数时，仍可前进。[避障说明](docs/forward-avoidance.md)
-
-## 常见问题
-
-### 1. 小鸭走不稳或发抖
-
-1. 先停止移动，扶稳小鸭并卸力。在舵机设置的「单舵机运动控制」中核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
-2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)统一标定全部 15 个舵机，单独标定 30 号颈部舵机，再标定 IMU、检查默认姿势。
-3. 打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对保存值和运行值。断电重启后，舵机会加载保存值。
+---
 
 本项目基于 Pollen Robotics 的 [Microduck](https://github.com/pollen-robotics/microduck)。[硬件](https://github.com/LuwuDynamics/xgoduck_hardware) · [训练代码](https://github.com/LuwuDynamics/xgoduck_rl)
