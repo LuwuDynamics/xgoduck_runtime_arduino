@@ -8,6 +8,15 @@
 
 下面按官方开发者指南的七步顺序配置，使用本仓库的 XGO Duck AI 安装包和启动命令。
 
+**下面这段提示词可以让 AI 代你完成第 1～4 步。** 安装验证通过后，直接从第 5 步继续。
+
+请先用**能传文件的手机 USB 数据线**把 UNO Q 接到电脑。仅充电的线无法传输数据。接好后，把下面这段复制给能操作本机终端的 AI。
+
+```text
+我的 UNO Q 已通过 USB 接到电脑。请按下面网页的安装说明，帮我安装最新版 XGO Duck AI。
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino#ai-assisted-install
+```
+
 ## 1. 设置并连接 Wi-Fi
 
 用 USB 数据线把 UNO Q 连到电脑，在 Arduino App Lab 完成首次设置。选择键盘布局、设置设备名、连接 Wi-Fi 并设置板端 Linux 登录密码。等待检查和更新完成，断开 USB 后按指南接好扩展板，再重开 App Lab 并连接开发板。 [官方图文步骤](https://www.xgorobot.com/duck-developer-guide/index.html)
@@ -16,17 +25,7 @@
 
 在 Arduino App Lab 右下角点击 Wi-Fi 图标，打开 **Network Info**，记下板子的 IP 地址。后续安装时，电脑和板子需要连接到同一局域网。
 
-拿到 IP 后，可把下面这段交给有终端权限的 AI，检查后续安装需要的 SSH 连接。
-
-```text
-板子 IP 是 [填写]。请从我的电脑验证能否通过 Wi-Fi SSH 登录 arduino 用户。
-登录后检查 Debian 版本、CPU 架构、可用空间和 Arduino App CLI 是否可用。
-密码由我在终端提示中输入。
-```
-
 ## 3. 导入 XGO Duck AI App
-
-> **想让 AI 代装？** 完成第 1～2 步后，直接使用[第 3～4 步的 AI 代装提示词](#ai-assisted-install)。
 
 | 安装包 | 什么时候用 | 包内有什么 |
 | --- | --- | --- |
@@ -40,7 +39,7 @@
 
 完成 UNO Q 的初始设置，通过 Wi-Fi SSH 登录官方 Debian 13 ARM64 系统。参考首装环境预留至少 **2.5 GiB** 可用空间。下载 ZIP 和校验文件，校验后通过 SCP 传到 UNO Q，在板上解压到新目录。若已接舵机，先扶稳小鸭并确认卸力。停止正在运行的 App，以 `arduino` 用户按包内 `INSTALL.txt` 执行 `bash install.sh`。脚本会配置 2 Mbps Bridge、设置开机自启并启动 App。完成后直接做第 4 步的验收。参考系统上，包传到板子后即可断开公网完成安装。账号绑定和云端语音需要互联网。
 
-全量包是应用及依赖安装包，不会重刷系统。解压目录与 App 安装目录不同：0.3.6 固定安装到 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-6-unoq`。该目录已存在时，只有其中的 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全相同，安装器才会复用；单独安装过同版本 `.ard` 或同版本重新打包后，也可能不满足这一条件。保留已核实可用的安装，或按明确的重装要求处理旧目录及数据后再安装。不要手工伪造收据或直接覆盖目录。[全量包说明](docs/full-install.txt)
+全量包是应用及依赖安装包，不会重刷系统。解压目录与 App 安装目录不同：0.3.7 固定安装到 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-7-unoq`。该目录已存在时，只有其中的 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全相同，安装器才会复用；单独安装过同版本 `.ard` 或同版本重新打包后，也可能不满足这一条件。保留已核实可用的安装，或按明确的重装要求处理旧目录及数据后再安装。不要手工伪造收据或直接覆盖目录。[全量包说明](docs/full-install.txt)
 
 需要迁回旧配置时，先按更新流程保存同一只鸭子的持久数据。全量安装器结束后，停止新 App 和 `xgoduck-ai-hardware.service`，迁回配置并保留权限及归属，然后启动硬件服务和新 App，再进行验收。[数据迁移和回退](docs/deployment.md#更新与回退)
 
@@ -86,19 +85,31 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 <a name="ai-assisted-install"></a>
 
-### 让 AI 代装第 3～4 步
+### 用 AI 配网、安装和验收（第 1～4 步）
 
 源码 ZIP 的安装流程已在 Codex、DeepSeek Harness 和 Cursor 中跑通，首装通常预留 30～60 分钟，实际取决于下载速度。全量包提前准备了依赖，板端耗时主要取决于传输、解压和本地安装。
 
-复制下面的提示词，填入 **板子 IP、SSH 用户名和密码**，交给能执行终端命令的 AI。若已配置 SSH 密钥，也可直接使用密钥登录。
+下面是 AI 执行第 1～4 步时使用的详细说明。需要密码时，请在电脑上弹出的窗口输入。如果已有板子 IP、想指定版本或已有安装包，可以在发给 AI 的消息里补充。
 
 ```text
-请在我的 Arduino UNO Q 上完成 XGO Duck AI 的安装、启动和验收。
-板子 IP：[填写]。SSH 用户名：[填写，通常是 arduino]。SSH 密码：[填写板子的 Linux 登录密码]。
-安装方式：[首次安装 / 更新 / 自动判断]。目标版本：[最新 AI 版 / 指定版本，例如 0.3.6]。
-服务区域：[自动识别或保留现有 / 国内 cn / 国际 global]。本地已下载的安装包路径：[可选]。
+请帮我的 Arduino UNO Q 连上 Wi-Fi，安装或更新 XGO Duck AI，并完成启动和验收。
+自动判断是首装还是更新，默认安装最新 AI 版。服务区域首装用自动设置，更新沿用已有设置。
+如果我指定了板子 IP、版本、区域或本地安装包，请使用我提供的信息。
+项目仓库：https://github.com/LuwuDynamics/xgoduck_runtime_arduino
 
-1. 通过 Wi-Fi SSH 登录目标板。密码只用于登录或 sudo，避免写入文件、命令历史或日志。
+1. 默认登录用户为 arduino。如果我提供了 IP，先从电脑尝试 SSH 登录，可使用已有密钥。
+   登录成功就继续检查板子。需要查 IP 或配网时，用 USB 数据线和 adb devices -l 找到 UNO Q；
+   若有多块候选板，让我选序列号。通过 ADB 检查板子的 Wi-Fi 连接，已联网就读取无线网卡的 IPv4 地址。
+   需要配网时，显示电脑当前连接的 Wi-Fi 名称，让我确认或改选。读不到名称时让我填写。
+   密码由我在可操作的本机窗口隐藏输入（Windows 用 PowerShell，Mac 用“终端”）。
+   Windows 经我确认后，若有权限，可在本机复用所选网络已保存的密码，取不到再让我输入；
+   Mac 让我输入该网络的密码。开放网络跳过 Wi-Fi 密码。通过 ADB 用板上的 NetworkManager 配网，
+   确认连上所选网络并取得无线 IPv4 地址。密码仅在本机交互程序中处理，避免出现在聊天、命令参数、历史或日志里。
+   如果无法弹出本机窗口，给我一条在本机终端启动相同交互流程的命令，完成输入后继续。
+   新板若尚未设置 arduino 密码，让我设置并再次输入确认；已设置过的板子沿用原密码或已有 SSH 密钥。
+   如板子尚未开启 SSH，通过 ADB 执行 arduino-app-cli system network-mode enable。
+   从电脑实际登录 arduino@板子IP 后，沿用该 SSH 连接继续安装。
+   后续需要 sudo 或重新认证时，也在本机窗口输入。
    核对 UNO Q、官方 Debian 13 ARM64、可用空间、arduino 用户（UID 1000）、App CLI 和 daemon 版本。
    用 arduino-app-cli app list 查看已装 App，用 app details <App ID> 核对实际目录，用 app ps 查看运行状态，
    用 arduino-app-cli properties get default 查看开机默认 App。旧版 CLI 的状态查询以帮助为准。
@@ -106,12 +117,14 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    核实魔搭全量包的实际版本，并用该版本做下面的检查，说明尚未确认它是否为最新。若我指定 master 腿姿，
    复用已有 App 前要用目标构建的 build-manifest.json 核对实际目录中 python/rl_core.py 的 SHA-256，两种构建都可能显示 0.3.6。
    已有 App 运行时，只读检查驾驶舱、/api/version 和 /api/status。若运行的是目标版本及所需构建，且状态正常，
-   告诉我“已是目标版本，跳过安装”，到此结束。若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
+   告诉我已是目标版本，给出实际版本、板子 IP、驾驶舱和 9527 控制页的完整地址，到此结束。
+   若同版本已安装但运行异常，先查现有 App 和服务日志再决定如何修复。
    需要安装时保持 Wi-Fi SSH，USB 探测可能中断 USB/ADB。
 
 2. 首次安装和跨版本更新默认都用目标版本的全量 ZIP（第 4 项）。优先复用电脑上已通过校验的包。
    - 需要下载全量包时，在实际下载的电脑上沿用当前代理设置，用下面的命令读取公网出口的国家/地区代码。
      curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     Windows PowerShell 可用 curl.exe -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | Select-String '^loc='
      CN 优先魔搭，其他已识别的地区优先 GitHub。查询失败或代理分流导致出口不明时，并行短测下面两个
      .sha256 链接，选先返回有效校验文件的来源。板子的局域网 IP 和语音服务区域不参与选源。
      魔搭全量 ZIP 和校验文件
@@ -203,6 +216,7 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
    若语音日志提示 libopus.so.0 权限错误，检查新 App 的 native 库和目录对容器运行用户是否可读及可遍历。
    启动失败先查 App、Router 和硬件服务日志。若需回退，停止新 App，按 docs/deployment.md 从旧目录
    恢复硬件服务和默认项，再启动旧 App，保留备份。汇报所用安装包、校验结果、版本、实际目录和验收结果。
+   给出重启后确认的板子 IP、驾驶舱地址 http://<板子IP>/ 和控制页地址 http://<板子IP>:9527/，用实际 IP 替换占位符。
    安装成功后提醒我按 README 完成第 5～8 步。依次设置舵机编号、组装、统一标定 15 个舵机、单独标定 30 号颈部舵机、
    标定 IMU，再检查默认姿势，最后绑定账号并选择智能体。已完成的步骤跳过，告诉我下一项。
 ```
@@ -219,95 +233,20 @@ sha256sum -c xgoduck-ai-unoq.ard.sha256 && \
 
 ## 5. 设置舵机并编号
 
-[按官方图文完成舵机设置与编号](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+每次只接一个舵机，按安装位置设置 ID，核对后贴上编号标签。[舵机设置图解](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-05)
 
 ## 6. 组装 XGO Duck
 
-[按官方图文组装 XGO Duck](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
-
-[音视频安装教程（PDF）](docs/xgo-duck-av-installation.pdf) · [下载中英装配 PPTX（约 69 MB）](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
-
-<img src="docs/images/wiring/overview-zh.png" alt="XGO Duck 实物端口接线图，标出 UNO Q、载板、摄像头、ToF 模块、扬声器和补光灯" width="960">
+按装配图核对舵机编号和安装方向，装好机身并连接音视频设备。[整机装配与接线图解](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-06)
 
 ## 7. IMU 标定和舵机标定
 
-打开 `http://<板子IP>:9527/`，确认 **15/15** 个舵机在线。扶稳小鸭后点顶部 **标定**，等页面确认舵机已卸力。
-
-1. **统一标定舵机。** 按四张图摆好小鸭，避开线束。点 **标定 15 个舵机**，等页面确认中位已保存。
-2. **单独标定颈部。** 让脖子与躯干平行，点 **标定 30 号舵机**。看到中位已保存后，点 **全部卸力**。
-3. **标定 IMU。** 保持舵机卸力，让 UNO Q 竖直、电池接口朝上、板子下边缘贴住水平桌面。点一次 **标定 IMU**，保持静止直到页面显示已保存。若读数有波动，页面会显示自动重试的进度。[IMU 标定细节](docs/imu-calibration.md)
-4. **检查默认姿势。** 把小鸭放到平坦处扶稳，点标定页底部的 **默认姿势**。等舵机上力，再对照实拍检查头颈、腿和脚的位置。如果姿势不对，先扶稳并点 **全部卸力**，再复查摆位和舵机标定。
-
-<img src="docs/images/default-pose-reference.jpg" alt="小鸭默认站姿实拍：左为轮脚，右为普通脚掌" width="900">
-
-[标定按钮和状态说明](docs/calibration-guide.md)
+按标定页提示校准舵机和 IMU，确认默认姿势正确后再试走。[标定与首次行走指南](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-guide-07)
 
 ## 8. 绑定账号，选择智能体
 
-1. 电脑或手机与小鸭连接同一网络，打开 **`http://<板子IP>/`**，无需端口和页面后缀。
+选择服务区域，绑定小鸭并选好智能体，用对应的唤醒词试一次语音对话。[账号绑定与语音验收指南](https://wiki.xgorobot.com/xgo/kb/xgo-duck/duck-ai-voice)
 
-   <img src="docs/images/cockpit-live-cn.png" alt="中文驾驶舱的实时画面、ToF 测距、左右遥控摇杆和底部动作按钮，顶部为 AI 语音交互绑定入口" width="1000">
-
-2. 打开准备使用的绑定平台。也可在驾驶舱顶部的 **AI 语音交互绑定** 里提前选择 **国内版** 或 **国际版**，点击即保存选区并重连语音。
-
-   | 设备选区 | 唤醒词 | 绑定与管理平台 |
-   | --- | --- | --- |
-   | `cn` 国内版 | **小鸭小鸭** | [agent.xgorobot.com/devices](https://agent.xgorobot.com/devices) |
-   | `global` 国际版 | **Hey Ducky** | [agent.luwudynamics.ai](https://agent.luwudynamics.ai/) |
-
-3. 登录平台，在「设备」中点击「添加设备」。按提示开启蓝牙，选择 `XGO-Duck` 开头的设备，完成配网和账号绑定，再选择要使用的智能体。
-4. 回到驾驶舱打开 **AI 语音交互绑定**，确认语音在线后，说页面上当前选区对应的唤醒词。
-
-<img src="docs/images/ai-binding-cn.jpg" alt="AI 语音交互绑定窗口显示国内版唤醒词小鸭小鸭和国际版唤醒词 Hey Ducky" width="760">
-
-网页蓝牙需使用支持 Web Bluetooth 的 Chrome / Edge。iPhone / iPad 可用对应的小程序或 App 完成添加：
-
-| 国内微信小程序 | 国际版 App |
-| --- | --- |
-| <img src="docs/images/qr_miniprogram.png" alt="国内微信小程序二维码" width="150"> | <img src="docs/images/qr_app_intl.png" alt="国际版 App 下载二维码" width="150"> |
-| 用微信扫码 | [打开 App 下载页](https://agent.luwudynamics.ai/download) |
-
-国内、国际账号和设备绑定相互独立。若小鸭还未选区，联网后会自动检查两边的绑定，只绑定一边就使用该服务，两边都绑定则使用国内版。已保存的选区优先。切换服务器会保留对话语言、音量和运动设置。首次切到另一侧需要在那里单独绑定。设备已绑定其他账号时，应先在原账号中解绑。
-
-如果绑定后语音没上线，可以复制这段提示词让 AI 协助排查。
-
-```text
-板子 IP：[填写]，我选择的服务区域：[国内 cn / 国际 global]。
-请读取驾驶舱的绑定状态和 9527 的 /api/voice/status，检查服务区域和语音连接。
-告诉我卡在配网、绑定还是语音连接，并引导我在相应平台完成下一步。
-账号登录、蓝牙授权、绑定和换区由我操作。
-```
-
-### 开机提示音
-
-后续通电会自动探测 USB 音视频设备，启动网页、聊天和运动服务，**无需每次打开 App Lab 或点击 Run**。完成配网、账号绑定并接好 USB 音频设备后，会依次听到两段启动鸭叫：
-
-| 顺序 | 含义 | 示例音效 |
-| --- | --- | --- |
-| ① | 联网成功 | [试听第一段鸭叫](assets/startup-network.wav?raw=true) |
-| ② | 语音服务已连接，聊天就绪 | [试听第二段鸭叫](assets/startup-voice.wav?raw=true) |
-
-如果还未绑定，联网鸭叫之后会播报三遍「请在浏览器打开［当前 IP 地址］，完成 AI 绑定」。开机连上 Wi-Fi 后，UNO Q 的板载点阵将完整 IP（如 `192.168.31.8`）连同分隔点一起向右循环滚动，末位数字最先从左侧进入，30 秒后熄灭。
-
-听到语音服务就绪的鸭叫后，说 **AI 语音交互绑定 → 开机自启与唤醒** 中显示的唤醒词。听到唤醒鸭叫后就可以说话。启动音示例可在当前手机或电脑上试听，实际启动音由小鸭扬声器播放。
-
-## 日常使用
-
-- **界面语言：**每次打开或刷新时跟随访问设备的浏览器系统语言，中文显示中文，其余显示英文；顶部切换按钮仅临时生效。
-- **音频测试：**首页「实时音频」中，左侧「测试扬声器」播放约 3 秒合成鸭叫，播放时可点击停止；右侧「实时监听」收听小鸭麦克风。
-- 手机横屏、竖屏默认都显示双摇杆。「更多」里有其他动作和鸭叫，「视图 → 显示全部」可打开设备设置。
-- 电脑上按住 **W/S** 前进或后退、**A/D** 侧移、**Q/E** 转向。松开按键或按 **空格** 停止移动。
-- 国内版说「小鸭小鸭」，国际版说「Hey Ducky」唤醒聊天。在平台中管理智能体，在驾驶舱「设置 → 扬声器」调整音量。
-- **音视频：**驾驶舱可开启/关闭摄像头、控制补光灯、保存照片和实时监听麦克风。
-- 开机先开启 USB Host，最多等待 5 秒识别 USB 摄像头或音频设备。识别到就保留 Host，否则切回 Device，方便用 USB 连接电脑。开机后才插入外设时，先让小鸭停止运动，再通过 Wi-Fi 打开驾驶舱，用顶部的 **USB Host** 开关手动开启。切换会中断当前 USB 连接。
-- ToF 正常测距时显示 8×8 实时距离，面板的「前向避障」默认关闭。开启后，普通速度前进时在 15 cm 内减速，10 cm 及以内停止前进。未接 ToF、传感器离线或没有有效的前方读数时，仍可前进。[避障说明](docs/forward-avoidance.md)
-
-## 常见问题
-
-### 1. 小鸭走不稳或发抖
-
-1. 先停止移动，扶稳小鸭并卸力。在舵机设置的「单舵机运动控制」中核对舵机 ID、安装位置和顺序，检查舵盘和固定螺丝是否松动。
-2. 打开 9527 的 **标定** 页，按[第 7 步](#7-imu-标定和舵机标定)统一标定全部 15 个舵机，单独标定 30 号颈部舵机，再标定 IMU、检查默认姿势。
-3. 打开 **舵机设置**，点 **扫描所有 ID**。逐个选中舵机，将 **KP 设为 5、KD 设为 10**，点 **写入 KP/KD（Set KpKd）**，再点 **读取** 核对保存值和运行值。断电重启后，舵机会加载保存值。
+---
 
 本项目基于 Pollen Robotics 的 [Microduck](https://github.com/pollen-robotics/microduck)。[硬件](https://github.com/LuwuDynamics/xgoduck_hardware) · [训练代码](https://github.com/LuwuDynamics/xgoduck_rl)

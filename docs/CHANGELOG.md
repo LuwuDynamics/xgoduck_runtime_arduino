@@ -5,27 +5,65 @@
 - 站立标定的陀螺仪合成标准差和峰值上限分别调整为 3.0 °/s 和 10.0 °/s。标定成功后，日志和标定文件记录加速度计与陀螺仪的三轴标准差、各轴峰值和合成峰值。
 - Standing calibration now accepts gyroscope noise up to 3.0 °/s combined standard deviation and 10.0 °/s combined peak deviation. Successful calibrations log and save per-axis standard deviations, per-axis peaks and the combined peak for both sensors.
 
-- Linux 与 STM32 默认使用 Arduino 可靠协议，握手后协商至 2 Mbaud。升级和回退时使用与目标固件配套的 Router。
-- IMU 六轴原始读数连续 10 帧全为零时，STM32 卸力并重新初始化 IMU。连续 3 帧有效后恢复反馈，小鸭保持卸力，等待新的起立或上力指令。
-- Linux and STM32 now use Arduino’s reliable protocol and negotiate 2 Mbaud. Use the target firmware’s matching Router when upgrading or rolling back.
-- After ten consecutive all-zero IMU samples, STM32 releases torque and reinitializes the IMU. Three consecutive valid samples restore feedback. Duck stays unloaded until a fresh arm command.
-
-- 开机连上 Wi-Fi 后，点阵向右滚动显示带分隔点的完整 IPv4 地址，末位数字先进入，30 秒后熄灭。
-- At startup, the LED matrix shows the last part of the Wi-Fi address for 30 seconds, then turns off.
-
 ## 0.3.7
 
 ### 简体中文
 
-- 更新坐站模型。站起阶段运行 1.2 秒，腿部和头部 action 滤波 α 均为 0.2，输出倍率为 1.1。站起首帧沿用坐姿的动作历史。
-- 前后倾超过 55° 或左右侧倾超过 35°，持续达到 150 ms 阈值后直接运行起身模型。机身倾角低于 15° 并持续 1 秒后恢复行走。
-- 左右脚踢球的腿部和头部 action 滤波 α 均改为 0.2，输出倍率改为 1.0，踢球时长为 0.4 秒。
+#### 轮滑、行走与起身
+
+- 优化轮滑起步和停车。前后滑行时速度逐渐升高，松开摇杆后速度指令归零，轮滑模型继续维持平衡。系统根据腿部位置、关节速度和机身姿态判断是否已收稳，最多等待 2 秒。期间可重新推杆调整方向。驾驶舱与 9527 控制页使用相同的轮滑速度范围。
+- 轮滑默认动作幅度为 0.6，腿部和头部动作滤波系数分别为 0.4 和 0.5。普通行走和轮滑沿用 0.3.6 的 ONNX 模型，本次更新了跌倒起身和坐站两个模型。
+- 前后倾超过 55° 或左右侧倾超过 35°，持续 150 毫秒后开始起身。机身回到直立 15° 以内并保持 1 秒后恢复行走。从坐姿站起时沿用上一帧的动作历史，站起过程为 1.2 秒，腿部和头部滤波系数均为 0.2，动作倍率为 1.1。
+- 左右脚踢球时长均为 0.4 秒，腿部和头部滤波系数均为 0.2，动作倍率为 1.0。
+
+#### 舵机设置与标定
+
+- 舵机设置新增可旋转的 3D 安装图。点选舵机 ID 会高亮对应关节，可在图下方启动「单舵机运动控制」，轻拖滑条，对照实机确认关节位置和运动方向。
+- 修改 ID 时会把当前位置设为中位，开启电压保护和 2 A 过流保护，并写入 KP 5、KD 10。页面分别显示写入和回读结果，KP/KD 区域可直接查看、修改并重新读取保存值和运行值。
+- 扫描通过读取 ID 寄存器确认舵机，单个地址最多尝试 10 次，减少串口回显和漏包造成的误判。停止扫描会保留已发现的 ID。若一个都没找到，可对照可放大的实拍图检查电池和接线。
+- 统一标定后可单独校准 30 号颈部舵机。默认姿势与参考照片不符时，可从检查步骤进入舵机设置核对安装位置，也可展开「单舵机标定」，按实拍和中位图例逐个校准。在同一标定会话中，从 30 号切到 31 号时，已标好的关节可以继续保持。 [标定图解](calibration-guide.md)
+
+#### 驾驶舱、语音与摄像头
+
+- 驾驶舱新增「前向避障」开关，默认关闭，选择会保存到设备。开启后，前方障碍物过近时会限制前进。关闭后仍可查看 ToF 实时测距。 [前向避障](forward-avoidance.md)
+- 驾驶舱顶部新增「控制调试中心」入口。控制、标定和舵机设置三页统一了导航和内容宽度。控制页说明了电压取自在线舵机供电读数的中间值，并提醒用户在用手机遥控前关闭电脑上的控制页，避免走走停停。
+- 语音指令「打开补光灯」会先启动摄像头，等画面就绪再开灯。「关闭补光灯」可以单独执行，「关闭摄像头」会同时熄灯并结束预览。网页预览上限为每秒 15 帧，拍照保留完整 JPEG 帧。支持处理器调度的设备会在语音进程启动时降低其优先级，并尽量让唤醒词和语音处理使用独立于运动控制的 CPU 核心。 [摄像头说明](usb-camera.md)
+
+#### 保护、诊断与安装
+
+- 堵转保护结合关节角度、速度、持续告警时间和当前动作判断。轮滑中的短时过流只提示，持续热负载达到阈值时会尝试回到默认姿势，回位受阻时卸力。低压保护触发时，若姿态和反馈允许，会先尝试坐下再卸力。日志增加跌倒前的关节反馈、告警及卸力原因，方便排查突然倒地。
+- Linux 与 STM32 使用 Arduino 可靠串口协议，握手后协商到 2 Mbaud。IMU 六轴读数连续 10 帧全零时，STM32 卸力并重新初始化传感器。连续 3 帧有效后恢复反馈，需重新发出起立或上力指令才能继续运动。
+- 开机连上 Wi-Fi 后，UNO Q 点阵向右滚动显示完整 IPv4 地址，包括分隔点，30 秒后熄灭。运动前的硬件检查增加实拍图，标明 V1.1 及更早扩展板的绝缘位置和后部保护壳的固定方式。
+- GitHub 和 ModelScope 均提供带版本号的 0.3.7 全量 ZIP 和预编译 ARD，可用配套 SHA-256 核对下载。首次安装或跨版本升级推荐全量包。升级或回退时，使用与目标 STM32 固件配套的 Router。 [安装与回退](deployment.md)
 
 ### English
 
-- Update the sit/stand model. Stand runs for 1.2 s with leg and head action smoothing α = 0.2 and an action scale of 1.1. The first standing frame carries over the seated action history.
-- Start the get-up policy as soon as pitch exceeds 55° or roll exceeds 35° for the 150 ms detection window. Return to walking after the body stays within 15° of upright for 1 s.
-- Both kicks use leg and head action smoothing α = 0.2 and an action scale of 1.0. Each kick lasts 0.4 s.
+#### Skating, walking and recovery
+
+- Roller mode ramps up forward and reverse speed. Releasing the stick sets the velocity command to zero while the roller policy continues balancing. Duck uses leg angles, joint speeds and body attitude to check for a settled stance for up to 2 seconds. Moving the stick again resumes manual input. The cockpit and port 9527 controls use the same roller speed limits.
+- Roller mode defaults to an action scale of 0.6, with smoothing coefficients of 0.4 for the legs and 0.5 for the head. The walk and roller ONNX models carry over from 0.3.6. This release updates the fall-recovery and sit/stand models.
+- Duck starts getting up after pitch exceeds 55° or roll exceeds 35° for 150 ms. Walking resumes after Duck stays within 15° of upright for 1 second. Standing from sitting carries over the last seated action and runs for 1.2 seconds, with leg and head smoothing of 0.2 and an action scale of 1.1.
+- Left and right kicks each last 0.4 seconds, with leg and head smoothing of 0.2 and an action scale of 1.0.
+
+#### Servo setup and calibration
+
+- Servo setup adds a rotatable 3D installation diagram. Select an ID to highlight its joint. Use the single-servo control below the diagram to move the joint slightly and check its location and direction on the robot.
+- Changing an ID sets the current position as the center, enables voltage and 2 A overcurrent protection, and writes KP 5 and KD 10. The page reports which settings it could verify. The gain controls stay visible so you can edit the values and read back both saved and active gains.
+- Scanning reads each servo’s ID register, with up to 10 attempts per address to handle missed replies and distinguish servos from serial echoes. Stopping a scan keeps the IDs already found. If the list is empty, a troubleshooting dialog includes an enlargeable battery and wiring photo.
+- After calibrating all servos, you can center neck servo 30 separately. If the default pose differs from the reference photo, open Servo setup to verify installation or expand single-servo calibration for photos and center-position diagrams. Within the same session, servo 30 can keep holding its calibrated position while you center servo 31. [Calibration guide](calibration-guide.md)
+
+#### Cockpit, voice and camera
+
+- The cockpit adds a Forward avoidance switch. It defaults to off and remembers the selection across restarts. When enabled, a nearby obstacle limits forward motion. Live ToF distances remain available with the switch off. [Forward avoidance](forward-avoidance.md)
+- The control and debugging center is accessible from the top of the cockpit. The control, calibration and servo setup pages share the same navigation and content width. The control page explains that voltage is the median of the reporting servos’ supply readings. It also reminds phone users to close the computer’s control page to avoid intermittent stops.
+- Asking Duck to turn on the fill light starts the camera and waits for video before switching on the light. The light can be switched off independently. Asking Duck to close the camera turns off the light and ends the preview. The web preview is capped at 15 fps, while photos use the full JPEG frame. On supported systems the voice process starts at lower priority and is assigned to a subset of CPU cores to leave capacity for motion control. [Camera guide](usb-camera.md)
+
+#### Protection, diagnostics and installation
+
+- Stall detection considers joint position, speed, alarm duration and the current activity. Brief overcurrent during skating raises a warning. Sustained thermal load triggers an attempt to return to the default stance, with torque released if the joints cannot make progress. On low voltage, Duck attempts to sit before releasing torque when posture and feedback permit. Diagnostic logs include joint feedback leading up to a fall, servo alarms and the reason for torque release.
+- Linux and STM32 use Arduino’s reliable serial protocol and negotiate 2 Mbaud after the handshake. After 10 consecutive all-zero IMU samples, STM32 releases torque and reinitializes the sensor. Three consecutive valid samples restore feedback. A fresh stand or arm command is required to resume motion.
+- Once Wi-Fi connects at startup, the UNO Q LED matrix scrolls the complete IPv4 address, including the dots, to the right for 30 seconds. The pre-motion hardware check includes photos showing where to insulate expansion boards up to V1.1 and how to secure the rear cover.
+- GitHub and ModelScope offer the versioned 0.3.7 full ZIP and precompiled ARD with matching SHA-256 files. Use the full ZIP for a first install or cross-version upgrade. Use the Router matched to the target STM32 firmware when upgrading or rolling back. [Deployment guide](deployment.md)
 
 ## 0.3.6
 

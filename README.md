@@ -8,6 +8,15 @@ Prepare an Arduino UNO Q running official Debian 13, a carrier board, a USB data
 
 The first seven steps follow the official developer guide, with this repository’s XGO Duck AI packages and startup commands.
 
+**Use the prompt below to have AI complete steps 1–4 for you.** Once the assistant verifies the installation, go straight to step 5.
+
+Connect the UNO Q to your computer with **a phone USB cable that can transfer files**. A charge-only cable cannot carry data. Once connected, copy the following into an AI assistant with access to your computer’s terminal.
+
+```text
+My UNO Q is connected to my computer by USB. Please use this guide to install the latest XGO Duck AI app.
+https://github.com/LuwuDynamics/xgoduck_runtime_arduino#ai-assisted-install
+```
+
 ## 1. Set up Wi-Fi
 
 Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, choose the keyboard layout, name the board, join Wi-Fi and set the board’s Linux password. Let the update check finish. Disconnect USB, fit the carrier as shown in the guide, then reopen App Lab and reconnect. [Illustrated guide](https://www.xgorobot.com/duck-developer-guide/index.html)
@@ -16,17 +25,7 @@ Connect the UNO Q to your computer with a USB data cable. In Arduino App Lab, ch
 
 In Arduino App Lab, click the Wi-Fi icon in the lower-right corner, open **Network Info**, and note the board’s IP address. Connect your computer and the board to the same local network for installation.
 
-Once you know the IP, you can give this prompt to an AI assistant with terminal access to check SSH.
-
-```text
-My board IP is [fill in]. Check whether my computer can reach the board over Wi-Fi SSH as arduino.
-After login, check the Debian version, CPU architecture, free disk space and Arduino App CLI.
-I will enter the password at the terminal prompt.
-```
-
 ## 3. Import XGO Duck AI
-
-> **Want AI to handle the installation?** Complete steps 1–2, then use the [AI prompt for steps 3–4](#ai-assisted-install).
 
 | Package | When to use it | What it includes |
 | --- | --- | --- |
@@ -40,7 +39,7 @@ For the full package, use ModelScope first on mainland China networks and GitHub
 
 Complete UNO Q initial setup and connect over Wi-Fi SSH to the official Debian 13 ARM64 image. Allow at least **2.5 GiB** of free space on the reference system. Verify the ZIP with its checksum, transfer it to UNO Q with SCP and extract it into a new directory on the board. If the servos are wired, support Duck and confirm torque is off. Stop any running Apps, then follow `INSTALL.txt` and run `bash install.sh` as `arduino`. The installer configures the 2 Mbps Bridge, enables autostart and launches the App. Continue with the checks in step 4. On the reference image, the board can install over the local network once it has the ZIP. Account binding and cloud voice need internet access.
 
-The full package installs the App and its dependencies without reflashing the OS. Its extraction directory is separate from the fixed App destination: `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-6-unoq` for 0.3.6. If that destination exists, the installer reuses it only when `.xgoduck-full-install.sha256` exactly matches the SHA-256 of the bundled `.ard`. A separately installed `.ard`, or a repacked file with the same version, may not meet this condition. Keep a verified working installation, or handle its directory and data under an explicit reinstall request before proceeding. Do not fabricate a receipt or overwrite the directory. [Full-package instructions](docs/full-install.txt)
+The full package installs the App and its dependencies without reflashing the OS. Its extraction directory is separate from the fixed App destination: `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-7-unoq` for 0.3.7. If that destination exists, the installer reuses it only when `.xgoduck-full-install.sha256` exactly matches the SHA-256 of the bundled `.ard`. A separately installed `.ard`, or a repacked file with the same version, may not meet this condition. Keep a verified working installation, or handle its directory and data under an explicit reinstall request before proceeding. Do not fabricate a receipt or overwrite the directory. [Full-package instructions](docs/full-install.txt)
 
 To retain settings, first save this Duck's persistent data using the update procedure. After the full installer finishes, stop the new App and `xgoduck-ai-hardware.service`, restore the saved settings with their permissions and ownership, then start the hardware service and the new App before verification. [Migration and rollback notes (Chinese)](docs/deployment.md#更新与回退)
 
@@ -86,21 +85,38 @@ A first installation may not have an account binding or a USB microphone and spe
 
 <a name="ai-assisted-install"></a>
 
-### Let AI handle steps 3–4
+### Set up Wi-Fi, install and verify with AI (steps 1–4)
 
 The source ZIP installation workflow has been tested with Codex, DeepSeek Harness and Cursor. Allow 30–60 minutes for a first source install, depending on download speed. The full package includes dependencies, so board setup time mostly depends on transfer, extraction and local installation.
 
-Copy the prompt and fill in the **board IP, SSH username and password** for an assistant with terminal access. If you already use an SSH key, the assistant can sign in with it.
+These are the instructions the AI assistant follows for steps 1–4. Enter passwords in the local window when prompted. If you know the board’s IP, want a specific version or already have a package, include that information in your message to the assistant.
 
 ```text
-Install, start and verify XGO Duck AI on my Arduino UNO Q.
-Board IP: [fill in]. SSH username: [fill in, usually arduino]. SSH password: [board's Linux login password].
-Installation: [first install / update / detect]. Version: [latest XGO Duck AI / specific, e.g. 0.3.6].
-Service region: [auto-detect or keep existing / China cn / International global].
-Path to any package I already downloaded: [optional].
+Connect my Arduino UNO Q to Wi-Fi, install or update XGO Duck AI, then start and verify it.
+Detect whether this is a first install or an update. Use the latest AI release by default.
+Use automatic region selection on a new board and keep the existing region on updates.
+Use any board IP, version, region or local package path I supply.
+Project repository: https://github.com/LuwuDynamics/xgoduck_runtime_arduino
 
-1. Sign in over Wi-Fi SSH. Use the password only for SSH or sudo and keep it out of files, shell history
-   and logs. Confirm UNO Q, official Debian 13 ARM64, free space, the arduino account (UID 1000), and
+1. Use the arduino account. If I supplied an IP, try SSH from my computer first, using an existing
+   key if available. Once logged in, continue with the board checks. If you need to find the IP
+   or set up Wi-Fi, connect over USB and find the UNO Q with adb devices -l. If several boards
+   match, let me choose the serial number. Check Wi-Fi over ADB. If connected, read the wireless IPv4 address.
+   If Wi-Fi setup is needed, show my computer’s current network name and let me confirm or choose
+   another. Ask me for the name if it cannot be read. Open an interactive window on my computer
+   for hidden password entry (PowerShell on Windows, Terminal on Mac). On Windows, after I confirm
+   the network, reuse its saved password locally if permissions allow. Prompt me if it is unavailable.
+   On Mac, prompt me for the Wi-Fi password. Skip the Wi-Fi password for open networks.
+   Connect using the board’s NetworkManager over ADB. Verify the selected network and its wireless IPv4
+   address. Handle passwords in the local interactive process and keep them out of chat, command arguments,
+   shell history and logs. If you cannot open a visible window, give me one command to start the same
+   interactive setup in my terminal, then continue after I enter the credentials.
+   If the arduino account on a new board needs a password, ask me to set one and enter it again
+   to confirm. On a configured board, use the existing password or SSH key. If SSH needs enabling,
+   run arduino-app-cli system network-mode enable over ADB. Log in from my computer as arduino
+   at the board’s IP and continue installation over that SSH connection. Use the local window
+   for any later sudo or login prompts.
+   Confirm UNO Q, official Debian 13 ARM64, free space, the arduino account (UID 1000), and
    the App CLI and daemon versions. Use arduino-app-cli app list for installed Apps,
    app details <App ID> for the actual path, app ps for running status, and
    arduino-app-cli properties get default for the startup App.
@@ -110,7 +126,8 @@ Path to any package I already downloaded: [optional].
    release is unconfirmed. If I requested the master walking pose, compare the installed python/rl_core.py
    SHA-256 with the target build-manifest.json before reusing an App. Both builds can report 0.3.6.
    If an App is running, check the cockpit, /api/version and /api/status without changing its state.
-   If the requested version and build are running normally, report that installation was skipped and finish here.
+   If the requested version and build are running normally, tell me the board is already up to date.
+   Give me the running version, board IP, cockpit URL and port 9527 control URL, then finish here.
    If the target version is installed but unhealthy, inspect its App and service logs before deciding how to repair it.
    For an installation, keep Wi-Fi SSH available. USB detection can interrupt USB/ADB.
 
@@ -119,6 +136,7 @@ Path to any package I already downloaded: [optional].
    - When a download is needed, check the public IP region on the computer that will download the full ZIP,
      using the same proxy settings as the download. Read only the loc field with this command.
      curl -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | sed -n 's/^loc=//p'
+     In Windows PowerShell, use curl.exe -fsS --max-time 5 https://www.cloudflare.com/cdn-cgi/trace | Select-String '^loc='
      For CN, try ModelScope first. For other known regions, try GitHub first. If the lookup fails or a
      split proxy makes the region unclear, briefly probe both .sha256 links in parallel and use the first
      valid checksum response. The board's LAN address and voice service region do not determine the download source.
@@ -236,6 +254,8 @@ Path to any package I already downloaded: [optional].
    To roll back, stop the new App, follow docs/deployment.md to restore hardware support and the default
    App from the old directory, then run the old version and keep the backup. Report the chosen package,
    checksum, running version, path and checks.
+   Report the IP confirmed after reboot and the two working URLs, http://<board-ip>/ and
+   http://<board-ip>:9527/, with the board’s actual IP.
    Once installed, send me back to README steps 5–8: number the servos, assemble Duck, calibrate all
    15 servo centers together, set ID 30 separately, calibrate the IMU, then check Default pose, bind an
    account and select an agent. Point me to the next unfinished step.
@@ -253,95 +273,20 @@ Path to any package I already downloaded: [optional].
 
 ## 5. Configure and number the servos
 
-[Follow the official guide to configure and number the servos](https://www.xgorobot.com/duck-developer-guide/05-servo-setup.html)
+Connect one servo at a time. Set its ID for the intended joint, verify it and label the servo. [Servo setup guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-05?model=duck)
 
 ## 6. Assemble XGO Duck
 
-[Follow the official illustrated assembly guide](https://www.xgorobot.com/duck-developer-guide/06-assembly.html)
-
-[Audio/video installation guide (PDF)](docs/xgo-duck-av-installation.pdf) · [Download the bilingual assembly PPTX (about 69 MB)](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/raw/ai-chat-audio-video-tof/assembly/xgo-duck-assembly-zh-en-20261016.pptx)
-
-<img src="docs/images/wiring/overview-en.png" alt="XGO Duck physical wiring diagram for the UNO Q, carrier, camera, ToF module, speakers and fill light" width="960">
+Match each servo ID and orientation to the assembly diagrams, then assemble the body and connect the audio and video hardware. [Assembly and wiring guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-06?model=duck)
 
 ## 7. IMU and servo calibration
 
-Open `http://<board-ip>:9527/` and check that all **15/15** servos are online. Support Duck before opening **Calibration**. Wait for the page to confirm that the servos are unloaded.
-
-1. **Calibrate all 15 servos.** Position Duck as shown in the four photos, keeping cables clear of the joints. Click **Calibrate all 15 servos** and wait for confirmation.
-2. **Calibrate the neck separately.** Position the neck parallel to the torso and click **Calibrate ID 30**. When the center is saved, click **Unload all**.
-3. **Calibrate the IMU.** With the servos unloaded, hold the UNO Q upright with its battery connector pointing up and its bottom edge against a level table. Click **Calibrate IMU** once and hold still until the page confirms the save. The page shows any automatic retries. [IMU calibration details](docs/imu-calibration.md)
-4. **Check the default pose.** Support Duck on a level surface and click **Default pose** at the bottom of **Calibration**. Once the servos engage, compare its neck, legs and feet with the photo. If the pose differs, support Duck and click **Unload all** before rechecking its placement and servo calibration.
-
-<img src="docs/images/default-pose-reference.jpg" alt="Default standing pose with roller feet on the left and standard feet on the right" width="900">
-
-[Calibration controls and status messages](docs/calibration-guide.md)
+Follow the calibration page to calibrate the servos and IMU. Check the default pose before taking the first steps. [Calibration and first walk guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-guide-07?model=duck)
 
 ## 8. Bind an account and select an agent
 
-1. Connect your computer or phone to Duck's network and open **`http://<board-ip>/`**. No port number or page suffix is needed.
+Choose your service region, bind Duck to your account and select an agent. Try the wake word for your region to start a conversation. [Account binding and voice setup guide](https://wiki.xgorobot.com/kb/the-xgo-series-robot/duck-ai-voice?model=duck)
 
-   <img src="docs/images/cockpit-live-en.png" alt="Cockpit with live camera video, ToF readings, and Link AI in the top bar" width="1000">
-
-2. Open the platform where you want to bind Duck. To choose the region in advance, open **Link AI** in the cockpit and tap **China** or **International**. This saves the choice and reconnects voice.
-
-   | Device region | Wake word | Binding and agent platform |
-   | --- | --- | --- |
-   | `global` International | **Hey Ducky** | [agent.luwudynamics.ai](https://agent.luwudynamics.ai/) |
-   | `cn` China | **小鸭小鸭** (xiǎo yā, xiǎo yā) | [agent.xgorobot.com/devices](https://agent.xgorobot.com/devices) |
-
-3. Sign in, open **Devices → Add device**, follow the Bluetooth prompts, and select the device beginning with `XGO-Duck`. Complete Wi-Fi setup and account binding, then select an agent.
-4. Return to **Link AI** to check the device server, binding and voice connection. Once voice is online, say the wake word shown for the selected region.
-
-<img src="docs/images/ai-binding-en.jpg" alt="Link AI shows Hey Ducky for the selected international region and 小鸭小鸭 for China" width="760">
-
-Web Bluetooth requires a compatible Chrome / Edge browser. On iPhone / iPad, add the device using the matching Mini Program or App:
-
-| International App | China WeChat Mini Program |
-| --- | --- |
-| <img src="docs/images/qr_app_intl.png" alt="International App download QR" width="150"> | <img src="docs/images/qr_miniprogram.png" alt="China WeChat Mini Program QR" width="150"> |
-| [Open the App download page](https://agent.luwudynamics.ai/download) | Scan with WeChat |
-
-China and international accounts and bindings are separate. If no region is saved, Duck checks both services after connecting to Wi-Fi. It uses the service where it is bound, choosing China when both have a binding. A saved region takes precedence. Switching servers preserves conversation language, volume and motion settings. Bind separately when switching to another service for the first time. If the device belongs to another account, unbind it from that account first.
-
-If voice stays offline after binding, copy this prompt to an AI assistant.
-
-```text
-Board IP: [fill in]. My service region: [China cn / International global].
-Read the cockpit binding status and /api/voice/status on port 9527. Check the region and voice connection.
-Tell me whether setup is waiting for Wi-Fi, binding or the voice service, and guide me to the next step.
-I will sign in, grant Bluetooth access, bind Duck and change regions myself.
-```
-
-### Startup sounds
-
-Later power-ups detect USB audio and video and start the cockpit, chat and motion services automatically. **You do not need to open App Lab or click Run each time.** With Wi-Fi, account binding and USB audio ready, two startup duck sounds play in order:
-
-| Order | Meaning | Example |
-| --- | --- | --- |
-| 1 | Network connected | [Listen to the first duck sound](assets/startup-network.wav?raw=true) |
-| 2 | Voice service connected; chat ready | [Listen to the second duck sound](assets/startup-voice.wav?raw=true) |
-
-If Duck is unpaired, it says “Please open [current IP address] in your browser to complete AI pairing” three times after the network sound. Once Duck has a Wi-Fi IP address at startup, the UNO Q LED matrix scrolls the full address (for example, `192.168.31.8`) from left to right. The last digit enters first, and the dots move with the digits. The display turns off after 30 seconds.
-
-After the voice service sound, say the wake word shown under **Link AI → Automatic startup & wake**. Speak after Duck’s wake-up call. You can play the startup examples there on your phone or computer. The actual startup sounds play through Duck’s speaker.
-
-## Everyday use
-
-- **Interface language:** Opening or refreshing follows the accessing browser’s system language: Chinese for Chinese locales, English otherwise. The language button changes only the current page.
-- **Audio check:** Under Live audio, Test speaker plays about three seconds of synthesized duck calls; tap again to stop. Listen live plays Duck’s microphone on your phone/computer.
-- On a phone, the driving view shows both joysticks in portrait and landscape. Use **More** for additional actions and duck calls, or **View → Show all** for device settings.
-- On a computer, hold **W/S** to move forward or back, **A/D** to strafe and **Q/E** to turn. Release the keys or press **Space** to stop moving.
-- Say “Hey Ducky” for International or “小鸭小鸭” for China to start chatting. Manage the agent on the platform and adjust volume in **Settings → Speaker**.
-- **Audio/video:** start or stop the camera, control its light, save photos and listen live to Duck's microphone from the cockpit.
-- On power-up, Duck tries USB Host for up to 5 seconds of device detection. It keeps Host if a USB camera or audio device is detected and switches to Device otherwise. For accessories plugged in after boot, use the **USB Host** switch at the top of the cockpit over Wi-Fi after stopping Duck. Switching interrupts the current USB connection.
-- The cockpit displays an 8×8 distance map with a working ToF sensor. Forward obstacle avoidance is off by default. Turn it on in the ToF panel to slow forward travel within 15 cm and stop at 10 cm at ordinary speeds. Forward travel remains available if the sensor is absent, offline, or has no fresh valid front reading. [Avoidance settings](docs/forward-avoidance.md)
-
-## FAQ
-
-### 1. Duck shakes or walks unsteadily
-
-1. Stop moving, support Duck, and release servo torque. Use **Servo setup → Single-servo motion control** to verify IDs, mounting positions and order. Check the servo horns and retaining screws for looseness.
-2. Open **Calibration** on port 9527. Follow [step 7](#7-imu-and-servo-calibration) to calibrate all 15 servos, set ID 30 separately, then calibrate the IMU, and check the default pose.
-3. Open **Servo setup** and click **Scan all IDs**. Select each servo, set **KP to 5** and **KD to 10**, then click **Set KpKd** and **Read** to verify the saved and runtime values. Power-cycling reloads the saved values.
+---
 
 Based on Pollen Robotics' [Microduck](https://github.com/pollen-robotics/microduck). [Hardware](https://github.com/LuwuDynamics/xgoduck_hardware) · [Training](https://github.com/LuwuDynamics/xgoduck_rl)

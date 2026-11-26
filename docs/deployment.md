@@ -10,7 +10,7 @@
 
 全量包包含参考系统缺少的依赖、ARM64 Docker 镜像、Python 环境、STM32 固件及上传工具。脚本会配置 2 Mbps Router、开机自启并启动 App。包传到板上后，安装可在局域网内完成。绑定账号和云端语音需要互联网。`.ard` 和源码 ZIP 导入后按 README 第 4 步配置并启动。
 
-全量包不会重刷系统。它固定安装到 `install.sh` 中的 `app_root`；换解压目录不会改变安装目标。0.3.6 的目标是 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-6-unoq`。已有目标目录只有在 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全一致时才能复用。单独装过 `.ard` 没有该收据，同版本重新打包也会改变校验值。遇到冲突时保留已验证可用的安装；明确需要重装时，先保存应保留的数据、停止 App 和相关服务，再处理旧目录。不要伪造收据或覆盖原目录。[完整中英文安装说明](full-install.txt)
+全量包不会重刷系统。它固定安装到 `install.sh` 中的 `app_root`；换解压目录不会改变安装目标。0.3.7 的目标是 `/var/lib/arduino-app-cli/releases/xgoduck-ai-0-3-7-unoq`。已有目标目录只有在 `.xgoduck-full-install.sha256` 与当前包内 `.ard` 的 SHA-256 完全一致时才能复用。单独装过 `.ard` 没有该收据，同版本重新打包也会改变校验值。遇到冲突时保留已验证可用的安装；明确需要重装时，先保存应保留的数据、停止 App 和相关服务，再处理旧目录。不要伪造收据或覆盖原目录。[完整中英文安装说明](full-install.txt)
 
 ## 更新与回退
 
@@ -28,9 +28,18 @@
 
 ## 发版文件
 
-制作全量包的离线 APT 仓库时，从要支持的系统镜像分别导出 `/var/lib/dpkg/status`。在已更新 APT 索引的 Debian 13 ARM64 构建环境中运行 `bash tools/prepare-full-dbus.sh <全量包的debs目录> <status文件> [更多status文件...]`。脚本会下载 `python3-dbus`、Router 所需的 `socat`、摄像头工具 `v4l-utils` 及其配套库 `libv4l2rds0t64`，按各镜像清单补齐这些包的依赖，再生成 `debs/Packages`。打包前分别用每份清单和包内仓库离线验证安装依赖，随后重算包内 `SHA256SUMS` 与 ZIP 校验文件。
-
 三个包使用同一版本的源码。源码 ZIP 继续放在 `packages/xgoduck_ai.zip`，同时更新其 `.sha256`。在 UNO Q 上用 `python3 tools/package-ai-app.py --release` 构建带版本号的 `.ard`，让每版有独立的安装目录。制作全量包时使用同一版本的 `.ard`，让包内脚本、安装目录和清单与新版本一致。 [预编译包制作与恢复](ai-chat.md#precompiled-uno-q-release)
+
+用专用目录暂存这个版本的 `.ard`、安装脚本、说明、运行镜像、上传工具和 `debs/`。为每个目标镜像保留一份出厂 `/var/lib/dpkg/status`。在已更新 APT 索引的 Debian 13 ARM64 构建环境中准备依赖，然后用 Python 3.9+ 生成最终 ZIP。
+
+```bash
+bash tools/prepare-full-debs.sh build/full/debs baselines/*.status
+python3 tools/package-ai-app.py --full-bundle build/full
+```
+
+构建仓库随源码维护一份[必带包清单](../tools/full-bundle-packages.txt)，其中包括 `python3-dbus`、Router 使用的 `socat`、`v4l-utils` 和配套的 `libv4l2rds0t64`。准备脚本保留暂存目录中已选定的版本，从 Debian 下载缺少的包，按各个镜像的状态解析依赖，并重建 `debs/Packages`。最终打包命令检查清单、索引、每个 deb 的大小和 SHA-256，检查通过才写出 `dist/xgoduck-ai-unoq-full.zip` 和 `.sha256`，包内的 `SHA256SUMS` 也会重新生成。
+
+发布前，用每个目标系统的出厂包清单和全量包内的仓库分别验证离线安装依赖。
 
 构建完成后将 Release 的外层附件命名为 `xgoduck-ai-unoq.ard` 和 `xgoduck-ai-unoq-full.zip`。为这两个最终文件名分别生成 `.sha256` 后一起上传，把这一版设为最新 Release。只在发布时使用固定附件名，`.ard` 的内部目录仍带版本号。旧版可从 [GitHub Releases](https://github.com/LuwuDynamics/xgoduck_runtime_arduino/releases) 的对应标签获取。
 
