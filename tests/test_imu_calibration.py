@@ -67,6 +67,18 @@ class ImuCalibrationTest(unittest.TestCase):
         for measured, expected in zip(record['gyro_zero_dps'], bias):
             self.assertAlmostEqual(measured, expected, delta=.5)
 
+    def test_large_stationary_gyro_offset_from_third_customer_is_accepted(self):
+        bias = [1.25, 3.375, 29.1875]  # reported /api/status gyro, robot at rest
+        rows = [(stamp, acc, list(bias)) for stamp, acc, _ in samples()[:151]]
+        record = estimate(rows)
+        self.assertEqual(record['gyro_zero_dps'], bias)
+
+    def test_rotating_board_reports_movement_before_gyro_offset(self):
+        rows = [(stamp, acc, [150. + (i % 2) * 20., 0., 0.])
+                for i, (stamp, acc, _) in enumerate(samples()[:151])]
+        with self.assertRaisesRegex(ValueError, 'Movement detected'):
+            estimate(rows)
+
     def test_stationary_customer_gyro_offset_is_saved_and_loaded(self):
         bias = [1.9, 14., 7.3]
         rows = [(stamp, acc, [value + (.25 if i % 2 else -.25) for value in bias])
@@ -86,7 +98,7 @@ class ImuCalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Movement detected'):
             estimate(moving)
         with self.assertRaisesRegex(ValueError, 'zero offset is too large'):
-            estimate([(stamp, acc, [1.9, 25., 7.3]) for stamp, acc, _ in rows])
+            estimate([(stamp, acc, [1.9, 120., 7.3]) for stamp, acc, _ in rows])
 
     def test_save_preserves_previous_and_reset_disables_calibration(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -233,7 +245,7 @@ class ImuCalibrationTest(unittest.TestCase):
     def test_pose_sensor_and_feedback_failures_do_not_retry(self):
         cases = [
             ('upright', lambda n: ([9.8, 0., 0.], [0.]*3)),
-            ('zero offset is too large', lambda n: ([0., 0., -9.8], [25., 0., 0.])),
+            ('zero offset is too large', lambda n: ([0., 0., -9.8], [120., 0., 0.])),
             ('IMU contains nonfinite', lambda n: ([0., 0., -9.8], [float('nan'), 0., 0.])),
             ('interrupted', lambda n: None if 40 <= n <= 51 else ([0., 0., -9.8], [0.]*3)),
             ('MCU feedback is stale', lambda n: None),

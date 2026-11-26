@@ -11,7 +11,9 @@ SAMPLE_SECONDS = 1.5
 MIN_SAMPLES = 90
 REFERENCE_G = 9.8
 FRAME = 'qmi-policy-body-offset-v2'
-MAX_GYRO_ZERO_DPS = 20.0
+# Sanity bound only: the offset is subtracted, the QMI8658 range here is +-1024 dps, and field boards
+# show 12-30 dps (datasheet initial tolerance is +-10). Stability is judged by MOTION_LIMITS.
+MAX_GYRO_ZERO_DPS = 100.0
 GYRO_ZERO_ERROR = 'Gyroscope zero offset is too large. Check the IMU and try again.'
 # Gyro limits only reject real board motion. The walk policy tolerates far more gyro noise than
 # this (simulation: no falls up to 0.8 rad/s white noise), and the calibration mean error is
@@ -84,13 +86,13 @@ def estimate(rows):
                   measurement=dict(samples=n, duration_s=rows[-1][0]-rows[0][0],
                                    mean_acc_ms2=mean_acc, mean_gyro_dps=mean_gyro,
                                    acc_std_ms2=acc_std, gyro_std_dps=gyro_std))
-    ImuCorrection(record)
     metrics = dict(acc_std_ms2=math.hypot(*acc_std), gyro_std_dps=math.hypot(*gyro_std),
                    acc_peak_ms2=max(math.dist(row, mean_acc) for row in acc),
                    gyro_peak_dps=max(math.dist(row, mean_gyro) for row in gyro))
     exceeded = [name for name, value in metrics.items() if value > MOTION_LIMITS[name]]
     if exceeded:
         raise ImuMovementError(metrics, exceeded)
+    ImuCorrection(record)  # Report real movement before an out-of-range offset.
     record['measurement'].update(
         acc_axis_peak_ms2=[max(abs(row[i]-mean_acc[i]) for row in acc) for i in range(3)],
         gyro_axis_peak_dps=[max(abs(row[i]-mean_gyro[i]) for row in gyro) for i in range(3)],

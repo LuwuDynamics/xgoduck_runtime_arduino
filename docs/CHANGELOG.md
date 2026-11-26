@@ -1,5 +1,11 @@
 # XGO Duck AI 更新记录 / Changelog
 
+## 0.3.9
+
+站立 IMU 标定的陀螺仪单轴零偏上限从 20 °/s 调整为 100 °/s，以支持静止读数偏高的板子。标定先检查采样波动，再检查零偏；检测到移动时会重新采样。
+
+Standing IMU calibration now accepts a per-axis gyroscope bias of up to 100 °/s (previously 20 °/s). Calibration checks sample stability before evaluating bias and retries when movement is detected.
+
 ## 0.3.8
 
 - 站立标定的陀螺仪合成标准差和峰值上限分别调整为 3.0 °/s 和 10.0 °/s。标定成功后，日志和标定文件记录加速度计与陀螺仪的三轴标准差、各轴峰值和合成峰值。
