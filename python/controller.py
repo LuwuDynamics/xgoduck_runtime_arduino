@@ -1,5 +1,6 @@
 """100Hz receive/filter callback and independent 50Hz ONNX loop."""
 import collections
+import json
 import math
 import os
 import secrets
@@ -650,6 +651,8 @@ class Controller:
                 self.generation += 1
                 self._imu_job.update(state='saved', active=False, progress=1.,
                                      message='IMU calibrated and saved.')
+            print(f"[imu-calibration] saved window {retry + 1}: "
+                  f"{json.dumps(record['measurement'], allow_nan=False)}", flush=True)
         except (OSError, ValueError, TypeError, KeyError) as exc:
             with self.lock:
                 if token == self._imu_job_token and self._imu_job['active']:

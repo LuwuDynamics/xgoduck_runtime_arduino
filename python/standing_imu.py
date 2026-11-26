@@ -13,7 +13,10 @@ REFERENCE_G = 9.8
 FRAME = 'qmi-policy-body-offset-v2'
 MAX_GYRO_ZERO_DPS = 20.0
 GYRO_ZERO_ERROR = 'Gyroscope zero offset is too large. Check the IMU and try again.'
-MOTION_LIMITS = dict(acc_std_ms2=.30, gyro_std_dps=1.125, acc_peak_ms2=1.0, gyro_peak_dps=4.5)
+# Gyro limits only reject real board motion. The walk policy tolerates far more gyro noise than
+# this (simulation: no falls up to 0.8 rad/s white noise), and the calibration mean error is
+# std/sqrt(n) (~0.1 deg/s), so noisy-but-stationary QMI8658 units must still pass.
+MOTION_LIMITS = dict(acc_std_ms2=.30, gyro_std_dps=3.0, acc_peak_ms2=1.0, gyro_peak_dps=10.0)
 
 
 class ImuMovementError(ValueError):
@@ -88,6 +91,10 @@ def estimate(rows):
     exceeded = [name for name, value in metrics.items() if value > MOTION_LIMITS[name]]
     if exceeded:
         raise ImuMovementError(metrics, exceeded)
+    record['measurement'].update(
+        acc_axis_peak_ms2=[max(abs(row[i]-mean_acc[i]) for row in acc) for i in range(3)],
+        gyro_axis_peak_dps=[max(abs(row[i]-mean_gyro[i]) for row in gyro) for i in range(3)],
+        acc_peak_ms2=metrics['acc_peak_ms2'], gyro_peak_dps=metrics['gyro_peak_dps'])
     return record
 
 

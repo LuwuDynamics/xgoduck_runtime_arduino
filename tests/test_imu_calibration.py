@@ -29,6 +29,17 @@ class ImuCalibrationTest(unittest.TestCase):
         for actual, expected in zip(acc + gyro, [1., 1., -8.8, 2., 0., 0.]):
             self.assertAlmostEqual(actual, expected)
 
+    def test_peaks_measure_deviations_in_individual_frames(self):
+        rows = samples()
+        for i, sign in enumerate((1, -1)):
+            rows[i] = (rows[i][0], [1. + sign * .25, 2., -9.], [.8, -.5 + sign * 2., 1.2])
+            rows[i+2] = (rows[i+2][0], [1., 2. + sign * .5, -9.], [.8, -.5, 1.2 + sign * 3.])
+        m = estimate(rows)['measurement']
+        self.assertEqual(m['acc_axis_peak_ms2'], [.25, .5, 0.])
+        self.assertEqual(m['acc_peak_ms2'], .5)
+        self.assertEqual(m['gyro_axis_peak_dps'], [0., 2., 3.])
+        self.assertEqual(m['gyro_peak_dps'], 3.)
+
     def test_motion_interruption_and_wrong_orientation_are_rejected(self):
         rows = samples()
         with self.assertRaisesRegex(ValueError, 'Not enough'):
@@ -43,6 +54,18 @@ class ImuCalibrationTest(unittest.TestCase):
             estimate(moving)
         with self.assertRaisesRegex(ValueError, 'upright'):
             estimate([(t, [9.8, 0., 0.], g) for t, _, g in rows])
+
+    def test_noisy_but_stationary_gyro_axis_is_accepted(self):
+        # Reported board: stationary, gyro X std 1.43 deg/s, other axes about 0.12 deg/s.
+        import random
+        rng = random.Random(7)
+        bias = [-1.7852, -12.6111, 9.1111]
+        sd = [1.4299, .1142, .1472]
+        rows = [(stamp, acc, [b + rng.gauss(0, s) for b, s in zip(bias, sd)])
+                for stamp, acc, _ in samples()[:151]]
+        record = estimate(rows)
+        for measured, expected in zip(record['gyro_zero_dps'], bias):
+            self.assertAlmostEqual(measured, expected, delta=.5)
 
     def test_stationary_customer_gyro_offset_is_saved_and_loaded(self):
         bias = [1.9, 14., 7.3]
@@ -59,7 +82,7 @@ class ImuCalibrationTest(unittest.TestCase):
                 self.assertAlmostEqual(value, 0.)
         moving = list(rows)
         stamp, acc, gyro = moving[75]
-        moving[75] = (stamp, acc, [gyro[0], gyro[1] + 5., gyro[2]])
+        moving[75] = (stamp, acc, [gyro[0], gyro[1] + 12., gyro[2]])
         with self.assertRaisesRegex(ValueError, 'Movement detected'):
             estimate(moving)
         with self.assertRaisesRegex(ValueError, 'zero offset is too large'):
@@ -146,7 +169,7 @@ class ImuCalibrationTest(unittest.TestCase):
 
             def reading(retry, frame):
                 if retry == 0:
-                    return [2., 0., -9.8], [5. if frame == 70 else 0., 0., 0.]
+                    return [2., 0., -9.8], [12. if frame == 70 else 0., 0., 0.]
                 if frame == 1:
                     self.assertEqual(load(file), previous)
                     self.assertEqual(app._imu_record, previous)
@@ -165,7 +188,11 @@ class ImuCalibrationTest(unittest.TestCase):
                 self.assertGreaterEqual(rows[-1][0] - rows[0][0], 1.5)
                 self.assertEqual(len(set(row[0] for row in rows)), len(rows))
             for metric in ('acc_std_ms2=', 'gyro_std_dps=', 'acc_peak_ms2=', 'gyro_peak_dps=', 'exceeded=gyro_peak_dps'):
-                self.assertIn(metric, log.call_args.args[0])
+                self.assertIn(metric, log.call_args_list[0].args[0])
+            prefix = '[imu-calibration] saved window 2: '
+            success = log.call_args_list[1].args[0]
+            self.assertTrue(success.startswith(prefix))
+            self.assertEqual(json.loads(success[len(prefix):]), load(file)['measurement'])
             persist.assert_called_once()
             self.assertEqual(app.status()['imu_calibration']['state'], 'saved')
             self.assertEqual(load(file)['acc_offset_ms2'], [1., 0., 0.])
@@ -185,7 +212,7 @@ class ImuCalibrationTest(unittest.TestCase):
 
                 def reading(retry, frame):
                     spike = frame == 60 and (retry < 10 or not last_passes)
-                    return [0., 0., -9.8], [6. if spike else 0., 0., 0.]
+                    return [0., 0., -9.8], [12. if spike else 0., 0., 0.]
 
                 with patch('controller.save_imu', wraps=save) as persist, patch('builtins.print'):
                     rounds = self.run_worker(app, job, reading)
@@ -238,7 +265,7 @@ class ImuCalibrationTest(unittest.TestCase):
                     app.set_mode('shadow')
                     self.assertEqual(app.status()['imu_calibration']['state'], 'cancelled')
                     self.start_job(app)
-                return [0., 0., -9.8], [6. if frame == 60 else 0., 0., 0.]
+                return [0., 0., -9.8], [12. if frame == 60 else 0., 0., 0.]
 
             with patch('builtins.print'):
                 self.run_worker(app, job, reading)

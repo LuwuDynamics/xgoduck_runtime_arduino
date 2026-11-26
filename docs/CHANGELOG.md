@@ -1,6 +1,9 @@
 # XGO Duck AI 更新记录 / Changelog
 
-## 未发布 / Unreleased
+## 0.3.8
+
+- 站立标定的陀螺仪合成标准差和峰值上限分别调整为 3.0 °/s 和 10.0 °/s。标定成功后，日志和标定文件记录加速度计与陀螺仪的三轴标准差、各轴峰值和合成峰值。
+- Standing calibration now accepts gyroscope noise up to 3.0 °/s combined standard deviation and 10.0 °/s combined peak deviation. Successful calibrations log and save per-axis standard deviations, per-axis peaks and the combined peak for both sensors.
 
 - Linux 与 STM32 默认使用 Arduino 可靠协议，握手后协商至 2 Mbaud。升级和回退时使用与目标固件配套的 Router。
 - IMU 六轴原始读数连续 10 帧全为零时，STM32 卸力并重新初始化 IMU。连续 3 帧有效后恢复反馈，小鸭保持卸力，等待新的起立或上力指令。
