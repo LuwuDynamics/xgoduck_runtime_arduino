@@ -21,8 +21,8 @@ static bool receiveStartupIp(int a, int b, int c, int d) {
   return true;
 }
 
-// Up to 12 digits (three columns each), three dots and 14 spaces.
-static uint8_t ipColumns[12 * 3 + 3 + 14];
+// Up to 12 digits (4 fields off three char each, each up to char 5 px wide), three dots and up to 14 spaces.
+static uint8_t ipColumns[4 * 3 * 5 + 3 + 14];
 
 static int buildIpColumns() {
   static constexpr uint8_t digits[10][5] = {
@@ -53,7 +53,7 @@ static int buildIpColumns() {
 static void renderIpFrame(Arduino_LED_Matrix& matrix, int width, int left) {
   uint8_t pixels[8][13] = {};
   for (int x = 0; x < 13; ++x) {
-    const int col = x - left;
+    const int col = left + x;
     if (col < 0 || col >= width) continue;
     for (int row = 0; row < 5; ++row) {
       pixels[row + 1][x] = (ipColumns[col] >> row) & 1;
@@ -88,10 +88,10 @@ static void serviceStartupIpDisplay() {
     return;
   }
 
-  // The rightmost column enters first, with one blank frame between passes.
+  // The leftmost column enters first, with one blank frame between passes.
   const int step = (elapsed / 100u) % (width + 13);
-  const int left = 1 - width + step;
-  static int previousLeft = 13;
+  const int left = step - 13;
+  static int previousLeft = 0;
   if (left != previousLeft) {
     renderIpFrame(matrix, width, left);
     previousLeft = left;
